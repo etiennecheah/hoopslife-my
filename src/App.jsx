@@ -5,6 +5,7 @@ import {
   Target, Plane, Flag, RotateCcw, Home, Sparkles, Brain, Gauge,
   Radio, Gem, Download, Share2, Search
 } from "lucide-react";
+import { Analytics } from "@vercel/analytics/react";
 
 /* ---------------------------------------------------------
    TROPHY & AWARD ICON LIBRARY
@@ -6228,6 +6229,7 @@ export default function App() {
       {screen === "event" && currentEvent && <EventScreen event={currentEvent} onChoose={handleChooseEvent} />}
       {screen === "result" && summary && <ResultScreen summary={summary} onContinue={handleContinueAfterResult} />}
       {screen === "retired" && player && <RetiredScreen player={player} onPlayAgain={handlePlayAgain} />}
+      <Analytics />
     </div>
   );
 }
