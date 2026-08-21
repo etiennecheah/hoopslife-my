@@ -712,7 +712,7 @@ const U18_RESULT_META = {
    and the imported player is always slotted in as a starter.
    Accepting also locks in a Malaysia U18 national call-up.
 ============================================================ */
-const HBL_RATING_THRESHOLD = 45;     // min overall at 17 to attract an HBL offer
+const HBL_RATING_THRESHOLD = 44;     // min overall at 17 to attract an HBL offer
 const HBL_OFFER_COUNT = 3;           // only a subset of schools bid in any given year
 const HBL_GAMES_MIN = 16;
 const HBL_GAMES_MAX = 20;
