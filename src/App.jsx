@@ -624,10 +624,11 @@ function computeA17ShortlistChance(a17Stats, awardIds, teamResultId, highlyTalen
    Everyone else (and U16 rejects) -> U17 jumpclass trial (30%).
 ============================================================ */
 
-// --- Option 1: U16 National Team -> FIBA U16 Asia Cup Qualifiers (5 teams) -> Asia Cup (12 teams) ---
+// --- Option 1: U16 National Team -> FIBA U16 Asia Cup Qualifiers (5 teams,
+// top 3 advance) -> Asia Cup (12 teams) ---
 const U16_SELECTION_CHANCE = 0.70;   // Bukit Jalil alumni who make the U16 squad
 const U16_SELECTION_CHANCE_PRODIGY = 0.96; // prodigies are near-locks for the actual squad
-const U16_QUALIFY_CHANCE = 0.50;     // Malaysia getting through the 5-team qualifiers into the Asia Cup
+const U16_QUALIFY_CHANCE = 0.60;     // top 3 of the 5-team qualifiers advance to the Asia Cup
 const U16_TOT_CHANCE = 0.05;         // player named to Team of the Tournament
 // The Asia Cup proper has 12 teams. As an underdog, Malaysia's best realistic
 // finish is a Quarter-Final (<20%); most of the time they sit 10th-12th.
@@ -637,12 +638,11 @@ const U16_ASIACUP_RESULT_OPTIONS = [
   { id: "place_11", weight: 28 },
   { id: "place_12", weight: 24 },
 ];
-// Failing to qualify means being knocked out in the 5-team qualifiers (finish 2nd-5th there).
+// The top 3 of the 5-team qualifiers advance, so missing out means finishing
+// 4th or 5th there.
 const U16_QUALIFIER_EXIT_OPTIONS = [
-  { id: "qual_2nd", weight: 22 },
-  { id: "qual_3rd", weight: 28 },
-  { id: "qual_4th", weight: 28 },
-  { id: "qual_5th", weight: 22 },
+  { id: "qual_4th", weight: 55 },
+  { id: "qual_5th", weight: 45 },
 ];
 const U16_RESULT_META = {
   quarterfinal: { label: "Asia Cup Quarter-Finalist", popularity: 20 },
@@ -676,11 +676,11 @@ function generateU16TournamentStats(stats, position, height) {
 /* ============================================================
    AGE 18 — U18 NATIONAL TEAM -> FIBA U18 ASIA CUP
    Gated behind accepting the U18 Bukit Jalil bootcamp at 17.
-   Same structure as U16: 5-team qualifiers -> 12-team Asia Cup.
+   Same structure as U16: 5-team qualifiers (top 3 advance) -> 12-team Asia Cup.
 ============================================================ */
 const U18_SELECTION_CHANCE = 0.70;   // U18 bootcamp players who make the national squad
 const U18_SELECTION_CHANCE_PRODIGY = 0.96; // prodigies are near-locks for the actual squad
-const U18_QUALIFY_CHANCE = 0.50;     // Malaysia getting through the 5-team qualifiers
+const U18_QUALIFY_CHANCE = 0.60;     // top 3 of the 5-team qualifiers advance
 const U18_TOT_CHANCE = 0.05;         // player named to Team of the Tournament
 const U18_ASIACUP_RESULT_OPTIONS = [
   { id: "quarterfinal", weight: 18 },
@@ -689,10 +689,8 @@ const U18_ASIACUP_RESULT_OPTIONS = [
   { id: "place_12", weight: 24 },
 ];
 const U18_QUALIFIER_EXIT_OPTIONS = [
-  { id: "qual_2nd", weight: 22 },
-  { id: "qual_3rd", weight: 28 },
-  { id: "qual_4th", weight: 28 },
-  { id: "qual_5th", weight: 22 },
+  { id: "qual_4th", weight: 55 },
+  { id: "qual_5th", weight: 45 },
 ];
 const U18_RESULT_META = {
   quarterfinal: { label: "Asia Cup Quarter-Finalist", popularity: 22 },
@@ -1007,7 +1005,7 @@ function resolveMSSM(base, guaranteed) {
   p.mssmGuaranteed = guaranteed;
   p.history = [...p.history, {
     age: p.age, tierLabel: "MSSM", note: `Represented ${p.hometown} at MSSM — finished as ${teamMeta.label}.${guaranteed ? " Selection was automatic off the back of your national/state squad spot this year." : ""}`,
-    tournament: "MSSM", stats, awards: awardIds, games: stats.games,
+    tournament: "MSSM", category: "mssm", stats, awards: awardIds, games: stats.games,
   }];
   return p;
 }
@@ -1082,7 +1080,7 @@ const EVENT_POOL = [
       { label: "Credit the team", icon: "team", popularity: 3, relationships: { coach: 5, team: 5 },
         result: "Low-key and professional. Your teammates appreciate it." },
     ]},
-  { id: "sponsor_local", stages: ["amateur", "pro"], title: "Sportswear Offer", scene: "contract_signing",
+  { id: "sponsor_local", stages: ["amateur", "pro"], financial: true, title: "Sportswear Offer", scene: "contract_signing",
     desc: "A homegrown sportswear brand wants to sponsor your boots and gear.",
     choices: [
       { label: "Sign the deal", icon: "penCheck", money: 3000, fatigue: 5,
@@ -1138,7 +1136,7 @@ const EVENT_POOL = [
       { label: "Stay and train", icon: "dumbbell", relationships: { family: -8 }, stats: { athleticism: 2 },
         result: "Gains on the court, distance at home." },
     ]},
-  { id: "contract_talk", stages: ["pro"], title: "Contract Talks", scene: "negotiation_table",
+  { id: "contract_talk", stages: ["pro"], financial: true, title: "Contract Talks", scene: "negotiation_table",
     desc: "Your agent says the club is open to renegotiating your deal.",
     choices: [
       { label: "Push hard for more money", icon: "dollarUp", money: 5000, relationships: { coach: -4 },
@@ -1162,7 +1160,7 @@ const EVENT_POOL = [
       { label: "Stay out of it", icon: "doorExit", relationships: { team: -4 },
         result: "Not your circus. The tension lingers a while." },
     ]},
-  { id: "preseason_camp", stages: ["pro"], title: "Off-Season Skills Camp", scene: "weight_room",
+  { id: "preseason_camp", stages: ["pro"], financial: true, title: "Off-Season Skills Camp", scene: "weight_room",
     desc: "A pricey off-season camp abroad promises real development.",
     choices: [
       { label: "Pay your way in", icon: "dollarUp", money: -4000, stats: { shooting: 2, athleticism: 2 },
@@ -1225,7 +1223,7 @@ const EVENT_POOL = [
         ]},
     ]},
 
-  { id: "analytics_offer", stages: ["pro"], minAge: 20, title: "The Analytics Pitch", scene: "data_chart",
+  { id: "analytics_offer", stages: ["pro"], financial: true, minAge: 20, title: "The Analytics Pitch", scene: "data_chart",
     desc: "A sports-data startup wants to overhaul your training with shot-charting, load management, and cold, hard numbers. Your old-school coach thinks it's nonsense — 'ball don't lie, spreadsheets do.'",
     choices: [
       { label: "Commit to the data-driven program", icon: "chartUp", risk: "risky",
@@ -1273,7 +1271,7 @@ const EVENT_POOL = [
         ]},
     ]},
 
-  { id: "kampung_homecoming", stages: ["youth", "amateur", "pro"], title: "Kampung Homecoming", scene: "kampung_village",
+  { id: "kampung_homecoming", stages: ["youth", "amateur", "pro"], financial: true, title: "Kampung Homecoming", scene: "kampung_village",
     desc: "Your childhood coach invites you back to run a free clinic for kids on the dusty kampung court where you first picked up a ball — same week a paid corporate appearance is on offer across town.",
     choices: [
       { label: "Go home — run the free clinic", icon: "handHeart", risk: "risky",
@@ -1321,7 +1319,7 @@ const EVENT_POOL = [
         ]},
     ]},
 
-  { id: "underground_3x3", stages: ["amateur", "pro"], minAge: 19, title: "Underground Cash Tournament", scene: "street_cash",
+  { id: "underground_3x3", stages: ["amateur", "pro"], financial: true, minAge: 19, title: "Underground Cash Tournament", scene: "street_cash",
     desc: "A friend invites you to an unsanctioned underground 3x3 tournament — street ballers, real cash on the line, no club insurance, no medical staff, no rules against 'physical' defense.",
     choices: [
       { label: "Enter the tournament", icon: "trophyCash", risk: "risky",
@@ -1408,7 +1406,7 @@ const EVENT_POOL = [
         ]},
     ]},
 
-  { id: "endorsement_offer", stages: ["pro"], minAge: 19, minOverall: 55, title: "Local Brand Wants You", scene: "brand_deal", 
+  { id: "endorsement_offer", stages: ["pro"], financial: true, minAge: 19, minOverall: 55, title: "Local Brand Wants You", scene: "brand_deal", 
     desc: "A Malaysian sportswear brand offers you a modest endorsement deal — decent money, but the contract has an exclusivity clause locking you to them for two years.",
     choices: [
       { label: "Sign it", icon: "penCheck", fatigue: 0, money: 12000, popularity: 5, relationships: { coach: 1 },
@@ -1433,7 +1431,7 @@ const EVENT_POOL = [
         result: "You stay behind and put in the work. Coach notices the dedication; home notices the absence." },
     ]},
 
-  { id: "contract_leverage", stages: ["pro"], minAge: 20, minOverall: 62, title: "Agent Wants to Push for More", scene: "agent_leverage", 
+  { id: "contract_leverage", stages: ["pro"], financial: true, minAge: 20, minOverall: 62, title: "Agent Wants to Push for More", scene: "agent_leverage", 
     desc: "Your agent thinks you're being underpaid relative to your production and wants to go public with a trade request to force your club's hand.",
     choices: [
       { label: "Let him go public", icon: "megaphone", risk: "risky",
@@ -4645,17 +4643,51 @@ function generateCareerCardCanvas(player, careerSummary, title, flagImg) {
   return canvas;
 }
 
+/* Every history entry belongs to exactly one competition category. New entries
+   carry an explicit `category`; older saves are classified from the markers
+   that were already being written (tier label, league name, club id), so
+   existing careers split correctly too. */
+function classifyHistoryEntry(h) {
+  if (!h) return null;
+  if (h.category) return h.category;
+  if (h.national) return "national";
+  const tl = h.tierLabel || "";
+  const ln = h.leagueName || "";
+  if (tl === "Taiwan HBL" || ln === "Taiwan HBL") return "hbl";
+  if (tl.startsWith("Taiwan UBA") || ln === "Taiwan UBA") return "uba";
+  if (tl === "MSSM") return "mssm";
+  if (tl === "U15 State Rep") return "u15";
+  if (tl === "U17 State Rep" || tl === "National U17 Tournament" || tl === "U17 Jumpclass") return "u17";
+  if (tl === "U16 National Team") return "u16";
+  if (tl === "U18 National Team") return "u18";
+  if (h.clubId || h.leagueId) return "pro";
+  if (h.clubName) return "pro";
+  return null;
+}
+
+const CAREER_CATEGORY_META = [
+  { id: "u15", label: "National U15", perGame: false },
+  { id: "u16", label: "FIBA U16 Asia Cup", perGame: false },
+  { id: "u17", label: "National U17", perGame: false },
+  { id: "u18", label: "FIBA U18 Asia Cup", perGame: false },
+  { id: "mssm", label: "MSSM", perGame: false },
+  { id: "hbl", label: "Taiwan HBL", perGame: true },
+  { id: "uba", label: "Taiwan UBA", perGame: true },
+  { id: "pro", label: "Pro Career", perGame: true },
+];
+
 function buildCareerSummary(history) {
   const order = [];
   const byClub = {};
   const careerAwards = {}; // award id -> count across whole career
   const nat = { apps: 0, games: 0, sum: { ppg: 0, rpg: 0, apg: 0, spg: 0, bpg: 0, fgPct: 0, threePct: 0 } };
-  // Full-career aggregates, split by context: "student" = every youth
-  // tournament (U15/U16/U17/U18/MSSM — anything with no club attached), and
-  // "pro" = every club season (domestic + overseas), games-weighted so a
-  // 40-game MBL season counts for more than a 6-game youth tournament.
-  const student = { apps: 0, sum: { ppg: 0, rpg: 0, apg: 0, spg: 0, bpg: 0 } };
-  const pro = { games: 0, sum: { ppg: 0, rpg: 0, apg: 0, spg: 0, bpg: 0 } };
+  // Per-competition aggregates. Each category is kept entirely separate —
+  // a UBA scholarship season is university basketball, not professional
+  // output, so it must never be folded into the pro averages.
+  const cats = {};
+  CAREER_CATEGORY_META.forEach(c => {
+    cats[c.id] = { seasons: 0, games: 0, sum: { ppg: 0, rpg: 0, apg: 0, spg: 0, bpg: 0 } };
+  });
   (history || []).forEach(h => {
     if (!h || !h.stats) return;
     if (h.national) {
@@ -4664,18 +4696,22 @@ function buildCareerSummary(history) {
       ["ppg", "rpg", "apg", "spg", "bpg", "fgPct", "threePct"].forEach(k => { nat.sum[k] += h.stats[k] || 0; });
       return;
     }
+    const cat = classifyHistoryEntry(h);
+    if (cat && cats[cat]) {
+      const c = cats[cat];
+      const g = h.games || 0;
+      c.seasons += 1;
+      c.games += g;
+      // Tournament categories average per appearance; league categories are
+      // games-weighted so a 40-game season outweighs a short one.
+      const w = CAREER_CATEGORY_META.find(m => m.id === cat).perGame ? (g || 1) : 1;
+      c.weight = (c.weight || 0) + w;
+      ["ppg", "rpg", "apg", "spg", "bpg"].forEach(k => { c.sum[k] += (h.stats[k] || 0) * w; });
+    }
     // Overseas seasons have a team name but no domestic clubId — group by
     // name instead so they still show up in the career-by-club breakdown.
     const groupKey = h.clubId || h.clubName;
-    if (!groupKey) {
-      // No club attached at all -> a youth/student tournament season.
-      student.apps += 1;
-      ["ppg", "rpg", "apg", "spg", "bpg"].forEach(k => { student.sum[k] += h.stats[k] || 0; });
-      return;
-    }
-    const g = h.games || 0;
-    pro.games += g;
-    ["ppg", "rpg", "apg", "spg", "bpg"].forEach(k => { pro.sum[k] += (h.stats[k] || 0) * (g || 1); });
+    if (!groupKey) return;
     if (!byClub[groupKey]) {
       byClub[groupKey] = {
         clubId: groupKey, clubName: h.clubName || "Club",
@@ -4717,19 +4753,22 @@ function buildCareerSummary(history) {
     Object.keys(nat.sum).forEach(k => { avg[k] = Math.round((nat.sum[k] / nat.apps) * 10) / 10; });
     national = { apps: nat.apps, games: nat.games, avg };
   }
-  let studentCareer = null;
-  if (student.apps > 0) {
+  // Per-competition breakdown, in career order, skipping empty categories.
+  const categories = CAREER_CATEGORY_META.map(meta => {
+    const c = cats[meta.id];
+    if (!c || c.seasons === 0) return null;
+    const denom = c.weight || c.seasons || 1;
     const avg = {};
-    Object.keys(student.sum).forEach(k => { avg[k] = Math.round((student.sum[k] / student.apps) * 10) / 10; });
-    studentCareer = { seasons: student.apps, avg };
-  }
-  let proCareer = null;
-  if (pro.games > 0) {
-    const avg = {};
-    Object.keys(pro.sum).forEach(k => { avg[k] = Math.round((pro.sum[k] / pro.games) * 10) / 10; });
-    proCareer = { games: pro.games, avg };
-  }
-  return { clubs, totalAwards, national, studentCareer, proCareer };
+    Object.keys(c.sum).forEach(k => { avg[k] = Math.round((c.sum[k] / denom) * 10) / 10; });
+    return { id: meta.id, label: meta.label, seasons: c.seasons, games: c.games, perGame: meta.perGame, avg };
+  }).filter(Boolean);
+
+  // proCareer stays available for the career card, but now reflects ONLY
+  // professional club seasons — UBA and HBL are reported separately.
+  const proCat = categories.find(c => c.id === "pro");
+  const proCareer = proCat ? { games: proCat.games, avg: proCat.avg } : null;
+
+  return { clubs, totalAwards, national, categories, proCareer };
 }
 
 function RetiredScreen({ player, onPlayAgain }) {
@@ -4928,42 +4967,33 @@ function RetiredScreen({ player, onPlayAgain }) {
           </div>
         )}
 
-        {(careerSummary.studentCareer || careerSummary.proCareer) && (
+        {careerSummary.categories && careerSummary.categories.length > 0 && (
           <div className="mb-6 text-left">
-            <div className="f-mono text-[10px] uppercase tracking-widest mb-2 text-center" style={{ color: C.chalkDim }}>Full Career Averages</div>
+            <div className="f-mono text-[10px] uppercase tracking-widest mb-2 text-center" style={{ color: C.chalkDim }}>Averages By Competition</div>
             <div className="grid grid-cols-1 gap-2">
-              {careerSummary.studentCareer && (
-                <div className="p-3 rounded-xl" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="f-display text-xs uppercase" style={{ color: C.chalk }}>Student Career</span>
-                    <span className="f-mono text-[9px]" style={{ color: C.chalkDim }}>{careerSummary.studentCareer.seasons} tournament{careerSummary.studentCareer.seasons === 1 ? "" : "s"}</span>
+              {careerSummary.categories.map(cat => {
+                const isPro = cat.id === "pro";
+                return (
+                  <div key={cat.id} className="p-3 rounded-xl" style={{ background: C.ink3, border: `1px solid ${isPro ? C.amber : C.line}` }}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="f-display text-xs uppercase" style={{ color: C.chalk }}>{cat.label}</span>
+                      <span className="f-mono text-[9px]" style={{ color: C.chalkDim }}>
+                        {cat.perGame && cat.games > 0
+                          ? `${cat.seasons} season${cat.seasons === 1 ? "" : "s"} · ${cat.games} games`
+                          : `${cat.seasons} appearance${cat.seasons === 1 ? "" : "s"}`}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-5 gap-1">
+                      {[["PPG", cat.avg.ppg], ["RPG", cat.avg.rpg], ["APG", cat.avg.apg], ["SPG", cat.avg.spg], ["BPG", cat.avg.bpg]].map(([lbl, val]) => (
+                        <div key={lbl} className="text-center">
+                          <div className="f-mono text-xs font-bold" style={{ color: isPro ? C.gold : C.chalk }}>{val}</div>
+                          <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>{lbl}</div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div className="grid grid-cols-5 gap-1">
-                    {[["PPG", careerSummary.studentCareer.avg.ppg], ["RPG", careerSummary.studentCareer.avg.rpg], ["APG", careerSummary.studentCareer.avg.apg], ["SPG", careerSummary.studentCareer.avg.spg], ["BPG", careerSummary.studentCareer.avg.bpg]].map(([lbl, val]) => (
-                      <div key={lbl} className="text-center">
-                        <div className="f-mono text-xs font-bold" style={{ color: C.chalk }}>{val}</div>
-                        <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>{lbl}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {careerSummary.proCareer && (
-                <div className="p-3 rounded-xl" style={{ background: C.ink3, border: `1px solid ${C.amber}` }}>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="f-display text-xs uppercase" style={{ color: C.chalk }}>Pro Career</span>
-                    <span className="f-mono text-[9px]" style={{ color: C.chalkDim }}>{careerSummary.proCareer.games} games</span>
-                  </div>
-                  <div className="grid grid-cols-5 gap-1">
-                    {[["PPG", careerSummary.proCareer.avg.ppg], ["RPG", careerSummary.proCareer.avg.rpg], ["APG", careerSummary.proCareer.avg.apg], ["SPG", careerSummary.proCareer.avg.spg], ["BPG", careerSummary.proCareer.avg.bpg]].map(([lbl, val]) => (
-                      <div key={lbl} className="text-center">
-                        <div className="f-mono text-xs font-bold" style={{ color: C.gold }}>{val}</div>
-                        <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>{lbl}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+                );
+              })}
             </div>
           </div>
         )}
@@ -5141,7 +5171,7 @@ export default function App() {
         u15Awards: awardIds,
         u15TeamResult: teamResult.id,
         nationalShortlisted,
-        history: [...p.history, { age: p.age, tierLabel: "U15 State Rep", note: `Selected as a ${p.hometown} state representative; finished as ${teamMeta.label} at the National U15 Championship.`, tournament: "National U15 Championship", stats: u15Stats, awards: awardIds }],
+        history: [...p.history, { age: p.age, tierLabel: "U15 State Rep", note: `Selected as a ${p.hometown} state representative; finished as ${teamMeta.label} at the National U15 Championship.`, tournament: "National U15 Championship", category: "u15", stats: u15Stats, awards: awardIds }],
       };
       if (teamResult.id === "runner_up" && Math.random() < CLUTCH_TRIGGER_CHANCE) {
         p.pendingClutchMoment = {
@@ -5289,8 +5319,8 @@ export default function App() {
         age16NatU17Awards: natU17Awards,
         history: [
           ...p.history,
-          { age: 16, tierLabel: "U16 National Team", note: `Represented Malaysia U16 at the FIBA U16 Asia Cup Qualifiers — ${resultMeta.label}.`, tournament: "FIBA U16 Asia Cup", stats: u16Stats, awards: (tot ? ["u16_tot"] : []) },
-          { age: 16, tierLabel: "National U17 Tournament", note: `Also turned out for ${p.hometown} at the National U17 Tournament this year — finished as ${natU17TeamMeta.label}${natU17Stats.outstanding ? ", standing out against players a year older." : "."}`, tournament: "National U17 Tournament", stats: natU17Stats, awards: natU17Awards },
+          { age: 16, tierLabel: "U16 National Team", note: `Represented Malaysia U16 at the FIBA U16 Asia Cup Qualifiers — ${resultMeta.label}.`, tournament: "FIBA U16 Asia Cup", category: "u16", stats: u16Stats, awards: (tot ? ["u16_tot"] : []) },
+          { age: 16, tierLabel: "National U17 Tournament", note: `Also turned out for ${p.hometown} at the National U17 Tournament this year — finished as ${natU17TeamMeta.label}${natU17Stats.outstanding ? ", standing out against players a year older." : "."}`, tournament: "National U17 Tournament", category: "u17", stats: natU17Stats, awards: natU17Awards },
         ],
       };
       const u16HistoryIndex = p.history.length - 2; // the U16 Asia Cup entry specifically, before MSSM potentially appends more
@@ -5415,7 +5445,7 @@ export default function App() {
         a17Shortlisted,
         pendingHblOffer: hblEligible,
         hblOfferIds,
-        history: [...p.history, { age: 17, tierLabel: "U17 State Rep", note: `Selected as a ${p.hometown} state representative; finished as ${teamMeta.label} at the National U17 Championship.`, tournament: "National U17 Championship", stats: a17Stats, awards: awardIds }],
+        history: [...p.history, { age: 17, tierLabel: "U17 State Rep", note: `Selected as a ${p.hometown} state representative; finished as ${teamMeta.label} at the National U17 Championship.`, tournament: "National U17 Championship", category: "u17", stats: a17Stats, awards: awardIds }],
       };
       const a17HistoryIndex = p.history.length - 1; // capture before MSSM potentially appends more
       // Selected for the National U17 squad -> auto-qualifies for MSSM too.
@@ -5678,7 +5708,7 @@ export default function App() {
       p.history = [...p.history, {
         age: 18, tierLabel: "Taiwan HBL",
         note: `Starting year at ${p.hblTeamName} in the Taiwan HBL — ${games} games, finished as ${teamMeta.label}.`,
-        tournament: `Taiwan HBL · ${p.hblTeamName}`,
+        tournament: `Taiwan HBL · ${p.hblTeamName}`, category: "hbl",
         stats: hblStats, awards: awardIds, games,
         champion: teamResult.id === "champion" || undefined,
       }];
@@ -5716,7 +5746,7 @@ export default function App() {
         age18Stats: u18Stats,
         age18ResultLabel: resultMeta.label,
         age18Gains: gains,
-        history: [...p.history, { age: 18, tierLabel: "U18 National Team", note: `Represented Malaysia U18 at the FIBA U18 Asia Cup Qualifiers — ${resultMeta.label}.`, tournament: "FIBA U18 Asia Cup", stats: u18Stats, awards: (tot ? ["u18_tot"] : []) }],
+        history: [...p.history, { age: 18, tierLabel: "U18 National Team", note: `Represented Malaysia U18 at the FIBA U18 Asia Cup Qualifiers — ${resultMeta.label}.`, tournament: "FIBA U18 Asia Cup", category: "u18", stats: u18Stats, awards: (tot ? ["u18_tot"] : []) }],
       };
       const u18HistoryIndex = p.history.length - 1;
       p.age18MssmResolved = true;
@@ -6067,8 +6097,13 @@ export default function App() {
     setPlayer(p);
 
     const stageKey = p.abroad ? "pro" : p.stage;
+    // Money/commercial events don't fit a minor or an amateur student-athlete:
+    // under-18s can't sign commercial deals, and HBL/UBA scholarship players
+    // would forfeit their eligibility by taking paid opportunities.
+    const noMoneyEvents = p.age < 18 || !!p.hblSeasonPending || !!p.uba;
     const pool = EVENT_POOL.filter(e => {
       if (!e.stages.includes(stageKey)) return false;
+      if (e.financial && noMoneyEvents) return false;
       if (e.minAge && p.age < e.minAge) return false;
       if (e.minOverall && computeOverall(p.stats, p.position) < e.minOverall) return false;
       if (e.notAbroad && p.abroad) return false;
@@ -6076,7 +6111,7 @@ export default function App() {
       if (usedEvents.current.filter(id => id === e.id).length >= 2) return false;
       return true;
     });
-    const chosenPool = pool.length > 0 ? pool : EVENT_POOL.filter(e => e.stages.includes(stageKey));
+    const chosenPool = pool.length > 0 ? pool : EVENT_POOL.filter(e => e.stages.includes(stageKey) && !(e.financial && noMoneyEvents));
     const ev = pick(chosenPool);
     usedEvents.current.push(ev.id);
     setCurrentEvent(ev);
@@ -6269,6 +6304,7 @@ export default function App() {
       clubName: leagueStats ? p.teamName : undefined,
       leagueId: (leagueStats && !p.abroad && !p.uba) ? p.league : undefined,
       leagueName: leagueLabel || undefined,
+      category: leagueStats ? (p.uba ? "uba" : "pro") : undefined,
       leagueAwards: leagueAwards.length ? leagueAwards : undefined,
       games: gamesPlayed != null ? gamesPlayed : undefined,
       champion: wonChampionship || undefined,
