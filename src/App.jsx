@@ -258,7 +258,7 @@ const LEAGUE = {
   u20: { id: "u20", name: "U20 D-League", short: "U20 D-League" },
 };
 // Rating (overall*0.7 + popularity*0.3) needed to genuinely hold an MBL rotation spot.
-const MBL_RATING_THRESHOLD = 68;
+const MBL_RATING_THRESHOLD = 65;
 // U23 D-League is only playable up to and including age 23; from 24 the player
 // must be in the MBL (as bench if their rating isn't there yet).
 const U23_MAX_AGE = 23;
@@ -288,7 +288,7 @@ const OVERSEAS_OFFER_CHANCE = 0.88; // per season, once eligible for any tier
 
 const OVERSEAS_TIERS = [
   {
-    id: "nba", label: "NBA", threshold: 81,
+    id: "nba", label: "NBA", threshold: 85,
     teams: [
       { name: "Dallas Mavericks", league: "NBA", salaryPerSeason: 14000000 },
       { name: "Atlanta Hawks", league: "NBA", salaryPerSeason: 14000000 },
@@ -305,7 +305,7 @@ const OVERSEAS_TIERS = [
     achId: "nba_player",
   },
   {
-    id: "europe", label: "EuroLeague", threshold: 78,
+    id: "europe", label: "EuroLeague", threshold: 80,
     teams: [
       { name: "Real Madrid", league: "Europe League", salaryPerSeason: 8000000 },
       { name: "Barcelona Club", league: "Europe League", salaryPerSeason: 8000000 },
@@ -322,7 +322,7 @@ const OVERSEAS_TIERS = [
     achId: "euroleague_player",
   },
   {
-    id: "asia", label: "Asia Pro", threshold: 74,
+    id: "asia", label: "Asia Pro", threshold: 75,
     teams: [
       { name: "Shanghai Sharks", league: "CBA", country: "China", salaryPerSeason: 5000000 },
       { name: "Beijing Ducks", league: "CBA", country: "China", salaryPerSeason: 5000000 },
@@ -712,7 +712,7 @@ const U18_RESULT_META = {
    and the imported player is always slotted in as a starter.
    Accepting also locks in a Malaysia U18 national call-up.
 ============================================================ */
-const HBL_RATING_THRESHOLD = 44;     // min overall at 17 to attract an HBL offer
+const HBL_RATING_THRESHOLD = 45;     // min overall at 17 to attract an HBL offer
 const HBL_OFFER_COUNT = 3;           // only a subset of schools bid in any given year
 const HBL_GAMES_MIN = 16;
 const HBL_GAMES_MAX = 20;
@@ -807,7 +807,7 @@ function generateU18TournamentStats(stats, position, height) {
    not just anyone — can get an early look.
 ============================================================ */
 const NT_RATING_THRESHOLD = 65;      // rating to receive a national tryout (MBL players)
-const NT_RATING_THRESHOLD_DLEAGUE = 58; // rating to receive a national tryout (U20/U23 players)
+const NT_RATING_THRESHOLD_DLEAGUE = 65; // rating to receive a national tryout (U20/U23 players)
 const NT_MAKE_SQUAD_CHANCE = 0.65;   // chance to make the squad once tried out (rating <= 80)
 const NT_QUALIFY_CHANCE = 0.50;      // Malaysia advancing through the qualifiers
 const NT_QUARTERFINAL_CHANCE = 0.20; // if at the Asia Cup, chance to reach the QF (else 10-12th)
@@ -1654,7 +1654,7 @@ function computeFgPct(stats, position, base, shootingCoef, iqCoef, noiseLo, nois
 
    Hierarchy (hardest to easiest): NBA > EuroLeague > Asia Pro > MBL.
 ============================================================ */
-const LEAGUE_TIER_ANCHOR = { mbl: 60, u20: 55, u23: 55, asia: 70, europe: 76, nba: 82 };
+const LEAGUE_TIER_ANCHOR = { mbl: 60, u20: 55, u23: 55, asia: 72, europe: 79, nba: 85 };
 
 function competitionMult(rating, tierAnchor) {
   return clamp(0.5 + (rating - tierAnchor) / 30, 0.18, 1.9);
@@ -1814,7 +1814,7 @@ function baseSalary(stage, abroad, overall, club) {
    - Pro D-League (U20/U23): RM2,000-2,999, nudged by club wealth
    - Semi-pro:   RM1,700-2,100, nudged by club wealth
    The monthly figure is locked for the 2-year contract term. */
-const CONTRACT_TERM_YEARS = 2; // first-ever contract is always 2 years
+const CONTRACT_TERM_YEARS = 1; // first-ever contract is always 1 year
 
 /* ============================================================
    "CONTINUE STUDY OR NOT?" — one-time decision at age 19.
@@ -2508,8 +2508,8 @@ function StartScreen({ onStart, savedGame, onContinue }) {
         </div>
         <input
           type="range"
-          min={160}
-          max={195}
+          min={155}
+          max={200}
           step={1}
           value={height}
           onChange={e => setHeight(Number(e.target.value))}
@@ -2517,8 +2517,8 @@ function StartScreen({ onStart, savedGame, onContinue }) {
           style={{ accentColor: C.amber }}
         />
         <div className="flex justify-between mb-6">
-          <span className="f-mono text-[10px]" style={{ color: C.chalkDim }}>160 cm</span>
-          <span className="f-mono text-[10px]" style={{ color: C.chalkDim }}>195 cm</span>
+          <span className="f-mono text-[10px]" style={{ color: C.chalkDim }}>155 cm</span>
+          <span className="f-mono text-[10px]" style={{ color: C.chalkDim }}>200 cm</span>
         </div>
 
         <PrimaryButton full onClick={() => onStart({ name, position, hometown, height, jersey })}>
@@ -5855,7 +5855,7 @@ export default function App() {
     let p = { ...player, stats: { ...player.stats } };
     const natEvent = nationalTryout.event;
     const rating = nationalTryout.rating;
-    const eliteRating = rating > 80;
+    const eliteRating = rating > 70;
     // Squad selection: >80 rating is a lock (100%); everyone else is 65% —
     // unless they already won MVP or Team of the Tournament this season,
     // which guarantees a squad spot regardless of rating.
