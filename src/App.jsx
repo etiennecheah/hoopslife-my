@@ -766,6 +766,34 @@ const UBA_TEAMS = [
     starterChance: 0.50, titleChance: 0.05 },
 ];
 
+/* UBA GRADUATE -> TAIWAN PRO (TPBL) IMPORT PATHWAY
+   On graduating UBA, there's a chance a player gets scouted directly into
+   the Taiwan Professional Basketball League as an Asian import — no need
+   to sign with an MBL/semi-pro club back home first. Declining (or missing
+   the roll) falls through to the normal domestic club-offers flow.
+   Reuses the same OVERSEAS_TIERS-shaped structure (roleBands, teams, achId)
+   so it can be handled by the existing overseas-offer screen/handlers. */
+const UBA_TPBL_IMPORT_CHANCE = 0.35; // chance of this offer firing at graduation, instead of going straight to domestic offers
+const UBA_TPBL_IMPORT_TIER = {
+  id: "tpbl_import", label: "Taiwan Pro (TPBL)",
+  teams: [
+    { name: "New Taipei Kings", league: "TPBL", country: "Taiwan", salaryPerSeason: 3500000 },
+    { name: "Formosa Dreamers", league: "TPBL", country: "Taiwan", salaryPerSeason: 3500000 },
+    { name: "Hsinchu Lioneers", league: "TPBL", country: "Taiwan", salaryPerSeason: 3500000 },
+    { name: "Fubon Braves", league: "TPBL", country: "Taiwan", salaryPerSeason: 3500000 },
+  ],
+  // Role bands are calibrated lower than the general "Asia Pro" overseas
+  // tier (threshold 75) since a fresh UBA graduate is rarely that
+  // developed yet — this is meant as a genuine "import opportunity for a
+  // promising grad," not an elite-only path.
+  roleBands: [
+    { min: 0, max: 54, role: "Rotation", awardChance: 0 },
+    { min: 55, max: 64, role: "Starter", awardChance: 0.10 },
+    { min: 65, max: 999, role: "First Option", awardChance: 0.25 },
+  ],
+  achId: "asia_pro_player",
+};
+
 /* UBA production sits at development-league level, so it reuses the same
    generator as the U20/U23 D-Leagues — role (Starter vs Rotation) drives
    the minutes, exactly as it does domestically. */
@@ -6123,8 +6151,9 @@ export default function App() {
     // unless they already won MVP or Team of the Tournament this season,
     // which guarantees a squad spot regardless of rating.
     const squadChance = (eliteRating || nationalTryout.wonMvpOrTot) ? 1.0 : NT_MAKE_SQUAD_CHANCE;
-    // Standout-performance chance: 30% for elite (>80) ratings, 10% otherwise.
-    const standoutChance = eliteRating ? 0.30 : 0.10;
+    // Standout-performance chance: tiered by rating. 100% lock above 83,
+    // 60% above 81, 30% for the existing elite band (>70), 10% otherwise.
+    const standoutChance = rating > 83 ? 1.0 : rating > 81 ? 0.60 : eliteRating ? 0.30 : 0.10;
     const madeSquad = Math.random() < squadChance;
 
     if (!madeSquad) {
@@ -6800,7 +6829,8 @@ export default function App() {
     }
 
     // UBA eligibility is exactly four years (19-22). Graduating at 23 frees
-    // the player to sign a professional contract back home.
+    // the player to sign a professional contract back home — or, with some
+    // chance, go straight into the Taiwan Pro League (TPBL) as an import.
     if (p.uba && !p.ubaGraduated) {
       p.ubaYearsLeft = Math.max(0, (p.ubaYearsLeft || 0) - 1);
       if (p.ubaYearsLeft <= 0 || p.age >= UBA_GRADUATION_AGE) {
@@ -6813,8 +6843,22 @@ export default function App() {
         p.achievements = Array.from(new Set([...p.achievements, "uba_graduate"]));
         p.history = [...p.history, {
           age: p.age, tierLabel: "Graduated",
-          note: `Graduated from ${alma} after four years in the Taiwan UBA — free to sign a professional contract.`,
+          note: `Graduated from ${alma} after four years in the Taiwan UBA.`,
         }];
+
+        const overallGrad = computeOverall(p.stats, p.position);
+        if (Math.random() < UBA_TPBL_IMPORT_CHANCE) {
+          const band = overseasRoleBand(UBA_TPBL_IMPORT_TIER, overallGrad);
+          const teams = pick3(UBA_TPBL_IMPORT_TIER.teams);
+          p.pendingOverseasOffer = { tier: UBA_TPBL_IMPORT_TIER, teams, role: band.role, awardChance: band.awardChance, years: randInt(1, 3) };
+          p.history[p.history.length - 1].note += " Taiwan Pro League (TPBL) scouts are interested in keeping you in the league as an import.";
+          setPlayer(p);
+          save(p);
+          setScreen("overseas_offers");
+          return;
+        }
+
+        p.history[p.history.length - 1].note += " Free to sign a professional contract back home.";
         const offers = generateClubOffers(p, { count: 3 });
         setPlayer(p);
         save(p);
@@ -7184,6 +7228,20 @@ export default function App() {
       save(p);
       setClubOffers(offers);
       setClubOfferContext({ mode: "join" });
+      setScreen("club_offers");
+      return;
+    }
+    // Not abroad and no domestic club yet — this is the UBA-graduate TPBL
+    // import offer being declined. Unlike the normal "stay put at my
+    // existing club" decline, this player has nowhere to go yet, so route
+    // them into domestic club offers instead of leaving them clubless.
+    if (!p.clubId && p.stage === "pro") {
+      p.history = [...p.history, { age: p.age, tierLabel: "Stayed Home", note: "You turn down the Taiwan Pro League interest to sign domestically instead." }];
+      const offers = generateClubOffers(p, { count: 3 });
+      setPlayer(p);
+      save(p);
+      setClubOffers(offers);
+      setClubOfferContext({ mode: "join", graduated: true });
       setScreen("club_offers");
       return;
     }
