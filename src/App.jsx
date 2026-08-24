@@ -1934,6 +1934,96 @@ function legacyTitle(p) {
   return "Journeyman Baller";
 }
 
+/* The single headline used on a Hall of Fame card — the most impressive
+   tier this career actually reached, checked in descending order. Tint
+   drives the card's badge color (gold for the very top tier, neutral for
+   everything else, dim for a career that never really took off). */
+function hallOfFameTier(p) {
+  const has = id => (p.achievements || []).includes(id);
+  if (has("nba_player")) return { label: "NBA Player", icon: "🌏", tint: "gold" };
+  if (has("euroleague_player")) return { label: "EuroLeague Player", icon: "🥈", tint: "neutral" };
+  if (has("asia_pro_player")) return { label: "Asia Pro Player", icon: "🥉", tint: "neutral" };
+  if (has("mbl_champion")) return { label: "MBL Champion", icon: "🏆", tint: "amber" };
+  if (has("uba_graduate")) return { label: "UBA Graduate", icon: "🎓", tint: "neutral" };
+  if (has("hbl_import")) return { label: "Taiwan HBL Import", icon: "✈️", tint: "neutral" };
+  return { label: "Retired in Malaysia", icon: "🏀", tint: "dim" };
+}
+
+const HALL_OF_FAME_KEY = "hoops_life_hall_of_fame";
+const HALL_OF_FAME_MAX = 50;
+
+/* Snapshots a just-finished career into the Hall of Fame. Purely additive —
+   never touches the active career save — and capped so it can't grow
+   unbounded over months of play (oldest entries drop off first). */
+function saveToHallOfFame(p, careerSummary) {
+  try {
+    if (typeof window === "undefined" || !window.localStorage) return;
+    const tier = hallOfFameTier(p);
+    const pro = (careerSummary && careerSummary.proCareer) || null;
+    const entry = {
+      id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      name: p.name || "Unnamed Player",
+      position: p.position,
+      jersey: p.jersey,
+      hometown: p.hometown,
+      peakOverall: p.peakOverall,
+      tierLabel: tier.label,
+      tierIcon: tier.icon,
+      tierTint: tier.tint,
+      avg: pro ? { ppg: pro.avg.ppg, rpg: pro.avg.rpg, apg: pro.avg.apg } : { ppg: 0, rpg: 0, apg: 0 },
+      games: pro ? pro.games : 0,
+      retiredAge: p.age,
+      trophies: (careerSummary.clubs || []).reduce((sum, c) => sum + (c.titles || 0), 0),
+      timestamp: Date.now(),
+    };
+    const raw = window.localStorage.getItem(HALL_OF_FAME_KEY);
+    const list = raw ? JSON.parse(raw) : [];
+    list.unshift(entry);
+    if (list.length > HALL_OF_FAME_MAX) list.length = HALL_OF_FAME_MAX;
+    window.localStorage.setItem(HALL_OF_FAME_KEY, JSON.stringify(list));
+  } catch (e) { /* Hall of Fame is a bonus feature — never let it block retirement */ }
+}
+
+function loadHallOfFame() {
+  try {
+    if (typeof window === "undefined" || !window.localStorage) return [];
+    const raw = window.localStorage.getItem(HALL_OF_FAME_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) { return []; }
+}
+
+const ACHIEVEMENT_GALLERY_KEY = "hoops_life_achievement_gallery";
+
+/* Records the first time each achievement is ever earned, across every
+   career ever played — not just the current one. Hooked into the main
+   save() function so it stays in sync automatically without needing to
+   touch every individual place an achievement gets granted. Only writes
+   to storage when there's actually something new to record. */
+function syncAchievementGallery(p) {
+  try {
+    if (typeof window === "undefined" || !window.localStorage) return;
+    if (!p || !p.achievements || p.achievements.length === 0) return;
+    const raw = window.localStorage.getItem(ACHIEVEMENT_GALLERY_KEY);
+    const gallery = raw ? JSON.parse(raw) : {};
+    let changed = false;
+    p.achievements.forEach(id => {
+      if (!gallery[id]) {
+        gallery[id] = { unlockedAt: Date.now(), playerName: p.name || "Unnamed Player" };
+        changed = true;
+      }
+    });
+    if (changed) window.localStorage.setItem(ACHIEVEMENT_GALLERY_KEY, JSON.stringify(gallery));
+  } catch (e) { /* the gallery is a bonus feature — never let it block a save */ }
+}
+
+function loadAchievementGallery() {
+  try {
+    if (typeof window === "undefined" || !window.localStorage) return {};
+    const raw = window.localStorage.getItem(ACHIEVEMENT_GALLERY_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) { return {}; }
+}
+
 function checkAchievements(p) {
   const set = new Set(p.achievements);
   if (p.nationalTeam) set.add("national_debut");
@@ -2360,7 +2450,7 @@ function CareerLedger({ history, maxHeight = 420 }) {
 /* ---------------------------------------------------------
    START SCREEN
 --------------------------------------------------------- */
-function StartScreen({ onStart, savedGame, onContinue }) {
+function StartScreen({ onStart, savedGame, onContinue, onViewHallOfFame, onViewAchievements }) {
   const [name, setName] = useState("");
   const [position, setPosition] = useState("PG");
   const [hometown, setHometown] = useState(HOMETOWNS[0]);
@@ -2388,6 +2478,13 @@ function StartScreen({ onStart, savedGame, onContinue }) {
         <p className="f-body text-sm mt-3" style={{ color: C.chalkDim }}>
           15 years old. A ball in your hands. One path from Malaysian gyms to the pros — and maybe beyond.
         </p>
+        <button onClick={onViewHallOfFame} className="f-mono text-[11px] uppercase tracking-widest mt-4 inline-flex items-center gap-1.5" style={{ color: C.chalkDim }}>
+          🏛️ Hall of Fame
+        </button>
+        <span style={{ color: C.chalkDim, margin: "0 8px" }}>·</span>
+        <button onClick={onViewAchievements} className="f-mono text-[11px] uppercase tracking-widest mt-4 inline-flex items-center gap-1.5" style={{ color: C.chalkDim }}>
+          🏆 Achievements
+        </button>
       </div>
 
       {savedGame && (
@@ -4771,7 +4868,168 @@ function buildCareerSummary(history) {
   return { clubs, totalAwards, national, categories, proCareer };
 }
 
-function RetiredScreen({ player, onPlayAgain }) {
+function AchievementGalleryScreen({ gallery, onBack }) {
+  const ids = Object.keys(ACHIEVEMENT_META);
+  const unlockedCount = ids.filter(id => gallery[id]).length;
+  const pct = Math.round((unlockedCount / ids.length) * 100);
+
+  return (
+    <div className="court-hero min-h-full w-full px-4 py-10 sm:py-14">
+      <div className="w-full max-w-5xl mx-auto">
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <div className="flex items-center gap-2.5">
+              <span className="text-xl">🏆</span>
+              <span className="f-display text-2xl font-black" style={{ color: C.chalk }}>Achievement Gallery</span>
+            </div>
+            <div className="f-body text-sm mt-1" style={{ color: C.chalkDim }}>Every badge you've ever earned, across every career.</div>
+          </div>
+          <button onClick={onBack} className="f-mono text-xs px-4 py-2 rounded-full" style={{ background: C.ink3, color: C.chalkDim, border: `1px solid ${C.line}` }}>← Back</button>
+        </div>
+
+        <div className="rounded-[20px] p-5 mt-5" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+          <div className="flex items-center justify-between mb-2.5">
+            <span className="f-display text-sm font-bold" style={{ color: C.chalk }}>{unlockedCount} / {ids.length} Unlocked</span>
+            <span className="f-mono text-xs font-bold" style={{ color: C.trophyGold }}>{pct}%</span>
+          </div>
+          <div className="h-2.5 rounded-full overflow-hidden" style={{ background: C.ink3 }}>
+            <div className="h-full rounded-full" style={{ width: `${pct}%`, background: `linear-gradient(90deg, ${C.amber}, ${C.trophyGold})` }} />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-8 gap-2.5 mt-6">
+          {ids.map(id => {
+            const meta = ACHIEVEMENT_META[id];
+            const unlocked = !!gallery[id];
+            const Icon = meta.icon;
+            const isMystery = meta.hidden && !unlocked;
+            return (
+              <div
+                key={id}
+                className="relative rounded-2xl p-3 text-center"
+                style={{
+                  background: unlocked ? C.ink2 : C.ink3,
+                  border: `1px solid ${unlocked ? (meta.hidden ? "rgba(168,85,247,0.4)" : C.line) : C.line}`,
+                  opacity: unlocked ? 1 : 0.5,
+                }}
+              >
+                {meta.hidden && unlocked && <div className="absolute top-1.5 right-1.5 text-[9px]">✨</div>}
+                <div className="flex items-center justify-center" style={{ height: 30 }}>
+                  {isMystery ? (
+                    <span className="text-lg" style={{ color: C.chalkDim }}>🔒</span>
+                  ) : (
+                    <Icon size={26} color={unlocked ? C.trophyGold : C.chalkDim} />
+                  )}
+                </div>
+                <div className="f-mono text-[9px] font-bold mt-2 leading-tight" style={{ color: unlocked ? C.chalk : C.chalkDim }}>
+                  {isMystery ? "???" : meta.label}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HallOfFameScreen({ entries, onBack, onPlayAgain }) {
+  const total = entries.length;
+  const bestOvr = total ? Math.max(...entries.map(e => e.peakOverall)) : 0;
+  const nbaCareers = entries.filter(e => e.tierLabel === "NBA Player").length;
+  const totalTrophies = entries.reduce((s, e) => s + (e.trophies || 0), 0);
+  const tintStyle = (tint) => {
+    if (tint === "gold") return { border: "rgba(250,204,21,0.35)", bg: "linear-gradient(180deg, rgba(250,204,21,0.07), " + C.ink2 + ")", badgeBg: "rgba(250,204,21,0.14)", badgeColor: C.trophyGold, badgeBorder: "rgba(250,204,21,0.35)" };
+    if (tint === "amber") return { border: C.line, bg: C.ink2, badgeBg: "rgba(249,115,22,0.14)", badgeColor: C.amberBright, badgeBorder: "rgba(249,115,22,0.35)" };
+    if (tint === "dim") return { border: C.line, bg: C.ink2, badgeBg: C.ink3, badgeColor: C.chalkDim, badgeBorder: C.line };
+    return { border: C.line, bg: C.ink2, badgeBg: "rgba(248,250,252,0.08)", badgeColor: C.chalk, badgeBorder: C.line };
+  };
+
+  return (
+    <div className="court-hero min-h-full w-full px-4 py-10 sm:py-14">
+      <div className="w-full max-w-5xl mx-auto">
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <div className="flex items-center gap-2.5">
+              <span className="text-xl">🏛️</span>
+              <span className="f-display text-2xl font-black" style={{ color: C.chalk }}>Hall of Fame</span>
+            </div>
+            <div className="f-body text-sm mt-1" style={{ color: C.chalkDim }}>Every career you've ever played, in one place.</div>
+          </div>
+          <button onClick={onBack} className="f-mono text-xs px-4 py-2 rounded-full" style={{ background: C.ink3, color: C.chalkDim, border: `1px solid ${C.line}` }}>← Back</button>
+        </div>
+
+        <div className="flex mt-5 rounded-[20px] py-5" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+          {[["Careers Played", total, C.chalk], ["Best Peak OVR", bestOvr || "—", C.trophyGold], ["NBA Careers", nbaCareers, C.chalk], ["Total Trophies", totalTrophies, C.chalk]].map(([label, val, color], i) => (
+            <div key={label} className="flex-1 text-center" style={i < 3 ? { borderRight: `1px solid ${C.line}` } : {}}>
+              <div className="f-display text-2xl font-black" style={{ color }}>{val}</div>
+              <div className="f-mono text-[9px] uppercase tracking-widest mt-0.5" style={{ color: C.chalkDim }}>{label}</div>
+            </div>
+          ))}
+        </div>
+
+        {total === 0 ? (
+          <div className="text-center py-20">
+            <div className="text-4xl mb-3">🏛️</div>
+            <div className="f-body text-sm" style={{ color: C.chalkDim }}>No careers retired yet. Finish one to start your collection.</div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-6">
+            {entries.map((e, i) => {
+              const t = tintStyle(e.tierTint);
+              const isNewest = i === 0;
+              return (
+                <div key={e.id} className="rounded-[20px] p-5 relative" style={{ background: t.bg, border: `1px solid ${isNewest ? C.amber : t.border}` }}>
+                  {isNewest && (
+                    <div className="absolute -top-2.5 right-4 f-mono text-[9px] font-extrabold px-2.5 py-0.5 rounded-full" style={{ background: C.amber, color: "#1A0A00" }}>JUST RETIRED</div>
+                  )}
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <FlagIcon name={e.hometown} size={16} />
+                        <span className="f-mono text-[10px]" style={{ color: C.chalkDim }}>{e.hometown}</span>
+                      </div>
+                      <div className="f-display text-lg font-bold" style={{ color: C.chalk }}>{e.name}</div>
+                      <div className="f-mono text-[10px] mt-0.5" style={{ color: C.chalkDim }}>#{e.jersey} {e.position}</div>
+                    </div>
+                    <div className="rounded-xl px-3 py-1.5 text-center" style={{ background: e.tierTint === "gold" ? `linear-gradient(160deg, ${C.trophyGold}, ${C.amber})` : C.ink3, border: e.tierTint === "gold" ? "none" : `1px solid ${isNewest ? C.amber : C.line}` }}>
+                      <div className="f-mono text-[8px] font-bold" style={{ color: e.tierTint === "gold" ? "rgba(0,0,0,0.55)" : C.chalkDim }}>PEAK</div>
+                      <div className="font-black text-xl" style={{ color: e.tierTint === "gold" ? "#1A0A00" : C.chalk }}>{e.peakOverall}</div>
+                    </div>
+                  </div>
+
+                  <div className="inline-flex items-center gap-1.5 f-display font-extrabold text-[13px] px-3 py-1.5 rounded-full mt-4" style={{ background: t.badgeBg, color: t.badgeColor, border: `1px solid ${t.badgeBorder}` }}>
+                    <span>{e.tierIcon}</span>{e.tierLabel}
+                  </div>
+
+                  <div className="flex gap-5 mt-4">
+                    {[["PPG", e.avg.ppg], ["RPG", e.avg.rpg], ["APG", e.avg.apg]].map(([lbl, val]) => (
+                      <div key={lbl}>
+                        <div className="f-display font-extrabold text-[19px]" style={{ color: C.chalk }}>{val}</div>
+                        <div className="f-mono text-[9px] font-bold uppercase tracking-widest" style={{ color: C.chalkDim }}>{lbl}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center justify-between mt-4 pt-3" style={{ borderTop: `1px solid ${C.line}` }}>
+                    <span className="f-mono text-[11px]" style={{ color: C.chalkDim }}>{e.games} games · retired at {e.retiredAge}</span>
+                    <span className="f-mono text-[11px] font-bold" style={{ color: e.trophies > 0 ? C.trophyGold : C.chalkDim }}>🏆 {e.trophies}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="mt-8 text-center">
+          <PrimaryButton onClick={onPlayAgain}>+ Start New Career</PrimaryButton>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RetiredScreen({ player, onPlayAgain, onViewHallOfFame, onViewAchievements }) {
   const overall = computeOverall(player.stats, player.position);
   const title = legacyTitle(player);
   const careerSummary = buildCareerSummary(player.history);
@@ -5076,6 +5334,10 @@ function RetiredScreen({ player, onPlayAgain }) {
         <PrimaryButton full onClick={onPlayAgain}>
           <RotateCcw size={13} className="inline mr-1" /> Start a New Career
         </PrimaryButton>
+        <div className="mt-2.5 grid grid-cols-2 gap-2.5">
+          <SecondaryButton full onClick={onViewHallOfFame}>🏛️ Hall of Fame</SecondaryButton>
+          <SecondaryButton full onClick={onViewAchievements}>🏆 Achievements</SecondaryButton>
+        </div>
       </div>
     </div>
   );
@@ -5120,6 +5382,7 @@ export default function App() {
   }, []);
 
   const save = async (p) => {
+    syncAchievementGallery(p);
     try {
       if (hasArtifactStorage) {
         await window.storage.set("career", JSON.stringify(p), false);
@@ -6824,7 +7087,9 @@ export default function App() {
     save(p);
 
     if (forcedRetire) {
-      setPlayer({ ...p, retired: true, retireReason: forcedRetire });
+      const retiredPlayer = { ...p, retired: true, retireReason: forcedRetire };
+      saveToHallOfFame(retiredPlayer, buildCareerSummary(retiredPlayer.history));
+      setPlayer(retiredPlayer);
       setScreen("retired");
       clearSave();
       return;
@@ -6850,7 +7115,9 @@ export default function App() {
   };
 
   const handleRetireConsider = () => {
-    setPlayer({ ...player, retired: true, retireReason: "You walk away on your own terms." });
+    const retiredPlayer = { ...player, retired: true, retireReason: "You walk away on your own terms." };
+    saveToHallOfFame(retiredPlayer, buildCareerSummary(retiredPlayer.history));
+    setPlayer(retiredPlayer);
     setScreen("retired");
     clearSave();
   };
@@ -6939,7 +7206,7 @@ export default function App() {
   return (
     <div className="w-full min-h-screen" style={{ background: C.ink }}>
       <FontStyle />
-      {screen === "start" && <StartScreen onStart={handleStart} savedGame={savedGame} onContinue={handleContinue} />}
+      {screen === "start" && <StartScreen onStart={handleStart} savedGame={savedGame} onContinue={handleContinue} onViewHallOfFame={() => setScreen("hall_of_fame")} onViewAchievements={() => setScreen("achievement_gallery")} />}
       {screen === "u15_result" && player && (
         <U15SelectionScreen
           player={player}
@@ -7044,7 +7311,20 @@ export default function App() {
       {screen === "training" && player && <Training player={player} onConfirm={handleConfirmTraining} />}
       {screen === "event" && currentEvent && <EventScreen event={currentEvent} onChoose={handleChooseEvent} />}
       {screen === "result" && summary && <ResultScreen summary={summary} onContinue={handleContinueAfterResult} />}
-      {screen === "retired" && player && <RetiredScreen player={player} onPlayAgain={handlePlayAgain} />}
+      {screen === "retired" && player && <RetiredScreen player={player} onPlayAgain={handlePlayAgain} onViewHallOfFame={() => setScreen("hall_of_fame")} onViewAchievements={() => setScreen("achievement_gallery")} />}
+      {screen === "hall_of_fame" && (
+        <HallOfFameScreen
+          entries={loadHallOfFame()}
+          onBack={() => setScreen("start")}
+          onPlayAgain={handlePlayAgain}
+        />
+      )}
+      {screen === "achievement_gallery" && (
+        <AchievementGalleryScreen
+          gallery={loadAchievementGallery()}
+          onBack={() => setScreen("start")}
+        />
+      )}
     </div>
   );
 }
