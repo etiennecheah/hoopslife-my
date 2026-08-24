@@ -6108,7 +6108,7 @@ export default function App() {
       if (e.minOverall && computeOverall(p.stats, p.position) < e.minOverall) return false;
       if (e.notAbroad && p.abroad) return false;
       if (e.id === "national_trial" && p.nationalTeam) return false;
-      if (usedEvents.current.filter(id => id === e.id).length >= 2) return false;
+      if (usedEvents.current.includes(e.id)) return false;
       return true;
     });
     const chosenPool = pool.length > 0 ? pool : EVENT_POOL.filter(e => e.stages.includes(stageKey) && !(e.financial && noMoneyEvents));
