@@ -775,7 +775,7 @@ const UBA_TEAMS = [
    so it can be handled by the existing overseas-offer screen/handlers. */
 const UBA_TPBL_IMPORT_CHANCE = 0.35; // chance of this offer firing at graduation, instead of going straight to domestic offers
 const UBA_TPBL_IMPORT_TIER = {
-  id: "tpbl_import", label: "Taiwan Pro (TPBL)",
+  id: "tpbl_import", label: "Taiwan Pro (TPBL)", threshold: 0,
   teams: [
     { name: "New Taipei Kings", league: "TPBL", country: "Taiwan", salaryPerSeason: 3500000 },
     { name: "Formosa Dreamers", league: "TPBL", country: "Taiwan", salaryPerSeason: 3500000 },
@@ -793,6 +793,16 @@ const UBA_TPBL_IMPORT_TIER = {
   ],
   achId: "asia_pro_player",
 };
+
+// ALL_OVERSEAS_TIERS — used for id-keyed lookups (season stat generation,
+// release/promotion checks) so a signed tpbl_import player is recognized
+// wherever any signed overseas player is recognized. Deliberately NOT used
+// by highestOverseasTier() (which stays scoped to OVERSEAS_TIERS only) —
+// that function drives the general "you're good enough to get scouted"
+// roll for domestic pros, and tpbl_import should only ever be reached via
+// the dedicated UBA-graduation offer, never as a random overseas offer for
+// an ordinary MBL player.
+const ALL_OVERSEAS_TIERS = [...OVERSEAS_TIERS, UBA_TPBL_IMPORT_TIER];
 
 /* UBA production sits at development-league level, so it reuses the same
    generator as the U20/U23 D-Leagues — role (Starter vs Rotation) drives
@@ -1148,10 +1158,16 @@ const EVENT_POOL = [
       { label: "Decline, focus on club form", icon: "shieldCheck", relationships: { coach: 5 },
         result: "You stay club-focused. The door stays open for next time." },
     ]},
-  { id: "overseas_scout", stages: ["pro"], minAge: 22, minOverall: 70, notAbroad: true, title: "Scouts Are Watching", scene: "scouting",
+  { id: "overseas_scout", stages: ["pro"], minAge: 22, minOverall: 75, notAbroad: true, title: "Scouts Are Watching", scene: "scouting",
     desc: "Scouts from an overseas league are in the stands this week.",
     choices: [
-      { label: "Play to impress", icon: "star", fatigue: 12, popularity: 6,
+      // guaranteesOverseasOffer: "Play to impress" has no risk tiers (see
+      // spec sheet — it's a flat Guaranteed effect), so success = whenever
+      // this is picked. Raised minOverall to 75 (above the Asia Pro tier's
+      // own 70 floor) so this guarantee is a genuine step up from the
+      // normal ~88%-per-season roll, not just a free skip of it the first
+      // moment a player becomes eligible.
+      { label: "Play to impress", icon: "star", fatigue: 12, popularity: 6, guaranteesOverseasOffer: true,
         result: "You ball out. Word travels fast — scouts abroad are taking notes." },
       { label: "Stick to the game plan", icon: "clipboard", relationships: { coach: 6, team: 4 },
         result: "You trust the system. Your team wins, quietly." },
@@ -1998,7 +2014,7 @@ function saveToHallOfFame(p, careerSummary) {
       tierLabel: tier.label,
       tierIcon: tier.icon,
       tierTint: tier.tint,
-      avg: pro ? { ppg: pro.avg.ppg, rpg: pro.avg.rpg, apg: pro.avg.apg } : { ppg: 0, rpg: 0, apg: 0 },
+      avg: pro ? { ppg: pro.avg.ppg, rpg: pro.avg.rpg, apg: pro.avg.apg, spg: pro.avg.spg, bpg: pro.avg.bpg, fgPct: pro.avg.fgPct, threePct: pro.avg.threePct } : { ppg: 0, rpg: 0, apg: 0, spg: 0, bpg: 0, fgPct: 0, threePct: 0 },
       games: pro ? pro.games : 0,
       retiredAge: p.age,
       trophies: (careerSummary.clubs || []).reduce((sum, c) => sum + (c.titles || 0), 0),
@@ -5030,11 +5046,11 @@ function HallOfFameScreen({ entries, onBack, onPlayAgain }) {
                     <span>{e.tierIcon}</span>{e.tierLabel}
                   </div>
 
-                  <div className="flex gap-5 mt-4">
-                    {[["PPG", e.avg.ppg], ["RPG", e.avg.rpg], ["APG", e.avg.apg]].map(([lbl, val]) => (
+                  <div className="grid grid-cols-4 gap-x-3 gap-y-2.5 mt-4">
+                    {[["PPG", e.avg.ppg], ["RPG", e.avg.rpg], ["APG", e.avg.apg], ["SPG", e.avg.spg ?? 0], ["BPG", e.avg.bpg ?? 0], ["FG%", e.avg.fgPct != null ? `${e.avg.fgPct}%` : "—"], ["3P%", e.avg.threePct != null ? `${e.avg.threePct}%` : "—"]].map(([lbl, val]) => (
                       <div key={lbl}>
-                        <div className="f-display font-extrabold text-[19px]" style={{ color: C.chalk }}>{val}</div>
-                        <div className="f-mono text-[9px] font-bold uppercase tracking-widest" style={{ color: C.chalkDim }}>{lbl}</div>
+                        <div className="f-display font-extrabold text-[15px]" style={{ color: C.chalk }}>{val}</div>
+                        <div className="f-mono text-[8px] font-bold uppercase tracking-widest" style={{ color: C.chalkDim }}>{lbl}</div>
                       </div>
                     ))}
                   </div>
@@ -5701,10 +5717,12 @@ export default function App() {
     const selected = Math.random() < A17_SELECTION_CHANCE[tier];
     setA17Selected(selected);
 
-    // Taiwanese HBL programmes scout the National U17 Championship for
-    // imports. Eligibility is judged on raw ability at 17, independent of
-    // whether the player made their state squad this year.
-    const hblEligible = computeOverall(p.stats, p.position) >= HBL_RATING_THRESHOLD;
+    // Taiwanese HBL programmes scout the National U17 Championship itself —
+    // they're evaluating what they see on court in that tournament, so a
+    // player who didn't even make the state squad has nothing for scouts to
+    // judge. Eligibility now requires actually playing in the tournament
+    // (selected === true), on top of the usual ability threshold.
+    const hblEligible = selected && computeOverall(p.stats, p.position) >= HBL_RATING_THRESHOLD;
     // Only a subset of programmes have an import slot open in any given year,
     // rolled once here so the shortlist stays stable across re-renders.
     const hblOfferIds = hblEligible ? sampleN(HBL_TEAMS, HBL_OFFER_COUNT).map(t => t.id) : null;
@@ -6562,7 +6580,7 @@ export default function App() {
     // variables (leagueStats/leagueLabel/leagueAwards/gamesPlayed) so the
     // season recap and Career Ledger render it exactly like a domestic season.
     if (p.stage === "pro" && p.abroad && p.overseasTierId) {
-      const tier = OVERSEAS_TIERS.find(t => t.id === p.overseasTierId);
+      const tier = ALL_OVERSEAS_TIERS.find(t => t.id === p.overseasTierId);
       if (tier) {
         const overallOs = computeOverall(p.stats, p.position);
         const band = overseasRoleBand(tier, overallOs);
@@ -6951,7 +6969,7 @@ export default function App() {
     // about your actual basketball ability, not your fame back home.
     if (p.stage === "pro" && p.abroad) {
       const overallAbroad = computeOverall(p.stats, p.position);
-      const currentTier = OVERSEAS_TIERS.find(t => t.id === p.overseasTierId);
+      const currentTier = ALL_OVERSEAS_TIERS.find(t => t.id === p.overseasTierId);
 
       if (currentTier && overallAbroad < currentTier.threshold) {
         // Fell below the current tier's floor — released. Re-evaluate against
@@ -6989,8 +7007,8 @@ export default function App() {
       // grows past EuroLeague/NBA level would be stuck forever.
       if (currentTier) {
         const bestQualifying = highestOverseasTier(overallAbroad);
-        const currentIdx = OVERSEAS_TIERS.findIndex(t => t.id === currentTier.id);
-        const bestIdx = bestQualifying ? OVERSEAS_TIERS.findIndex(t => t.id === bestQualifying.id) : -1;
+        const currentIdx = ALL_OVERSEAS_TIERS.findIndex(t => t.id === currentTier.id);
+        const bestIdx = bestQualifying ? ALL_OVERSEAS_TIERS.findIndex(t => t.id === bestQualifying.id) : -1;
         if (bestQualifying && bestIdx >= 0 && bestIdx < currentIdx && Math.random() < OVERSEAS_OFFER_CHANCE) {
           const band = overseasRoleBand(bestQualifying, overallAbroad);
           const teams = pick3(bestQualifying.teams);
@@ -7030,10 +7048,14 @@ export default function App() {
     // Gated on raw overall, not the popularity-blended domestic "rating" —
     // otherwise a merely-decent player with high local fame could wrongly
     // qualify for offers meant for genuinely elite basketball ability.
+    // choice.guaranteesOverseasOffer (e.g. "Scouts Are Watching" → Play to
+    // impress) bypasses the usual per-season roll and guarantees an offer
+    // outright, as long as the player already qualifies for some tier.
     if (p.stage === "pro" && !p.abroad && p.clubId) {
       const overallD = computeOverall(p.stats, p.position);
       const qualifyingTier = highestOverseasTier(overallD);
-      if (qualifyingTier && Math.random() < OVERSEAS_OFFER_CHANCE) {
+      const guaranteed = !!choice.guaranteesOverseasOffer && !!qualifyingTier;
+      if (qualifyingTier && (guaranteed || Math.random() < OVERSEAS_OFFER_CHANCE)) {
         const band = overseasRoleBand(qualifyingTier, overallD);
         const teams = pick3(qualifyingTier.teams);
         p.pendingOverseasOffer = { tier: qualifyingTier, teams, role: band.role, awardChance: band.awardChance, years: randInt(1, 3) };
