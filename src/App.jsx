@@ -46,6 +46,7 @@ const IconSixthMan = svgIcon(<><rect x="3" y="16" width="18" height="3" rx="0.5"
 const IconClubLoyal = svgIcon(<><path d="M12 20s-7-4.5-7-10a4.5 4.5 0 0 1 7-3.7A4.5 4.5 0 0 1 19 10c0 5.5-7 10-7 10z"/></>);
 const IconJourneyman = svgIcon(<><path d="M3 12h4l2-7 4 14 2-7h6"/></>);
 const IconAsiaCup = svgIcon(<><ellipse cx="12" cy="10" rx="6" ry="6"/><path d="M12 4a6 8 0 0 1 0 12"/><path d="M12 16v3"/><path d="M8 21h8l-1-2H9z"/></>);
+const IconMedal = svgIcon(<><circle cx="12" cy="15" r="5"/><path d="M9 10L7 3h4l1.5 4"/><path d="M15 10l2-7h-4l-1.5 4"/></>);
 const IconQuarterfinal = svgIcon(<><path d="M4 4v6h6"/><path d="M20 4v6h-6"/><path d="M4 20v-6h6"/><path d="M20 20v-6h-6"/><circle cx="12" cy="12" r="2"/></>);
 const IconNBA = svgIcon(<><circle cx="12" cy="12" r="8"/><path d="M12 4v16M4 12h16M6 6.5c2 2 10 2 12 0M6 17.5c2-2 10-2 12 0"/></>);
 const IconEuroLeague = svgIcon(<><circle cx="12" cy="12" r="8"/><circle cx="12" cy="6" r="1" fill="currentColor" stroke="none"/><circle cx="16.9" cy="9.5" r="1" fill="currentColor" stroke="none"/><circle cx="15.1" cy="15" r="1" fill="currentColor" stroke="none"/><circle cx="8.9" cy="15" r="1" fill="currentColor" stroke="none"/><circle cx="7.1" cy="9.5" r="1" fill="currentColor" stroke="none"/></>);
@@ -465,6 +466,12 @@ const ACHIEVEMENT_META = {
   nt_qualifier: { label: "Asia Cup Qualifiers", icon: IconQuarterfinal },
   nt_asia_cup: { label: "FIBA Asia Cup", icon: IconAsiaCup },
   nt_quarterfinal: { label: "Asia Cup Quarter-Finalist", icon: IconQuarterfinal },
+  sea_games: { label: "SEA Games", icon: IconNationalTeam },
+  sea_games_bronze: { label: "SEA Games Bronze", icon: IconMedal },
+  sea_games_silver: { label: "SEA Games Silver", icon: IconMedal },
+  sea_games_gold: { label: "SEA Games Gold", icon: IconMedal },
+  sea_games_multi: { label: "Multiple SEA Games Medals", icon: IconMedal },
+  sea_games_setl: { label: "SEA Games Full Set", icon: IconMedal, hidden: true },
   mbl_champion: { label: "MBL Champion", icon: IconChampion },
   dleague_champion: { label: "D-League Champion", icon: IconChampion },
   mssm_rep: { label: "MSSM State Rep", icon: IconStateRep },
@@ -712,7 +719,40 @@ const U18_RESULT_META = {
    and the imported player is always slotted in as a starter.
    Accepting also locks in a Malaysia U18 national call-up.
 ============================================================ */
-const HBL_RATING_THRESHOLD = 45;     // min overall at 17 to attract an HBL offer
+/* HBL IMPORT SCOUTING
+   Taiwanese programmes scout the National U17 Championship in person, so
+   eligibility reflects WHAT THE SCOUTS SAW, not just a rating check.
+
+   The old flat "overall >= 45" gate passed 96.4% of players once the
+   attribute-point system raised the average 17-year-old to ~49.5 overall.
+   Raising the number alone is unworkable: the field is so bunched at 17
+   that 50 -> 34%, 55 -> 17%, 60 -> 3% — a two-point move swings the rate
+   several-fold. Worse, a pure rating check can reject a Final MVP while
+   accepting a bench player one point higher.
+
+   Instead: a modest ability floor, then a CHANCE built from tournament
+   performance. Import slots are limited, so clearing the bar is never a
+   guarantee. */
+const HBL_RATING_THRESHOLD = 48;      // ability floor to be considered at all
+const HBL_BASE_CHANCE      = 0.02;    // bare-minimum prospect, nothing else
+const HBL_AWARD_BONUS      = 0.10;    // per individual award (max 2 counted)
+const HBL_MARQUEE_BONUS    = 0.12;    // extra for Player of the Tournament / Final MVP
+const HBL_TEAM_RUN_BONUS   = 0.10;    // champions (half for runners-up) = more games on show
+const HBL_ABILITY_SCALE    = 0.010;   // per point of overall above the floor
+const HBL_MAX_CHANCE       = 0.75;    // even a superb tournament is never certain
+
+/* Probability that at least one Taiwanese programme offers an import spot. */
+function hblOfferChance(overall, awards, teamResultId) {
+  if (overall < HBL_RATING_THRESHOLD) return 0;
+  const aw = awards || [];
+  let c = HBL_BASE_CHANCE;
+  c += Math.min(2, aw.length) * HBL_AWARD_BONUS;
+  if (aw.includes("pot") || aw.includes("final_mvp")) c += HBL_MARQUEE_BONUS;
+  if (teamResultId === "champion") c += HBL_TEAM_RUN_BONUS;
+  else if (teamResultId === "runner_up") c += HBL_TEAM_RUN_BONUS * 0.5;
+  c += Math.max(0, overall - HBL_RATING_THRESHOLD) * HBL_ABILITY_SCALE;
+  return Math.min(HBL_MAX_CHANCE, c);
+}
 const HBL_OFFER_COUNT = 3;           // only a subset of schools bid in any given year
 const HBL_GAMES_MIN = 16;
 const HBL_GAMES_MAX = 20;
@@ -849,19 +889,71 @@ const NT_RATING_THRESHOLD_DLEAGUE = 65; // rating to receive a national tryout (
 const NT_MAKE_SQUAD_CHANCE = 0.65;   // chance to make the squad once tried out (rating <= 80)
 const NT_QUALIFY_CHANCE = 0.50;      // Malaysia advancing through the qualifiers
 const NT_QUARTERFINAL_CHANCE = 0.20; // if at the Asia Cup, chance to reach the QF (else 10-12th)
-const ASIA_CUP_FIRST_YEAR = 2029;    // first Asia Cup finals
+/* Asia Cup finals sit on EVEN years. The SEA Games run on odd years from
+   2027, and the old 2029 anchor put the Asia Cup on odd years too — the
+   SEA Games then displaced every single Asia Cup finals, removing the
+   marquee event from the game entirely. Shifting the anchor keeps both. */
+const ASIA_CUP_FIRST_YEAR = 2030;    // first Asia Cup finals
+
+/* SEA GAMES — biennial regional championship, first edition 2027.
+   Malaysia is a genuine contender here (unlike the continental Asia Cup),
+   so the floor is 5th and a medal is realistically in play. */
+const SEA_GAMES_FIRST_YEAR = 2027;
+const SEA_GAMES_INTERVAL = 2;
+const SEA_GAMES_NATIONS = [
+  "Malaysia", "Singapore", "Vietnam", "Thailand", "Philippines", "Indonesia",
+  "Brunei", "Laos", "Timor-Leste", "Myanmar", "Cambodia",
+];
+/* Placement odds. Philippines/Indonesia are the regional powers, so gold is
+   rare; bronze is the realistic medal target at 35%. Malaysia never finishes
+   below 5th — the regional field drops off sharply after the top handful. */
+const SEA_GAMES_PLACEMENTS = [
+  { place: 1, label: "Gold Medal",   chance: 0.07, achId: "sea_games_gold",   pop: 34, games: [5, 6] },
+  { place: 2, label: "Silver Medal", chance: 0.14, achId: "sea_games_silver", pop: 26, games: [5, 6] },
+  { place: 3, label: "Bronze Medal", chance: 0.35, achId: "sea_games_bronze", pop: 20, games: [5, 6] },
+  { place: 4, label: "4th Place",    chance: 0.24, achId: "sea_games",        pop: 12, games: [4, 5] },
+  { place: 5, label: "5th Place",    chance: 0.20, achId: "sea_games",        pop: 9,  games: [4, 5] },
+];
+function rollSeaGamesPlacement() {
+  const r = Math.random();
+  let acc = 0;
+  for (const p of SEA_GAMES_PLACEMENTS) {
+    acc += p.chance;
+    if (r < acc) return p;
+  }
+  return SEA_GAMES_PLACEMENTS[SEA_GAMES_PLACEMENTS.length - 1];
+}
 
 // What national event (if any) happens in a given calendar year.
-function nationalEventForYear(year) {
-  if (year < 2026) return null;
-  if ((year - ASIA_CUP_FIRST_YEAR) % 4 === 0 && year >= ASIA_CUP_FIRST_YEAR) {
-    return { type: "cup", year };
+// SEA Games takes priority in a clash — it's the shorter, closer tournament
+// and a qualifier phase can slip a year without breaking the Asia Cup cycle.
+/* Every national event happening in a given year, in the order they'd be
+   played. Real calendars run the SEA Games and an Asia Cup qualifier window
+   in the same year (different months), so a season can carry TWO call-ups —
+   all three qualifier phases survive alongside the biennial SEA Games. */
+function nationalEventsForYear(year) {
+  if (year < 2026) return [];
+  const out = [];
+  // SEA Games run mid-year, before the Asia Cup windows.
+  if (year >= SEA_GAMES_FIRST_YEAR && (year - SEA_GAMES_FIRST_YEAR) % SEA_GAMES_INTERVAL === 0) {
+    out.push({ type: "sea_games", year });
   }
-  const offset = (((ASIA_CUP_FIRST_YEAR - year) % 4) + 4) % 4; // 3,2,1 before a cup
-  if (offset === 3) return { type: "qualifier", phase: 1, year };
-  if (offset === 2) return { type: "qualifier", phase: 2, year };
-  if (offset === 1) return { type: "qualifier", phase: 3, year };
-  return null;
+  if ((year - ASIA_CUP_FIRST_YEAR) % 4 === 0 && year >= ASIA_CUP_FIRST_YEAR) {
+    out.push({ type: "cup", year });
+  } else {
+    const offset = (((ASIA_CUP_FIRST_YEAR - year) % 4) + 4) % 4; // 3,2,1 before a cup
+    if (offset === 3) out.push({ type: "qualifier", phase: 1, year });
+    else if (offset === 2) out.push({ type: "qualifier", phase: 2, year });
+    else if (offset === 1) out.push({ type: "qualifier", phase: 3, year });
+  }
+  return out;
+}
+
+/* Back-compat single-event accessor. Returns the first event of the year so
+   any caller that only handles one still behaves sensibly. */
+function nationalEventForYear(year) {
+  const list = nationalEventsForYear(year);
+  return list.length ? list[0] : null;
 }
 
 /* National-team role multipliers — mirrors the club league system's role
@@ -873,6 +965,27 @@ const NT_ROLE_MULT = { "First Option": 1.15, "Starter": 1.0, "Rotation": 0.62, "
    (First Option > Starter > Rotation > Bench, exactly like club minutes).
    A standout performance lets output spike well above the role's usual
    ceiling, per the national-team selection rules. */
+/* SEA Games stat line. The regional field is materially weaker than the
+   continental Asia Cup — Brunei, Laos, Timor-Leste and Cambodia are well
+   below Malaysia's level — so counting stats run noticeably higher than the
+   Asia Cup baseline for the same player and role. */
+function generateSeaGamesStats(stats, position, height, role, standout) {
+  const base = generateNationalStats(stats, position, height, role, standout);
+  const boost = randFloat(1.18, 1.34);
+  const pct = (v, lo, hi) => clamp(Math.round(v * randFloat(1.02, 1.07)), lo, hi);
+  return {
+    ppg: round1(base.ppg * boost),
+    rpg: round1(base.rpg * boost),
+    apg: round1(base.apg * boost),
+    spg: round1(base.spg * boost),
+    bpg: round1(base.bpg * boost),
+    fgPct: pct(base.fgPct, 25, 68),
+    threePct: pct(base.threePct, 15, 52),
+    role: base.role,
+    standout: base.standout,
+  };
+}
+
 function generateNationalStats(stats, position, height, role, standout) {
   const roleM = (NT_ROLE_MULT[role] || 0.62) * (standout ? randFloat(1.4, 1.8) : 1);
   const overallScale = computeOverall(stats, position);
@@ -1149,14 +1262,6 @@ const EVENT_POOL = [
         result: "You start seeing the game a full step ahead." },
       { label: "Skip it, protect your rest", icon: "bed", fatigue: -5, relationships: { coach: -5 },
         result: "Coach notices. You feel fresher, at least." },
-    ]},
-  { id: "national_trial", stages: ["pro"], minAge: 19, minOverall: 58, title: "National Team Call-Up", scene: "national_pride",
-    desc: "Basketball Malaysia has invited you to trials for the national squad.",
-    choices: [
-      { label: "Attend and give everything", icon: "star", fatigue: 20, popularity: 10, flag: "nationalTeam",
-        result: "You earn the call. You're officially a Malaysia international." },
-      { label: "Decline, focus on club form", icon: "shieldCheck", relationships: { coach: 5 },
-        result: "You stay club-focused. The door stays open for next time." },
     ]},
   { id: "overseas_scout", stages: ["pro"], minAge: 22, minOverall: 75, notAbroad: true, title: "Scouts Are Watching", scene: "scouting",
     desc: "Scouts from an overseas league are in the stands this week.",
@@ -1913,6 +2018,199 @@ function contractMonthlySalary({ leagueId, role, club, semiPro }) {
   return Math.round(lo + t * (hi - lo));
 }
 
+/* ============================================================
+   BODY SYSTEM (height / weight / wingspan)
+
+   Set once at creation, permanent for the career. Body doesn't
+   grant free rating — it SHAPES the starting attribute spread,
+   so a long-armed big starts better at rim protection and boards
+   while a compact guard starts quicker and steadier from range.
+   Every build sums to roughly the same total, so no body is
+   strictly better; they're different starting shapes.
+============================================================ */
+const BODY_LIMITS = {
+  height:   [154, 215],
+  weight:   [55, 140],
+  wingspan: [150, 245],
+  reachMin: -6,   // wingspan may sit slightly under height
+  reachMax: 35,   // hard ceiling: a 195cm player tops out at a 230cm span
+};
+// Clamp a wingspan against BOTH the absolute limits and the reach rule,
+// so the two constraints can never disagree (e.g. a 154cm player can't
+// reach the 245cm absolute max — the +35 rule caps them at 189cm).
+function wingspanBounds(height) {
+  const h = height || 180;
+  return {
+    min: Math.max(BODY_LIMITS.wingspan[0], h + BODY_LIMITS.reachMin),
+    max: Math.min(BODY_LIMITS.wingspan[1], h + BODY_LIMITS.reachMax),
+  };
+}
+function clampWingspan(height, wingspan) {
+  const b = wingspanBounds(height);
+  return Math.max(b.min, Math.min(b.max, wingspan));
+}
+
+// Typical frame per position — used only as the midpoint that body
+// modifiers measure deviation FROM. Sliders are not limited to these.
+const BODY_RANGES = {
+  PG: { h: [168, 190], w: [62, 92],  s: [-2, 14] },
+  SG: { h: [175, 196], w: [68, 98],  s: [-2, 15] },
+  SF: { h: [182, 202], w: [74, 106], s: [-2, 16] },
+  PF: { h: [188, 208], w: [82, 118], s: [-2, 17] },
+  C:  { h: [193, 215], w: [88, 130], s: [-2, 18] },
+};
+function defaultBody(posId) {
+  const r = BODY_RANGES[posId] || BODY_RANGES.SF;
+  const height = Math.round((r.h[0] + r.h[1]) / 2);
+  return {
+    height,
+    weight: Math.round((r.w[0] + r.w[1]) / 2),
+    wingspan: clampWingspan(height, height + 6),
+  };
+}
+/* Returns per-attribute modifiers from the body build. Deliberately
+   near zero-sum: length and mass help inside, compactness helps
+   outside, so no single build dominates. */
+function bodyModifiers({ height, weight, reach, position }) {
+  const h = height || 180, w = weight || 80, r = reach == null ? 6 : reach;
+  const rng = BODY_RANGES[position] || BODY_RANGES.SF;
+  const midH = (rng.h[0] + rng.h[1]) / 2;
+  const midW = (rng.w[0] + rng.w[1]) / 2;
+  const bmi = w / Math.pow(h / 100, 2);
+
+  /* Soft response curve. The sliders span 61cm of height and 85kg of weight,
+     so a linear model produced ±20 swings at the extremes (a 215cm/140kg
+     centre lost 10 athleticism). Raising the deviation to a fractional power
+     keeps normal builds responsive while compressing absurd ones. */
+  const soft = (d, k) => Math.sign(d) * Math.pow(Math.abs(d), 0.72) * k;
+  const dh = soft(h - midH, 1), dw = soft(w - midW, 1), dr = soft(r - 6, 1);
+  const dwPos = Math.max(0, dw);
+
+  const raw = {
+    shooting:    -dh * 0.42 - dr * 0.26 - dwPos * 0.13,
+    playmaking:  -dh * 0.47 - dwPos * 0.16,
+    defense:      dr * 0.68 + dh * 0.13 + dw * 0.13,
+    rebounding:   dh * 0.52 + dr * 0.62 + dw * 0.16,
+    athleticism: -dw * 0.37 - Math.max(0, dh) * 0.16 + (bmi < 21 ? 1 : 0),
+    iq:           0,
+  };
+
+  /* Zero-sum correction. Positions that concentrate weight on defense +
+     rebounding (C: .65 combined) would otherwise gain far more from an
+     extreme frame than they lose on the perimeter, making "max everything"
+     strictly optimal (5.4 OVR swing before this). Since position weights
+     sum to 1, subtracting the weighted mean forces the weighted total to
+     zero — body changes your SHAPE, never your rating. */
+  const wts = posWeights(position);
+  let bias = 0;
+  STAT_LIST.forEach(k => { bias += raw[k] * (wts[k] || 0); });
+
+  /* Final safety clamp. Deliberately absurd builds (a 154cm 140kg centre)
+     could still swing a single attribute by ~19, which would gut a starting
+     stat. ±10 keeps even silly frames playable; the zero-sum property is
+     preserved to within rounding because clamping is symmetric. */
+  const out = {};
+  STAT_LIST.forEach(k => { out[k] = clamp(Math.round(raw[k] - bias), -10, 10); });
+  return out;
+}
+
+/* ============================================================
+   ATTRIBUTE POINT SYSTEM (replaces the old Training screen)
+
+   Each season the player earns a pool of points and spends them
+   raising attributes directly. Three levers keep this from
+   collapsing the career curve:
+
+   1. COST CURVE — rises with the attribute value, and is scaled by
+      the position weight. Without the weight scaling, concentrated
+      positions (C: .30 def + .35 reb) out-min-max spread ones
+      (SF: .22/.15/.20/.13) by ~7 OVR. Scaling cuts that to ~3.
+   2. AGE CAPS — hard ceiling per attribute that rises with age, so
+      a 15-year-old can't dump everything into one stat.
+   3. TALENT TIERS — a per-career points multiplier. Pure point-buy
+      makes every career identical (p10 66 / p90 72 in testing);
+      the multiplier restores the spread that makes NBA reachable
+      but rare.
+============================================================ */
+const ATTR_COST_BANDS = [[45, 1], [60, 2], [72, 3], [82, 4], [90, 5], [Infinity, 7]];
+function attrRawCost(value) {
+  for (const [ceil, c] of ATTR_COST_BANDS) if (value < ceil) return c;
+  return 7;
+}
+// Weight-scaled cost: raising a stat your position leans on costs more.
+function attrPointCost(value, statKey, posId) {
+  const w = posWeights(posId)[statKey] || 0;
+  return Math.max(1, Math.round(attrRawCost(value) * (0.70 + 1.8 * w)));
+}
+
+const ATTR_AGE_CAPS = {
+  15: 46, 16: 52, 17: 58, 18: 64, 19: 69, 20: 73, 21: 77, 22: 80,
+  23: 83, 24: 86, 25: 88, 26: 90, 27: 92, 28: 94, 29: 95, 30: 96,
+};
+function attrAgeCap(age, stats) {
+  let cap;
+  if (age <= 14) cap = 46;
+  else if (age > 30) cap = 99;
+  else cap = ATTR_AGE_CAPS[age] || 46;
+  // A prodigy can roll starting attributes ABOVE the age cap (playmaking can
+  // start at 58 against a cap of 46). Without this the cap would block them
+  // from spending at all — ~18% of creation points were being silently
+  // wasted, and 1.25% of players could spend nothing. Lift the cap to sit
+  // just above their best attribute so they always have somewhere to invest.
+  if (stats) {
+    const best = Math.max(...STAT_LIST.map(k => stats[k] || 0));
+    if (best >= cap) cap = Math.min(99, best + 4);
+  }
+  return cap;
+}
+
+// Talent tiers — rolled once at career creation, persistent.
+const TALENT_TIERS = [
+  { id: "common", label: "Common", chance: 0.55, mult: 1.00 },
+  { id: "talented", label: "Talented", chance: 0.27, mult: 1.28 },
+  { id: "elite", label: "Elite", chance: 0.14, mult: 1.62 },
+  { id: "generational", label: "Generational", chance: 0.04, mult: 2.15 },
+];
+function rollTalentTier() {
+  const r = Math.random();
+  let acc = 0;
+  for (const t of TALENT_TIERS) { acc += t.chance; if (r < acc) return t.id; }
+  return "common";
+}
+function talentMult(id) {
+  const t = TALENT_TIERS.find(x => x.id === id);
+  return t ? t.mult : 1.00;
+}
+
+/* Base points per season by age. Reduced from 13/14/15/13/7/4 after testing:
+   the original curve had the MEDIAN player gaining 1.2-1.4 OVR every season
+   from 22 to 30, so 89% of guards and 99% of centres drifted past the MBL
+   threshold just by showing up. Lower base makes prime-years progress feel
+   earned and keeps MBL a milestone rather than a formality. The late-career
+   values fall proportionally less, so veterans still have something to spend. */
+const ATTR_BASE_POINTS = [[17, 10], [22, 11], [26, 12], [30, 10], [33, 6], [Infinity, 3]];
+function attrBasePoints(age) {
+  for (const [ceil, v] of ATTR_BASE_POINTS) if (age <= ceil) return v;
+  return 4;
+}
+
+/* Season points = (base + noise + performance + facility) * talent multiplier.
+   `perfBonus` comes from last season's tier (set in the season resolver);
+   `facility` from the state programme / club quality. */
+function computeSeasonPoints(p, perfBonus = 0) {
+  const base = attrBasePoints(p.age);
+  const noise = randInt(-1, 1);
+  let facility = 0;
+  if (p.age < 19 && p.hometown) {
+    const tier = getStateTier(p.hometown);
+    facility = tier === 1 ? 2 : tier === 2 ? 1 : 0;
+  } else if (p.league === "mbl") facility = 2;
+  else if (p.abroad) facility = 2;
+  else if (p.clubId) facility = 1;
+  const raw = base + noise + perfBonus + facility;
+  return Math.max(1, Math.round(raw * talentMult(p.talentTier)));
+}
+
 function growthAmount(age) {
   // Growth is still held back before 23 so most players need the U23
   // D-League to develop. From 23-30, there's now a small (10%) chance of a
@@ -2071,6 +2369,15 @@ function loadAchievementGallery() {
 function checkAchievements(p) {
   const set = new Set(p.achievements);
   if (p.nationalTeam) set.add("national_debut");
+  /* SEA Games medal badges. Counted from history rather than a running
+     tally so they stay correct if a career is reloaded mid-run. Team
+     medals only — the SEA Games award no individual honours in this game. */
+  {
+    const seaMedals = (p.history || []).filter(h => h.tournament && /^SEA Games — (Gold|Silver|Bronze) Medal$/.test(h.tournament));
+    if (seaMedals.length >= 2) set.add("sea_games_multi");
+    const kinds = new Set(seaMedals.map(h => h.tournament.split("— ")[1]));
+    if (kinds.has("Gold Medal") && kinds.has("Silver Medal") && kinds.has("Bronze Medal")) set.add("sea_games_setl");
+  }
   if (p.abroad || p.abroadEver) set.add("overseas_pro");
   if (p.popularity >= 80) set.add("fan_favorite");
   if (p.money >= 500000) set.add("financially_set");
@@ -2231,6 +2538,20 @@ function newPlayer({ name, position, hometown, height, jersey }) {
     age: 15, seasonNum: 1, year: 2026,
     stats,
     highlyTalented,
+    weight: null,
+    wingspan: null,
+    reach: null,
+    natQueue: [],
+    natQueueYear: null,
+    talentTier: (function(){
+      // Prodigies (the pre-existing 15% flag) are guaranteed at least Elite,
+      // so the two systems agree rather than contradicting each other.
+      const rolled = rollTalentTier();
+      if (!highlyTalented) return rolled === "generational" ? "elite" : rolled;
+      return (rolled === "common" || rolled === "talented") ? "elite" : rolled;
+    })(),
+    seasonPoints: 0,
+    lastPerfBonus: 0,
     slowDecliner: Math.random() < 0.20,
     height: height || 175,
     heightWillGrow, heightGrowthCutoff,
@@ -2499,7 +2820,9 @@ function StartScreen({ onStart, savedGame, onContinue, onViewHallOfFame, onViewA
   const [position, setPosition] = useState("PG");
   const [hometown, setHometown] = useState(HOMETOWNS[0]);
   const [hometownSearch, setHometownSearch] = useState("");
-  const [height, setHeight] = useState(178);
+  // Height/weight/wingspan are chosen on the Body Setup screen that follows;
+  // this placeholder is overwritten there before any stats are generated.
+  const height = 178;
   const [jersey, setJersey] = useState("");
 
   const handleJerseyChange = (val) => {
@@ -2641,25 +2964,6 @@ function StartScreen({ onStart, savedGame, onContinue, onViewHallOfFame, onViewA
               {TIER_META[t].name} · {TIER_META[t].tag}
             </span>
           ))}
-        </div>
-
-        <div className="flex items-center justify-between mb-1.5">
-          <label className="f-mono text-[11px] uppercase tracking-widest" style={{ color: C.chalkDim }}>Height</label>
-          <span className="f-mono text-sm" style={{ color: C.amberBright }}>{height} cm</span>
-        </div>
-        <input
-          type="range"
-          min={155}
-          max={200}
-          step={1}
-          value={height}
-          onChange={e => setHeight(Number(e.target.value))}
-          className="w-full mb-1.5"
-          style={{ accentColor: C.amber }}
-        />
-        <div className="flex justify-between mb-6">
-          <span className="f-mono text-[10px]" style={{ color: C.chalkDim }}>155 cm</span>
-          <span className="f-mono text-[10px]" style={{ color: C.chalkDim }}>200 cm</span>
         </div>
 
         <PrimaryButton full onClick={() => onStart({ name, position, hometown, height, jersey })}>
@@ -2810,46 +3114,200 @@ function Hub({ player, onPlaySeason, onRetireConsider, banner }) {
 /* ---------------------------------------------------------
    TRAINING SCREEN
 --------------------------------------------------------- */
-function Training({ player, onConfirm }) {
-  const [selected, setSelected] = useState([]);
-  const toggle = (s) => {
-    setSelected(prev => {
-      if (prev.includes(s)) return prev.filter(x => x !== s);
-      if (prev.length >= 2) return prev;
-      return [...prev, s];
-    });
+function BodySetup({ player, onConfirm }) {
+  const d = defaultBody(player.position);
+  const [height, setHeight] = useState(d.height);
+  const [weight, setWeight] = useState(d.weight);
+  const [wingspan, setWingspan] = useState(d.wingspan);
+
+  // Height changes can invalidate the current wingspan (the +35cm reach rule
+  // moves with height), so re-clamp whenever height moves.
+  const applyHeight = (h) => {
+    setHeight(h);
+    setWingspan(w => clampWingspan(h, w));
   };
+  const wb = wingspanBounds(height);
+  const reach = wingspan - height;
+  const mods = bodyModifiers({ height, weight, reach, position: player.position });
+
   return (
-    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+    <div className="min-h-full w-full flex items-start justify-center px-4 py-8" style={{ background: C.ink }}>
+      <div className="max-w-md w-full">
         <div className="flex items-center gap-2 mb-1">
-          <Dumbbell size={16} color={C.amberBright} />
-          <span className="f-display text-sm uppercase tracking-wide" style={{ color: C.amberBright }}>Training Focus</span>
+          <Gauge size={16} color={C.amberBright} />
+          <span className="f-display text-sm uppercase tracking-wide" style={{ color: C.amberBright }}>Build Your Frame</span>
         </div>
-        <p className="f-body text-xs mb-4" style={{ color: C.chalkDim }}>
-          Season {player.seasonNum}, age {player.age}. Pick up to two attributes to prioritize, or rest and recover.
+        <p className="f-body text-[11.5px] mb-4" style={{ color: C.chalkDim }}>
+          Permanent for this career. Your frame shapes where you naturally start —
+          length and mass help inside, a compact build helps outside. No build is
+          stronger overall; they lead to different players.
         </p>
-        <div className="grid grid-cols-2 gap-2 mb-5">
-          {STAT_LIST.map(s => {
-            const meta = STAT_META[s];
-            const Icon = meta.icon;
-            const isSel = selected.includes(s);
+
+        <div className="rounded-[20px] px-4 py-1 mb-4" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+          <div className="py-3" style={{ borderBottom: `1px solid ${C.line}` }}>
+            <div className="flex justify-between items-baseline mb-2">
+              <span className="f-display text-[12px]" style={{ color: C.chalk }}>Height</span>
+              <span className="f-mono text-[18px]" style={{ color: C.amberBright }}>{height} cm</span>
+            </div>
+            <input type="range" min={BODY_LIMITS.height[0]} max={BODY_LIMITS.height[1]} value={height}
+              onChange={e => applyHeight(Number(e.target.value))} className="w-full" style={{ accentColor: C.amber }} />
+            <div className="flex justify-between mt-1">
+              <span className="f-mono text-[9px]" style={{ color: C.chalkDim }}>{BODY_LIMITS.height[0]} cm</span>
+              <span className="f-mono text-[9px]" style={{ color: C.chalkDim }}>{BODY_LIMITS.height[1]} cm</span>
+            </div>
+          </div>
+
+          <div className="py-3" style={{ borderBottom: `1px solid ${C.line}` }}>
+            <div className="flex justify-between items-baseline mb-2">
+              <span className="f-display text-[12px]" style={{ color: C.chalk }}>Weight</span>
+              <span className="f-mono text-[18px]" style={{ color: C.amberBright }}>{weight} kg</span>
+            </div>
+            <input type="range" min={BODY_LIMITS.weight[0]} max={BODY_LIMITS.weight[1]} value={weight}
+              onChange={e => setWeight(Number(e.target.value))} className="w-full" style={{ accentColor: C.amber }} />
+            <div className="flex justify-between mt-1">
+              <span className="f-mono text-[9px]" style={{ color: C.chalkDim }}>{BODY_LIMITS.weight[0]} kg · lean</span>
+              <span className="f-mono text-[9px]" style={{ color: C.chalkDim }}>{BODY_LIMITS.weight[1]} kg · powerful</span>
+            </div>
+          </div>
+
+          <div className="py-3">
+            <div className="flex justify-between items-baseline mb-2">
+              <span className="f-display text-[12px]" style={{ color: C.chalk }}>Wingspan</span>
+              <span className="f-mono text-[18px]" style={{ color: C.amberBright }}>{wingspan} cm</span>
+            </div>
+            <input type="range" min={wb.min} max={wb.max} value={wingspan}
+              onChange={e => setWingspan(Number(e.target.value))} className="w-full" style={{ accentColor: C.amber }} />
+            <div className="flex justify-between mt-1">
+              <span className="f-mono text-[9px]" style={{ color: C.chalkDim }}>{wb.min} cm</span>
+              <span className="f-mono text-[9px]" style={{ color: reach > 0 ? C.teal : C.chalkDim }}>
+                {reach >= 0 ? `+${reach}` : reach} cm vs height
+              </span>
+              <span className="f-mono text-[9px]" style={{ color: C.chalkDim }}>{wb.max} cm</span>
+            </div>
+            <p className="f-body text-[9.5px] mt-2" style={{ color: C.chalkDim }}>
+              Wingspan can't exceed your height by more than {BODY_LIMITS.reachMax} cm.
+            </p>
+          </div>
+        </div>
+
+        <div className="f-mono text-[10px] uppercase tracking-widest mb-2" style={{ color: C.chalkDim }}>
+          Effect on starting attributes
+        </div>
+        <div className="grid grid-cols-3 gap-2 mb-5">
+          {STAT_LIST.map(k => {
+            const v = mods[k] || 0;
+            const col = v > 0 ? "#10B981" : v < 0 ? C.red : C.chalkDim;
             return (
-              <button key={s} onClick={() => toggle(s)} className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-left transition"
-                style={{ background: isSel ? C.ink3 : "transparent", border: `1px solid ${isSel ? C.amber : C.line}` }}>
-                <Icon size={14} color={isSel ? C.amberBright : C.chalkDim} />
-                <div>
-                  <div className="f-body text-xs" style={{ color: C.chalk }}>{meta.label}</div>
-                  <div className="f-mono text-[10px]" style={{ color: C.chalkDim }}>{player.stats[s]}</div>
+              <div key={k} className="rounded-xl px-2 py-2.5 text-center"
+                style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+                <div className="f-mono text-[15px] font-bold" style={{ color: col }}>
+                  {v > 0 ? `+${v}` : v === 0 ? "—" : v}
                 </div>
-              </button>
+                <div className="f-mono text-[8.5px] mt-0.5" style={{ color: C.chalkDim }}>{STAT_META[k].label}</div>
+              </div>
             );
           })}
         </div>
-        <div className="flex gap-3">
-          <PrimaryButton full disabled={selected.length === 0} onClick={() => onConfirm(selected, false)}>Train</PrimaryButton>
-          <SecondaryButton full onClick={() => onConfirm([], true)}>Rest &amp; Recover</SecondaryButton>
+
+        <PrimaryButton full onClick={() => onConfirm({ height, weight, wingspan, reach })}>
+          Continue <ChevronRight size={14} className="inline ml-1" />
+        </PrimaryButton>
+      </div>
+    </div>
+  );
+}
+
+function AttributeBuilder({ player, points, onConfirm, creation = false }) {
+  const [alloc, setAlloc] = useState({});
+  const cap = attrAgeCap(player.age, player.stats);
+  const cur = (k) => player.stats[k] + (alloc[k] || 0);
+  const spent = STAT_LIST.reduce((t, k) => {
+    let sum = 0;
+    for (let v = player.stats[k]; v < cur(k); v++) sum += attrPointCost(v, k, player.position);
+    return t + sum;
+  }, 0);
+  const left = points - spent;
+  const projected = {};
+  STAT_LIST.forEach(k => { projected[k] = cur(k); });
+  const projOvr = computeOverall(projected, player.position);
+
+  const inc = (k) => {
+    const c = attrPointCost(cur(k), k, player.position);
+    if (cur(k) < cap && left >= c) setAlloc(a => ({ ...a, [k]: (a[k] || 0) + 1 }));
+  };
+  const dec = (k) => { if ((alloc[k] || 0) > 0) setAlloc(a => ({ ...a, [k]: a[k] - 1 })); };
+
+  return (
+    <div className="min-h-full w-full flex items-start justify-center px-4 py-8" style={{ background: C.ink }}>
+      <div className="max-w-md w-full">
+        <div className="rounded-[20px] p-4 mb-3.5 flex items-center gap-3.5"
+          style={{ background: C.ink2, border: `1px solid ${C.amber}` }}>
+          <div>
+            <div className="f-display text-3xl leading-none" style={{ color: C.amberBright }}>{left}</div>
+            <div className="f-mono text-[10px] uppercase tracking-widest mt-0.5" style={{ color: C.chalkDim }}>Points to spend</div>
+            <div className="f-mono text-[10px] mt-0.5" style={{ color: C.teal }}>
+              {creation ? `Build your 15-year-old · cap ${cap}` : `Season ${player.seasonNum} · age ${player.age} · cap ${cap}`}
+            </div>
+          </div>
+          <div className="ml-auto text-right">
+            <div className="f-mono text-2xl leading-none" style={{ color: C.trophyGold }}>{projOvr}</div>
+            <div className="f-mono text-[10px] uppercase tracking-widest mt-0.5" style={{ color: C.chalkDim }}>Overall</div>
+          </div>
         </div>
+
+        {creation && (
+          <p className="f-body text-[11.5px] mb-3 px-1" style={{ color: C.chalkDim }}>
+            Shape your player before the <span style={{ color: C.chalk }}>National U15 selection trials</span> — the
+            state coaches judge you on exactly these numbers.
+          </p>
+        )}
+        {STAT_LIST.map(k => {
+          const v = cur(k), c = attrPointCost(v, k, player.position);
+          const atCap = v >= cap, gained = alloc[k] || 0;
+          return (
+            <div key={k} className="rounded-2xl px-4 py-3 mb-2" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+              <div className="flex items-center gap-3">
+                <span className="f-display text-[13px] w-[78px] shrink-0" style={{ color: C.chalk }}>{STAT_META[k].label}</span>
+                <div className="flex-1 h-2 rounded-full relative" style={{ background: C.ink3 }}>
+                  <div className="h-full rounded-full absolute left-0 top-0"
+                    style={{ width: `${player.stats[k]}%`, background: `linear-gradient(90deg, #38BDF8, ${C.amber})` }} />
+                  {gained > 0 && (
+                    <div className="h-full absolute top-0 rounded-full"
+                      style={{ left: `${player.stats[k]}%`, width: `${gained}%`, background: C.trophyGold, opacity: 0.55 }} />
+                  )}
+                  <div className="absolute rounded-sm" style={{ left: `${cap}%`, top: -4, width: 2, height: 16, background: C.trophyGold }} />
+                </div>
+                <span className="f-mono text-[19px] w-8 text-right" style={{ color: C.chalk }}>{v}</span>
+                <button onClick={() => dec(k)} disabled={gained === 0}
+                  className="w-8 h-8 rounded-[10px] text-lg font-bold shrink-0"
+                  style={{ background: C.ink3, border: `1px solid ${C.line}`, color: C.chalk, opacity: gained === 0 ? 0.25 : 1 }}>−</button>
+                <button onClick={() => inc(k)} disabled={atCap || left < c}
+                  className="w-8 h-8 rounded-[10px] text-lg font-bold shrink-0"
+                  style={{ background: C.amber, border: `1px solid ${C.amber}`, color: C.ink, opacity: (atCap || left < c) ? 0.25 : 1 }}>+</button>
+              </div>
+              <div className="flex justify-between mt-1.5 pl-[90px]">
+                <span className="f-mono text-[9.5px]" style={{ color: C.chalkDim }}>
+                  Start {player.stats[k]}{gained > 0 ? ` · +${gained}` : ""}
+                </span>
+                <span className="f-mono text-[9.5px] font-bold" style={{ color: atCap ? C.trophyGold : C.amberBright }}>
+                  {atCap ? `At age cap ${cap}` : `Next +1 · ${c} pt`}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+
+        <div className="grid grid-cols-3 gap-2.5 mt-4">
+          <SecondaryButton full onClick={() => setAlloc({})}>Reset</SecondaryButton>
+          <div className="col-span-2">
+            <PrimaryButton full onClick={() => onConfirm(alloc)}>{creation ? "Begin Career" : "Confirm Season"}</PrimaryButton>
+          </div>
+        </div>
+        {left > 0 && (
+          <p className="f-body text-[10.5px] text-center mt-2.5" style={{ color: C.trophyGold }}>
+            {left} point{left > 1 ? "s" : ""} unspent — {creation ? "spend them before the U15 trials." : "they don't carry over."}
+          </p>
+        )}
       </div>
     </div>
   );
@@ -3567,7 +4025,9 @@ function U16ResultScreen({ player, onContinue }) {
 function NationalTryoutScreen({ player, tryout, onAttend, onDecline }) {
   const ev = tryout.event;
   const highRated = tryout.rating > 80;
-  const title = ev.type === "qualifier" ? `Asia Cup Qualifiers — Phase ${ev.phase}` : "FIBA Asia Cup";
+  const title = ev.type === "sea_games" ? "SEA Games"
+    : ev.type === "qualifier" ? `Asia Cup Qualifiers — Phase ${ev.phase}`
+    : "FIBA Asia Cup";
   return (
     <div className="court-hero min-h-full w-full flex items-center justify-center px-4 py-10">
       <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
@@ -3657,9 +4117,11 @@ function NationalResultScreen({ event, onContinue }) {
         </div>
         <div className="f-display text-lg uppercase mt-1" style={{ color: C.chalk }}>{event.label}</div>
         <p className="f-body text-xs mb-3" style={{ color: C.chalkDim }}>
-          {event.type === "qualifier"
-            ? "Every game in the qualifiers matters — the top four teams advance to the Asia Cup."
-            : "The FIBA Asia Cup: Asia's best on the biggest stage."}
+          {event.type === "sea_games"
+            ? "Eleven Southeast Asian nations, one podium. Malaysia are genuine contenders here — a medal is within reach."
+            : event.type === "qualifier"
+              ? "Every game in the qualifiers matters — the top four teams advance to the Asia Cup."
+              : "The FIBA Asia Cup: Asia's best on the biggest stage."}
         </p>
 
         {s.role && (
@@ -5447,6 +5909,34 @@ export default function App() {
 
   const handleStart = (data) => {
     let p = newPlayer(data);
+    // Frame first, then attributes — body modifiers shape the starting
+    // spread the player is allocating on top of.
+    setPlayer(p);
+    save(p);
+    setScreen("body_setup");
+  };
+
+  const handleConfirmBody = ({ height, weight, wingspan }) => {
+    // Re-clamp server-side rather than trusting the slider bounds, so the
+    // limits hold even if the values arrive from an edited save.
+    const hh = clamp(height, BODY_LIMITS.height[0], BODY_LIMITS.height[1]);
+    const ww = clamp(weight, BODY_LIMITS.weight[0], BODY_LIMITS.weight[1]);
+    const ws = clampWingspan(hh, wingspan);
+    const reach = ws - hh;
+    let p = { ...player, stats: { ...player.stats }, height: hh, weight: ww, wingspan: ws, reach };
+    const mods = bodyModifiers({ height, weight, reach, position: p.position });
+    STAT_LIST.forEach(k => { p.stats[k] = clamp(p.stats[k] + (mods[k] || 0), 1, 99); });
+    p.seasonPoints = computeSeasonPoints(p, 0);
+    p.creationBuild = true;
+    setPlayer(p);
+    save(p);
+    setScreen("creation_build");
+  };
+
+  // Runs once the creation allocation is confirmed — this is the original
+  // handleStart body, now gated behind the attribute builder.
+  const runU15Selection = (basePlayer) => {
+    let p = { ...basePlayer, creationBuild: false, seasonPoints: 0 };
     const tier = getStateTier(p.hometown);
     const chance = U15_SELECTION_CHANCE[tier];
     const selected = Math.random() < chance;
@@ -5503,6 +5993,15 @@ export default function App() {
     setPlayer(p);
     setScreen("u15_result");
     save(p);
+  };
+
+  const handleConfirmCreationBuild = (alloc) => {
+    let p = { ...player, stats: { ...player.stats } };
+    STAT_LIST.forEach(s => {
+      const g = (alloc && alloc[s]) || 0;
+      if (g > 0) p.stats[s] = clamp(p.stats[s] + g, 1, 99);
+    });
+    runU15Selection(p);
   };
 
   const handleU15TournamentContinue = () => {
@@ -5722,10 +6221,10 @@ export default function App() {
     // player who didn't even make the state squad has nothing for scouts to
     // judge. Eligibility now requires actually playing in the tournament
     // (selected === true), on top of the usual ability threshold.
-    const hblEligible = selected && computeOverall(p.stats, p.position) >= HBL_RATING_THRESHOLD;
-    // Only a subset of programmes have an import slot open in any given year,
-    // rolled once here so the shortlist stays stable across re-renders.
-    const hblOfferIds = hblEligible ? sampleN(HBL_TEAMS, HBL_OFFER_COUNT).map(t => t.id) : null;
+    // HBL eligibility is decided AFTER the tournament resolves — scouts are
+    // judging awards, team run and stat line, none of which exist yet here.
+    let hblEligible = false;
+    let hblOfferIds = null;
 
     if (selected) {
       const a17Stats = generateU15TournamentStats(p.stats, p.position, p.height);
@@ -5742,6 +6241,12 @@ export default function App() {
       });
 
       const a17Shortlisted = awardIds.length > 0 || Math.random() < computeA17ShortlistChance(a17Stats, awardIds, teamResult.id, p.highlyTalented);
+
+      // Taiwanese scouts decide on the strength of the tournament itself.
+      hblEligible = Math.random() < hblOfferChance(computeOverall(p.stats, p.position), awardIds, teamResult.id);
+      // Only a subset of programmes have an import slot open in any given
+      // year, rolled once here so the shortlist stays stable across renders.
+      hblOfferIds = hblEligible ? sampleN(HBL_TEAMS, HBL_OFFER_COUNT).map(t => t.id) : null;
 
       p = {
         ...p,
@@ -6156,8 +6661,12 @@ export default function App() {
     setPlayer(p);
     save(p);
     setNationalTryout(null);
-    setBanner("You skipped the national tryout this time.");
-    setScreen("hub");
+    // A declined call-up doesn't cancel any OTHER tournament this year.
+    if (resolveNextNationalEvent(p)) return;
+    if (!goHubOrPendingClub(p, "You skipped the national tryout this time.")) {
+      setBanner("You skipped the national tryout this time.");
+      setScreen("hub");
+    }
   };
 
   const handleAttendTryout = () => {
@@ -6176,10 +6685,12 @@ export default function App() {
 
     if (!madeSquad) {
       p.morale = clamp(p.morale - 4);
-      p.history = [...p.history, { age: p.age, tierLabel: "NT Trials", note: natEvent.type === "qualifier" ? `Attended national trials for the Asia Cup Qualifiers (Phase ${natEvent.phase}) but didn't make the final squad.` : "Attended the national tryout but didn't make the Asia Cup squad." }];
+      p.history = [...p.history, { age: p.age, tierLabel: "NT Trials", note: natEvent.type === "sea_games" ? "Attended national trials for the SEA Games but didn't make the final squad." : natEvent.type === "qualifier" ? `Attended national trials for the Asia Cup Qualifiers (Phase ${natEvent.phase}) but didn't make the final squad.` : "Attended the national tryout but didn't make the Asia Cup squad." }];
       setPlayer(p);
       save(p);
       setNationalTryout(null);
+      // Missing out on one squad doesn't rule you out of the other event.
+      if (resolveNextNationalEvent(p)) return;
       setBanner("You didn't make the national squad this time — keep pushing.");
       setScreen("hub");
       return;
@@ -6194,11 +6705,25 @@ export default function App() {
     else ntRole = "Bench"; // 71-74, and the floor for anyone below that too
 
     const standout = Math.random() < standoutChance;
-    const nStats = generateNationalStats(p.stats, p.position, p.height, ntRole, standout);
+    const nStats = natEvent.type === "sea_games"
+      ? generateSeaGamesStats(p.stats, p.position, p.height, ntRole, standout)
+      : generateNationalStats(p.stats, p.position, p.height, ntRole, standout);
     p.nationalTeam = true;
     p.nationalCaps = (p.nationalCaps || 0) + 1;
     let label, resultNote, achId, popGain, ntGames, qualified = null, qf = null;
-    if (natEvent.type === "qualifier") {
+    const isSea = natEvent.type === "sea_games";
+    if (isSea) {
+      const res = rollSeaGamesPlacement();
+      label = `SEA Games — ${res.label}`;
+      achId = res.achId;
+      popGain = res.pop;
+      ntGames = randInt(res.games[0], res.games[1]);
+      const medal = res.place <= 3;
+      resultNote = medal
+        ? `Won ${res.label.toLowerCase()} with Malaysia (${ntRole}) at the SEA Games${standout ? ", and was one of the tournament's standout players." : "."}`
+        : `Represented Malaysia (${ntRole}) at the SEA Games, finishing ${res.label.toLowerCase()}${standout ? " — with a standout individual campaign." : "."}`;
+      if (medal) p.achievements = Array.from(new Set([...p.achievements, "sea_games"]));
+    } else if (natEvent.type === "qualifier") {
       label = `Asia Cup Qualifiers — Phase ${natEvent.phase}`;
       resultNote = `Represented Malaysia (${ntRole}) in the FIBA Asia Cup Qualifiers (Phase ${natEvent.phase})${standout ? " — and turned in a standout performance." : "."}`;
       achId = "nt_qualifier"; popGain = 10; ntGames = randInt(3, 5);
@@ -6223,7 +6748,7 @@ export default function App() {
     p.achievements = checkAchievements(p);
     // So close to the quarter-finals — a chance for a knockout-game clutch
     // moment to still push the campaign into the QF instead.
-    if (qualified && !qf && Math.random() < CLUTCH_TRIGGER_CHANCE) {
+    if (!isSea && qualified && !qf && Math.random() < CLUTCH_TRIGGER_CHANCE) {
       p.pendingClutchMoment = {
         historyIndex: p.history.length - 1,
         upgradeMeta: { label: "FIBA Asia Cup — Quarter-Finalist", noteText: "Quarter-Finalist", achId: "nt_quarterfinal", popularity: 25 },
@@ -6376,33 +6901,143 @@ export default function App() {
 
   const handlePlaySeason = () => {
     setBanner(null);
+    // Points are rolled once per season and stashed on the player, so the
+    // builder screen shows a stable number across re-renders.
+    const pts = computeSeasonPoints(player, player.lastPerfBonus || 0);
+    const p = { ...player, seasonPoints: pts };
+    setPlayer(p);
+    save(p);
     setScreen("training");
   };
 
-  const handleConfirmTraining = (selected, resting) => {
-    let p = { ...player, stats: { ...player.stats }, fatigue: player.fatigue };
-    let text = "";
-    if (resting) {
-      p.fatigue = clamp(p.fatigue - 25, 0, 100);
+  /* Resolves the next pending national call-up for this season. Returns
+     true if it took over the screen (so the caller must stop), false if
+     there was nothing to do. Called both inline during the season and
+     again after a national result screen closes, so a second event in
+     the same year still gets played. */
+  const resolveNextNationalEvent = (p) => {
+    // ---- Senior national team: FIBA Asia Cup qualifiers & finals ----
+    // Runs by calendar year. Players overseas are 100% guaranteed to play in
+    // every national team game — no tryout roll, straight to the squad.
+    // Domestic players get a tryout offered at 65+ rating, OR guaranteed if
+    // the player won ANY award this season. The PLAYER decides whether to
+    // attend; squad selection & the tournament resolve after that.
+    // A season can carry more than one call-up (e.g. SEA Games + an Asia Cup
+    // qualifier window). Seed the queue once per season, then take the next
+    // pending event; whatever remains is resolved after this screen closes.
+    if (!p.natQueueYear || p.natQueueYear !== p.year) {
+      p.natQueueYear = p.year;
+      p.natQueue = nationalEventsForYear(p.year);
+    }
+    const natEvent = (p.natQueue && p.natQueue.length) ? p.natQueue[0] : null;
+    if (natEvent) p.natQueue = p.natQueue.slice(1);
+    if (natEvent && p.age >= 18 && !p.retired && p.abroad) {
+      const overallOs = computeOverall(p.stats, p.position);
+      let ntRole;
+      if (overallOs >= 85) ntRole = "First Option";
+      else if (overallOs >= 80) ntRole = "Starter";
+      else if (overallOs >= 75) ntRole = "Rotation";
+      else ntRole = "Bench";
+      const standout = Math.random() < (overallOs > 80 ? 0.30 : 0.10);
+      const isSea = natEvent.type === "sea_games";
+      const nStats = isSea
+        ? generateSeaGamesStats(p.stats, p.position, p.height, ntRole, standout)
+        : generateNationalStats(p.stats, p.position, p.height, ntRole, standout);
+      p.nationalTeam = true;
+      p.nationalCaps = (p.nationalCaps || 0) + 1;
+      let label, resultNote, achId, popGain, ntGames, qualified = null, qf = null;
+      if (isSea) {
+        const res = rollSeaGamesPlacement();
+        label = `SEA Games — ${res.label}`;
+        achId = res.achId;
+        popGain = res.pop;
+        ntGames = randInt(res.games[0], res.games[1]);
+        const medal = res.place <= 3;
+        resultNote = medal
+          ? `Won ${res.label.toLowerCase()} with Malaysia (${ntRole}) at the SEA Games${standout ? ", and was one of the tournament's standout players." : "."}`
+          : `Represented Malaysia (${ntRole}) at the SEA Games, finishing ${res.label.toLowerCase()}${standout ? " — with a standout individual campaign." : "."}`;
+        // Every medallist also banks the generic SEA Games appearance badge.
+        if (medal) p.achievements = Array.from(new Set([...p.achievements, "sea_games"]));
+      } else if (natEvent.type === "qualifier") {
+        label = `Asia Cup Qualifiers — Phase ${natEvent.phase}`;
+        resultNote = `Represented Malaysia (${ntRole}) in the FIBA Asia Cup Qualifiers (Phase ${natEvent.phase}) — flying in from ${p.teamName || "overseas"}${standout ? ", and turned in a standout performance." : "."}`;
+        achId = "nt_qualifier"; popGain = 10; ntGames = randInt(3, 5);
+      } else {
+        qualified = Math.random() < NT_QUALIFY_CHANCE;
+        if (qualified) {
+          qf = Math.random() < NT_QUARTERFINAL_CHANCE;
+          if (qf) { label = "FIBA Asia Cup — Quarter-Finalist"; achId = "nt_quarterfinal"; popGain = 25; ntGames = randInt(6, 8); }
+          else { const place = randInt(10, 12); label = `FIBA Asia Cup — ${place}th Place`; achId = "nt_asia_cup"; popGain = 18; ntGames = randInt(5, 6); }
+          resultNote = `Played for Malaysia (${ntRole}) at the FIBA Asia Cup — ${label.split("— ")[1]}${standout ? ", with a standout campaign." : "."}`;
+        } else {
+          label = "Asia Cup — Did Not Qualify";
+          resultNote = "Malaysia fell short in the qualifiers and missed the Asia Cup finals this cycle.";
+          achId = "nt_qualifier"; popGain = 8; ntGames = randInt(3, 5);
+        }
+      }
+      if (standout) popGain += 6;
+      p.popularity = clamp(p.popularity + popGain);
       p.morale = clamp(p.morale + 6);
-      text = "You take the off-time to recover fully. Fatigue drops, spirits lift.";
-    } else {
-      const parts = [];
-      const tier = getStateTier(p.hometown);
-      const tm = TIER_META[tier];
-      const facilityBonus = !p.abroad && p.age < 19 && Math.random() < tm.bonusChance;
-      selected.forEach(s => {
-        let g = growthAmount(p.age);
-        if (facilityBonus) g += randInt(1, 2);
-        p.stats[s] = clamp(p.stats[s] + g, 1, 99);
-        parts.push(`${STAT_META[s].label} ${g >= 0 ? "+" : ""}${g}`);
-      });
-      p.fatigue = clamp(p.fatigue + 12);
-      text = `Focused reps this season: ${parts.join(", ")}.`;
-      if (facilityBonus) {
-        text += ` The ${p.hometown} programme's resources paid off — extra development this season.`;
+      if (achId) p.achievements = Array.from(new Set([...p.achievements, achId]));
+      p.history = [...p.history, { age: p.age, tierLabel: "🇲🇾 Malaysia", note: resultNote, tournament: label, stats: nStats, national: true, games: ntGames }];
+      p.achievements = checkAchievements(p);
+      if (!isSea && qualified && !qf && Math.random() < CLUTCH_TRIGGER_CHANCE) {
+        p.pendingClutchMoment = {
+          historyIndex: p.history.length - 1,
+          upgradeMeta: { label: "FIBA Asia Cup — Quarter-Finalist", noteText: "Quarter-Finalist", achId: "nt_quarterfinal", popularity: 25 },
+          previousMeta: { label, noteText: label.split("— ")[1], achId, popularity: popGain },
+          resumeScreen: "national_result",
+          clutchEventId: pick(CLUTCH_EVENTS).id,
+          natEventPatch: { stats: nStats, phase: natEvent.phase, type: natEvent.type },
+        };
+        setPlayer(p);
+        save(p);
+        setScreen("clutch_moment");
+        return true;
+      }
+      setPlayer(p);
+      save(p);
+      setNationalEvent({ label, stats: nStats, phase: natEvent.phase, type: natEvent.type });
+      setScreen("national_result");
+      return true;
+    }
+    if (natEvent && p.age >= 18 && !p.retired) {
+      const overall = computeOverall(p.stats, p.position);
+      const wonAwardThisSeason = (p.lastSeasonLeagueAwards || []).length > 0;
+      const wonMvpOrTot = (p.lastSeasonLeagueAwards || []).includes("mvp") || (p.lastSeasonLeagueAwards || []).includes("tot");
+      const isDLeague = p.league === "u20" || p.league === "u23";
+      const effectiveThreshold = isDLeague ? NT_RATING_THRESHOLD_DLEAGUE : NT_RATING_THRESHOLD;
+      if (overall >= effectiveThreshold || wonAwardThisSeason) {
+        setPlayer(p);
+        save(p);
+        setNationalTryout({ event: natEvent, rating: overall, wonAwardThisSeason, wonMvpOrTot });
+        setScreen("national_tryout");
+        return true;
       }
     }
+    return false;
+  };
+
+  const handleConfirmTraining = (alloc) => {
+    let p = { ...player, stats: { ...player.stats }, fatigue: player.fatigue };
+    const parts = [];
+    let totalGain = 0;
+    STAT_LIST.forEach(s => {
+      const g = (alloc && alloc[s]) || 0;
+      if (g > 0) {
+        p.stats[s] = clamp(p.stats[s] + g, 1, 99);
+        parts.push(`${STAT_META[s].label} +${g}`);
+        totalGain += g;
+      }
+    });
+    // Fatigue scales with how hard you pushed this season.
+    p.fatigue = clamp(p.fatigue + (totalGain > 0 ? Math.min(14, 4 + totalGain) : -20), 0, 100);
+    if (totalGain === 0) p.morale = clamp(p.morale + 5);
+    p.seasonPoints = 0;
+    p.lastPerfBonus = 0;
+    const text = totalGain > 0
+      ? `Development this season: ${parts.join(", ")}.`
+      : "You bank the off-season for recovery rather than development.";
     setPending({ trainingText: text });
     setPlayer(p);
 
@@ -6417,7 +7052,6 @@ export default function App() {
       if (e.minAge && p.age < e.minAge) return false;
       if (e.minOverall && computeOverall(p.stats, p.position) < e.minOverall) return false;
       if (e.notAbroad && p.abroad) return false;
-      if (e.id === "national_trial" && p.nationalTeam) return false;
       if (usedEvents.current.includes(e.id)) return false;
       return true;
     });
@@ -6470,6 +7104,9 @@ export default function App() {
     p.popularity = clamp(p.popularity + sim.popularityDelta);
     p.money += sim.moneyDelta;
     p.peakOverall = Math.max(p.peakOverall, sim.overall);
+    // Season quality feeds next season's attribute-point pool: a breakout
+    // year earns you more development points than a season on the bench.
+    p.lastPerfBonus = [-2, -1, 0, 2, 4, 6][sim.tier] || 0;
 
     // Pro players compete in a league (MBL or a D-League) — generate a box score.
     let leagueStats = null;
@@ -6657,11 +7294,14 @@ export default function App() {
     // overall (Asia 71+, EuroLeague 78+, NBA 81+) rather than that ceiling
     // being effectively unreachable, while most careers still land well
     // below it — training alone can't get there if the other 4 stats lag.
+    // NOTE: with the attribute-point system, development is driven by the
+    // points the player spends each season. Maturity growth is kept only as
+    // a small "natural physical development" trickle for under-20s — the
+    // old curve applied +1-2 to ALL SIX stats every season on top of
+    // training, which stacked with points inflates NBA-tier careers from
+    // ~2% to ~48%. Points are now the primary lever.
     let matGrowth;
-    if (p.age < 20) matGrowth = randInt(1, 2);
-    else if (p.age < 23) matGrowth = randInt(0, 1);
-    else if (p.age < 27) matGrowth = randInt(0, 2) + (Math.random() < 0.13 ? randInt(2, 4) : 0);
-    else if (p.age < 31) matGrowth = randInt(0, 1) + (Math.random() < 0.13 ? randInt(2, 4) : 0);
+    if (p.age < 18) matGrowth = Math.random() < 0.5 ? 1 : 0;
     else matGrowth = 0;
     if (matGrowth > 0) {
       STAT_LIST.forEach(s => { p.stats[s] = clamp(p.stats[s] + matGrowth, 1, 99); });
@@ -6931,33 +7571,22 @@ export default function App() {
             : `${oldClub.name} released you from your contract.`,
         }];
         p.morale = clamp(p.morale - (ev.type === "bankrupt" ? 8 : 14));
-        setPlayer(p);
-        save(p);
-        setClubOffers(offers);
-        setClubOfferContext({ mode: ev.type, oldClubName: oldClub.name });
-        setScreen("club_offers");
-        return;
-      }
-      // Contract expired: must re-sign or move (free agency).
-      if (p.contractYearsLeft <= 0) {
+        // QUEUE rather than return. These club branches used to jump straight
+        // to the offers screen, which meant the national-team and overseas
+        // checks further down were never reached — an elite player hit them in
+        // only ~27% of seasons and could finish a career at OVR 86 with zero
+        // caps and zero overseas offers. Queued offers are shown after the
+        // bigger career events resolve.
+        p.pendingClubOffers = { offers, context: { mode: ev.type, oldClubName: oldClub.name } };
+      } else if (p.contractYearsLeft <= 0) {
+        // Contract expired: must re-sign or move (free agency).
         const offers = generateClubOffers(p, { count: 3, excludeId: p.clubId });
-        setPlayer(p);
-        save(p);
-        setClubOffers(offers);
-        setClubOfferContext({ mode: "transfer", oldClubName: getClub(p.clubId).name, expiring: true });
-        setScreen("club_offers");
-        return;
-      }
-      // Mid-contract transfer interest: a chance to move despite time left on the deal.
-      if (ev.type === "offers") {
+        p.pendingClubOffers = { offers, context: { mode: "transfer", oldClubName: getClub(p.clubId).name, expiring: true } };
+      } else if (ev.type === "offers") {
+        // Mid-contract transfer interest: a chance to move despite time left.
         const offers = generateClubOffers(p, { count: 3, excludeId: p.clubId });
         if (offers.length > 0) {
-          setPlayer(p);
-          save(p);
-          setClubOffers(offers);
-          setClubOfferContext({ mode: "transfer", oldClubName: getClub(p.clubId).name });
-          setScreen("club_offers");
-          return;
+          p.pendingClubOffers = { offers, context: { mode: "transfer", oldClubName: getClub(p.clubId).name } };
         }
       }
       // else 'stay' — nothing changes this season.
@@ -7066,82 +7695,7 @@ export default function App() {
       }
     }
 
-    // ---- Senior national team: FIBA Asia Cup qualifiers & finals ----
-    // Runs by calendar year. Players overseas are 100% guaranteed to play in
-    // every national team game — no tryout roll, straight to the squad.
-    // Domestic players get a tryout offered at 65+ rating, OR guaranteed if
-    // the player won ANY award this season. The PLAYER decides whether to
-    // attend; squad selection & the tournament resolve after that.
-    const natEvent = nationalEventForYear(p.year);
-    if (natEvent && p.age >= 18 && !p.retired && p.abroad) {
-      const overallOs = computeOverall(p.stats, p.position);
-      let ntRole;
-      if (overallOs >= 85) ntRole = "First Option";
-      else if (overallOs >= 80) ntRole = "Starter";
-      else if (overallOs >= 75) ntRole = "Rotation";
-      else ntRole = "Bench";
-      const standout = Math.random() < (overallOs > 80 ? 0.30 : 0.10);
-      const nStats = generateNationalStats(p.stats, p.position, p.height, ntRole, standout);
-      p.nationalTeam = true;
-      p.nationalCaps = (p.nationalCaps || 0) + 1;
-      let label, resultNote, achId, popGain, ntGames, qualified = null, qf = null;
-      if (natEvent.type === "qualifier") {
-        label = `Asia Cup Qualifiers — Phase ${natEvent.phase}`;
-        resultNote = `Represented Malaysia (${ntRole}) in the FIBA Asia Cup Qualifiers (Phase ${natEvent.phase}) — flying in from ${p.teamName || "overseas"}${standout ? ", and turned in a standout performance." : "."}`;
-        achId = "nt_qualifier"; popGain = 10; ntGames = randInt(3, 5);
-      } else {
-        qualified = Math.random() < NT_QUALIFY_CHANCE;
-        if (qualified) {
-          qf = Math.random() < NT_QUARTERFINAL_CHANCE;
-          if (qf) { label = "FIBA Asia Cup — Quarter-Finalist"; achId = "nt_quarterfinal"; popGain = 25; ntGames = randInt(6, 8); }
-          else { const place = randInt(10, 12); label = `FIBA Asia Cup — ${place}th Place`; achId = "nt_asia_cup"; popGain = 18; ntGames = randInt(5, 6); }
-          resultNote = `Played for Malaysia (${ntRole}) at the FIBA Asia Cup — ${label.split("— ")[1]}${standout ? ", with a standout campaign." : "."}`;
-        } else {
-          label = "Asia Cup — Did Not Qualify";
-          resultNote = "Malaysia fell short in the qualifiers and missed the Asia Cup finals this cycle.";
-          achId = "nt_qualifier"; popGain = 8; ntGames = randInt(3, 5);
-        }
-      }
-      if (standout) popGain += 6;
-      p.popularity = clamp(p.popularity + popGain);
-      p.morale = clamp(p.morale + 6);
-      if (achId) p.achievements = Array.from(new Set([...p.achievements, achId]));
-      p.history = [...p.history, { age: p.age, tierLabel: "🇲🇾 Malaysia", note: resultNote, tournament: label, stats: nStats, national: true, games: ntGames }];
-      p.achievements = checkAchievements(p);
-      if (qualified && !qf && Math.random() < CLUTCH_TRIGGER_CHANCE) {
-        p.pendingClutchMoment = {
-          historyIndex: p.history.length - 1,
-          upgradeMeta: { label: "FIBA Asia Cup — Quarter-Finalist", noteText: "Quarter-Finalist", achId: "nt_quarterfinal", popularity: 25 },
-          previousMeta: { label, noteText: label.split("— ")[1], achId, popularity: popGain },
-          resumeScreen: "national_result",
-          clutchEventId: pick(CLUTCH_EVENTS).id,
-          natEventPatch: { stats: nStats, phase: natEvent.phase, type: natEvent.type },
-        };
-        setPlayer(p);
-        save(p);
-        setScreen("clutch_moment");
-        return;
-      }
-      setPlayer(p);
-      save(p);
-      setNationalEvent({ label, stats: nStats, phase: natEvent.phase, type: natEvent.type });
-      setScreen("national_result");
-      return;
-    }
-    if (natEvent && p.age >= 18 && !p.retired) {
-      const overall = computeOverall(p.stats, p.position);
-      const wonAwardThisSeason = (p.lastSeasonLeagueAwards || []).length > 0;
-      const wonMvpOrTot = (p.lastSeasonLeagueAwards || []).includes("mvp") || (p.lastSeasonLeagueAwards || []).includes("tot");
-      const isDLeague = p.league === "u20" || p.league === "u23";
-      const effectiveThreshold = isDLeague ? NT_RATING_THRESHOLD_DLEAGUE : NT_RATING_THRESHOLD;
-      if (overall >= effectiveThreshold || wonAwardThisSeason) {
-        setPlayer(p);
-        save(p);
-        setNationalTryout({ event: natEvent, rating: overall, wonAwardThisSeason, wonMvpOrTot });
-        setScreen("national_tryout");
-        return;
-      }
-    }
+    if (resolveNextNationalEvent(p)) return;
 
     let forcedRetire = null;
     if (p.age >= 40) forcedRetire = "Father Time is undefeated. Your body has called it.";
@@ -7176,8 +7730,39 @@ export default function App() {
       return;
     }
 
+    // Drain any club offers queued earlier this season. They were deferred so
+    // the national-team and overseas checks above could still run.
+    if (p.pendingClubOffers) {
+      const q = p.pendingClubOffers;
+      const np = { ...p, pendingClubOffers: null };
+      setPlayer(np);
+      save(np);
+      setClubOffers(q.offers);
+      setClubOfferContext(q.context);
+      setBanner(bannerMsg);
+      setScreen("club_offers");
+      return;
+    }
+
     setBanner(bannerMsg);
     setScreen("hub");
+  };
+
+  // Any flow that lands back on the hub mid-season must also drain the queue,
+  // otherwise a pending contract situation would be silently dropped.
+  const goHubOrPendingClub = (p, banner) => {
+    if (p && p.pendingClubOffers) {
+      const q = p.pendingClubOffers;
+      const np = { ...p, pendingClubOffers: null };
+      setPlayer(np);
+      save(np);
+      setClubOffers(q.offers);
+      setClubOfferContext(q.context);
+      if (banner) setBanner(banner);
+      setScreen("club_offers");
+      return true;
+    }
+    return false;
   };
 
   const handleRetireConsider = () => {
@@ -7212,9 +7797,12 @@ export default function App() {
   };
 
   const handleAcceptOverseasOffer = (team) => {
+    // Any domestic club offers queued this season are void once you sign
+    // abroad — leaving them queued would pop a stale Malaysian transfer
+    // screen after the move.
     const offer = player.pendingOverseasOffer;
     if (!offer) return;
-    let p = { ...player };
+    let p = { ...player, pendingClubOffers: null };
     // Leaving the domestic system entirely — clear club/league state.
     p.clubId = null; p.starterStatus = offer.role; p.league = null; p.semiProClub = null;
     p.abroad = true; p.abroadEver = true;
@@ -7270,7 +7858,7 @@ export default function App() {
     p.history = [...p.history, { age: p.age, tierLabel: "Stayed Home", note: "You turn down interest from overseas to stay in Malaysia." }];
     setPlayer(p);
     save(p);
-    setScreen("hub");
+    if (!goHubOrPendingClub(p)) setScreen("hub");
   };
 
   const handlePlayAgain = () => {
@@ -7359,7 +7947,7 @@ export default function App() {
         <NationalTryoutScreen player={player} tryout={nationalTryout} onAttend={handleAttendTryout} onDecline={handleDeclineTryout} />
       )}
       {screen === "national_result" && player && nationalEvent && (
-        <NationalResultScreen event={nationalEvent} onContinue={() => { setBanner(null); setScreen("hub"); }} />
+        <NationalResultScreen event={nationalEvent} onContinue={() => { setBanner(null); if (resolveNextNationalEvent({ ...player })) return; if (!goHubOrPendingClub(player)) setScreen("hub"); }} />
       )}
       {screen === "study_decision" && player && (
         <StudyDecisionScreen onStudy={handleChooseStudy} onFocus={handleFocusBasketball} />
@@ -7388,7 +7976,9 @@ export default function App() {
           onRetireConsider={handleRetireConsider}
         />
       )}
-      {screen === "training" && player && <Training player={player} onConfirm={handleConfirmTraining} />}
+      {screen === "body_setup" && player && <BodySetup player={player} onConfirm={handleConfirmBody} />}
+      {screen === "creation_build" && player && <AttributeBuilder player={player} points={player.seasonPoints || 0} creation onConfirm={handleConfirmCreationBuild} />}
+      {screen === "training" && player && <AttributeBuilder player={player} points={player.seasonPoints || 0} onConfirm={handleConfirmTraining} />}
       {screen === "event" && currentEvent && <EventScreen event={currentEvent} onChoose={handleChooseEvent} />}
       {screen === "result" && summary && <ResultScreen summary={summary} onContinue={handleContinueAfterResult} />}
       {screen === "retired" && player && <RetiredScreen player={player} onPlayAgain={handlePlayAgain} onViewHallOfFame={() => setScreen("hall_of_fame")} onViewAchievements={() => setScreen("achievement_gallery")} />}
