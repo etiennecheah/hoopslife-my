@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback, memo } from "react";
 import {
   Trophy, Dumbbell, HeartPulse, TrendingUp, TrendingDown, Users, DollarSign,
   Newspaper, Star, Award, Activity, ChevronRight, Zap, Shield,
@@ -1641,7 +1641,7 @@ function PrimeCourtLogo({ width = 90 }) {
   return <img src={PRIME_COURT_LOGO} alt="Prime Court" width={width} height={h} style={{ width, height: h, objectFit: "contain", display: "block" }} />;
 }
 
-function FlagIcon({ name, size = 32 }) {
+const FlagIcon = memo(function FlagIcon({ name, size = 32 }) {
   const src = FLAG_IMAGES[name];
   const hh = Math.round(size * 0.6);
   if (!src) return <div style={{ width: size, height: hh, background: C.ink3, borderRadius: 3, flexShrink: 0 }} />;
@@ -1654,7 +1654,7 @@ function FlagIcon({ name, size = 32 }) {
       style={{ width: size, height: hh, objectFit: "cover", borderRadius: 3, display: "block", flexShrink: 0, border: "1px solid rgba(0,0,0,0.25)" }}
     />
   );
-}
+})
 /* ---------------------------------------------------------
    HELPERS
 --------------------------------------------------------- */
@@ -1804,6 +1804,144 @@ function computeFgPct(stats, position, base, shootingCoef, iqCoef, noiseLo, nois
    Hierarchy (hardest to easiest): NBA > EuroLeague > Asia Pro > MBL.
 ============================================================ */
 const LEAGUE_TIER_ANCHOR = { mbl: 60, u20: 55, u23: 55, asia: 72, europe: 79, nba: 85 };
+
+/* ============================================================
+   LEAGUE NPCs — the players you're actually competing against
+
+   Without these you post 22 PPG and have no idea whether that's
+   good. NPCs are run through the SAME generateLeagueSeasonStats()
+   as the player, so leaderboards are directly comparable rather
+   than a parallel invented model.
+
+   Two properties matter and both were tuned by simulation:
+
+   1. RATING CURVE. `floor + pow(random, curve) * span` — heavily
+      skewed so most of the league sits near the floor and stars are
+      rare. Flatter curves produced a 36.7 PPG league leader, absurd
+      for a domestic league. At 4.5/17 the MBL leader averages ~27.8
+      PPG and the median player is 66 overall.
+
+   2. UNEVEN ATTRIBUTES. Each NPC gets two strengths and one
+      weakness. With uniform profiles a single NPC led points,
+      rebounds, assists AND steals in the same season; real leagues
+      have specialists. Variance drops that to ~1%.
+
+   NPCs persist on the save and age with the player, so chasing the
+   same scorer across several seasons is a real arc.
+============================================================ */
+const NPC_LEAGUE_CFG = {
+  mbl: { size: 40, floor: 65, curve: 4.5, span: 17 },
+  u23: { size: 36, floor: 52, curve: 3.8, span: 20 },
+  u20: { size: 36, floor: 48, curve: 3.8, span: 20 },
+};
+const NPC_FIRST = ["Farid","Danial","Wong","Aiman","Ravi","Hafiz","Marcus","Tan","Syafiq","Lim",
+  "Arjun","Nazrin","Chong","Iskandar","Kumar","Zulhelmi","Lee","Bala","Amirul","Ong",
+  "Haziq","Vinod","Yusof","Cheng","Rizal"];
+const NPC_LAST = ["Rahman","Osman","Jia Hao","Zulkifli","Chandran","Ismail","Anak Jelani","Wei Sheng",
+  "Hakim","Chee Keong","Menon","Aziz","Yew Ming","Shah","Raj","Bakar","Kang Wei","Krishnan",
+  "Hakimi","Boon Huat","Sivam","Mokhtar","Swee Lim","Nathan","Danish"];
+
+/* Attribute profile for one NPC: position-shaped, then given two
+   strengths and a weakness so specialists emerge. */
+function npcAttributes(pos, target) {
+  const w = posWeights(pos);
+  const pool = [...STAT_LIST];
+  const s1 = pool.splice(randInt(0, pool.length - 1), 1)[0];
+  const s2 = pool.splice(randInt(0, pool.length - 1), 1)[0];
+  const wk = pool.splice(randInt(0, pool.length - 1), 1)[0];
+  const out = {};
+  STAT_LIST.forEach(k => {
+    let v = target + (w[k] - 1 / 6) * 40;
+    if (k === s1) v += 10 + Math.random() * 8;
+    else if (k === s2) v += 4 + Math.random() * 6;
+    else if (k === wk) v -= 10 + Math.random() * 10;
+    else v += (Math.random() - 0.5) * 8;
+    out[k] = clamp(Math.round(v), 1, 99);
+  });
+  return out;
+}
+
+function makeNpc(leagueId, usedNames) {
+  const cfg = NPC_LEAGUE_CFG[leagueId] || NPC_LEAGUE_CFG.mbl;
+  const pos = POSITIONS[randInt(0, POSITIONS.length - 1)].id;
+  const ovr = Math.round(cfg.floor + Math.pow(Math.random(), cfg.curve) * cfg.span);
+  let name, guard = 0;
+  do {
+    name = `${NPC_FIRST[randInt(0, NPC_FIRST.length - 1)]} ${NPC_LAST[randInt(0, NPC_LAST.length - 1)]}`;
+  } while (usedNames.has(name) && ++guard < 40);
+  usedNames.add(name);
+  const clubPool = leagueId === "mbl" ? PRO_CLUBS : SEMI_PRO_CLUBS;
+  const club = clubPool[randInt(0, clubPool.length - 1)];
+  return {
+    id: `npc_${leagueId}_${Math.random().toString(36).slice(2, 8)}`,
+    name, pos, clubName: club.name,
+    age: randInt(19, 31),
+    height: pos === "C" ? randInt(198, 212) : pos === "PF" ? randInt(193, 205) : randInt(178, 196),
+    stats: npcAttributes(pos, ovr),
+  };
+}
+
+/* Build (or top up) the NPC pool for a league. Called lazily the first
+   time a player competes in that league. */
+function ensureNpcPool(p, leagueId) {
+  if (!leagueId || !NPC_LEAGUE_CFG[leagueId]) return p;
+  const pools = { ...(p.npcPools || {}) };
+  const cfg = NPC_LEAGUE_CFG[leagueId];
+  let list = pools[leagueId] ? [...pools[leagueId]] : [];
+  const used = new Set(list.map(n => n.name));
+  while (list.length < cfg.size) list.push(makeNpc(leagueId, used));
+  pools[leagueId] = list;
+  return { ...p, npcPools: pools };
+}
+
+/* Age the pool one season: NPCs develop, peak, decline and retire —
+   replaced by fresh young players. This is what makes chasing the same
+   scorer over several seasons feel like a rivalry. */
+function ageNpcPool(p, leagueId) {
+  if (!p.npcPools || !p.npcPools[leagueId]) return p;
+  const cfg = NPC_LEAGUE_CFG[leagueId];
+  const used = new Set();
+  const list = p.npcPools[leagueId].map(n => {
+    const age = n.age + 1;
+    if (age > randInt(33, 37)) return null;           // retires
+    const stats = { ...n.stats };
+    const delta = age < 25 ? randInt(0, 2) : age < 29 ? randInt(0, 1) : -randInt(0, 2);
+    if (delta) STAT_LIST.forEach(k => { stats[k] = clamp(stats[k] + delta, 1, 99); });
+    used.add(n.name);
+    return { ...n, age, stats };
+  }).filter(Boolean);
+  while (list.length < cfg.size) list.push(makeNpc(leagueId, used));
+  return { ...p, npcPools: { ...p.npcPools, [leagueId]: list } };
+}
+
+/* Season stat lines for every NPC in a league, plus the player's own
+   line, ranked. Returns the leaderboards and the player's rank in each. */
+const NPC_LEADER_KEYS = ["ppg", "rpg", "apg", "spg", "bpg"];
+function buildLeagueBoard(p, leagueId, myLine) {
+  const list = (p.npcPools && p.npcPools[leagueId]) || [];
+  const rows = list.map(n => {
+    const ovr = computeOverall(n.stats, n.pos);
+    const cfg = NPC_LEAGUE_CFG[leagueId];
+    const rel = (ovr - cfg.floor) / cfg.span;
+    const role = rel > 0.75 ? "Starter"
+      : rel > 0.4 ? (Math.random() < 0.75 ? "Starter" : "Rotation")
+      : rel > 0.18 ? (Math.random() < 0.45 ? "Starter" : "Rotation") : "Rotation";
+    return {
+      name: n.name, clubName: n.clubName, pos: n.pos,
+      ...generateLeagueSeasonStats(n.stats, n.pos, leagueId, role, n.height),
+    };
+  });
+  const mine = myLine ? { name: "__ME__", clubName: null, pos: p.position, me: true, ...myLine } : null;
+  const all = mine ? [...rows, mine] : rows;
+  const boards = {}, ranks = {};
+  NPC_LEADER_KEYS.forEach(k => {
+    const sorted = all.slice().sort((a, b) => b[k] - a[k]);
+    boards[k] = sorted.slice(0, 5).map(x => ({ name: x.name, clubName: x.clubName, value: x[k], me: !!x.me }));
+    ranks[k] = mine ? 1 + all.filter(x => x[k] > mine[k]).length : null;
+  });
+  return { boards, ranks, fieldSize: all.length };
+}
+
 
 function competitionMult(rating, tierAnchor) {
   return clamp(0.5 + (rating - tierAnchor) / 30, 0.18, 1.9);
@@ -2115,6 +2253,65 @@ function bodyModifiers({ height, weight, reach, position }) {
 }
 
 /* ============================================================
+   CAREER INVESTMENTS — spending money on your own career
+
+   Money was previously a scoreboard: earned all career, never spent,
+   and ignored by legacyTitle(). These four upkeep options give it a
+   job, and each optimises for a DIFFERENT outcome so none is a
+   strictly-correct purchase:
+
+     trainer  -> peak rating      (+1 attribute point/season)
+     science  -> durability       (half injury risk, slower decline, +1 season)
+     family   -> stability        (no overseas settling-in dip, no bad-season spiral)
+     agent    -> access           (overseas offers 75%->95%, better role band)
+
+   Costs are a PERCENTAGE of monthly salary, not flat RM. Career
+   earnings span RM438k (domestic) to RM121M (NBA) — a 280x range —
+   so flat pricing would be pocket change at the top and crippling at
+   the bottom. All four total 72% of salary, so nobody can run
+   everything; two is 45%, which is the intended real choice.
+============================================================ */
+const INVESTMENTS = {
+  trainer: { id: "trainer", label: "Personal Trainer",       pct: 0.25 },
+  science: { id: "science", label: "Sports Science & Physio", pct: 0.20 },
+  family:  { id: "family",  label: "Support Your Family",     pct: 0.15 },
+  agent:   { id: "agent",   label: "Elite Agent",             pct: 0.12 },
+};
+const AGENT_RATING_BOOST = 3;             // effective rating uplift for overseas scouting only
+const INVESTMENT_MAX_PCT = 0.72;          // cannot commit more than this
+const OVERSEAS_SETTLING_DIP = [2, 5];     // first-season-abroad form dip, removed by family support
+
+function hasInvestment(p, id) {
+  return !!(p && p.investments && p.investments[id]);
+}
+function investmentPct(p) {
+  if (!p || !p.investments) return 0;
+  return Object.keys(INVESTMENTS).reduce(
+    (t, k) => t + (p.investments[k] ? INVESTMENTS[k].pct : 0), 0
+  );
+}
+/* Monthly upkeep in RM, charged against the contract salary. */
+function investmentUpkeep(p) {
+  const salary = p && p.contractSalary ? p.contractSalary : 0;
+  return Math.round(salary * investmentPct(p));
+}
+
+/* Retirement wealth tiers. legacyTitle() describes what you ACHIEVED;
+   this is the independent axis of what the career LEFT you with, so
+   spending is a genuine trade-off rather than free upside. Thresholds
+   are calibrated against a ~RM1.16M gross domestic career. */
+const WEALTH_TIERS = [
+  { id: "set_for_life", label: "Set for Life", min: 5000000, note: "Never has to work again." },
+  { id: "comfortable",  label: "Comfortable",  min: 900000,  note: "Home paid off. Could open a gym or academy." },
+  { id: "stable",       label: "Stable",       min: 500000,  note: "A cushion — but a second career is coming." },
+  { id: "modest",       label: "Modest",       min: 200000,  note: "Enough to retrain. The game gave, but not much." },
+  { id: "nothing_left", label: "Nothing Left", min: 0,       note: "Years of basketball, little to show for it." },
+];
+function wealthTier(money) {
+  return WEALTH_TIERS.find(t => (money || 0) >= t.min) || WEALTH_TIERS[WEALTH_TIERS.length - 1];
+}
+
+/* ============================================================
    ATTRIBUTE POINT SYSTEM (replaces the old Training screen)
 
    Each season the player earns a pool of points and spends them
@@ -2208,23 +2405,15 @@ function computeSeasonPoints(p, perfBonus = 0) {
   else if (p.abroad) facility = 2;
   else if (p.clubId) facility = 1;
   const raw = base + noise + perfBonus + facility;
-  return Math.max(1, Math.round(raw * talentMult(p.talentTier)));
+  let pts = Math.max(1, Math.round(raw * talentMult(p.talentTier)));
+  // Personal trainer: extra year-round individual work. Only from 18, when
+  // there's a salary to pay for it.
+  if (p.age >= 18 && hasInvestment(p, "trainer")) pts += 1;
+  return pts;
 }
 
-function growthAmount(age) {
-  // Growth is still held back before 23 so most players need the U23
-  // D-League to develop. From 23-30, there's now a small (10%) chance of a
-  // "breakout season" adding extra growth on top of the normal roll — this
-  // is what lets a meaningful minority of careers reach the overseas tiers
-  // (Asia 71+, EuroLeague 78+, NBA 81+) instead of that ceiling being nearly
-  // unreachable, while a typical career still lands well below it.
-  if (age < 20) return randInt(1, 3);
-  if (age < 23) return randInt(1, 2);
-  if (age < 27) return randInt(1, 4) + (Math.random() < 0.10 ? randInt(1, 2) : 0);
-  if (age < 31) return randInt(0, 2) + (Math.random() < 0.10 ? randInt(1, 2) : 0);
-  if (age < 34) return randInt(0, 1);
-  return -randInt(1, 3);
-}
+/* growthAmount() removed — the attribute-point system replaced per-season
+   automatic growth entirely. It had no remaining call sites. */
 
 const TIER_LABELS = ["Rough", "Struggling", "Steady", "Solid", "Breakout", "Legendary"];
 const TIER_NOTES = {
@@ -2341,10 +2530,18 @@ const ACHIEVEMENT_GALLERY_KEY = "hoops_life_achievement_gallery";
    save() function so it stays in sync automatically without needing to
    touch every individual place an achievement gets granted. Only writes
    to storage when there's actually something new to record. */
+/* PERFORMANCE: this runs on every save (60+ call sites). It was doing a
+   synchronous localStorage read + JSON.parse + write each time, on the main
+   thread, even when the player had unlocked nothing new. The fast path below
+   skips all of that unless the achievement list actually changed. */
+let _lastSyncedAchSig = null;
 function syncAchievementGallery(p) {
   try {
     if (typeof window === "undefined" || !window.localStorage) return;
     if (!p || !p.achievements || p.achievements.length === 0) return;
+    const sig = p.achievements.length + ":" + p.achievements[p.achievements.length - 1];
+    if (sig === _lastSyncedAchSig) return;   // nothing new since last save
+    _lastSyncedAchSig = sig;
     const raw = window.localStorage.getItem(ACHIEVEMENT_GALLERY_KEY);
     const gallery = raw ? JSON.parse(raw) : {};
     let changed = false;
@@ -2543,6 +2740,8 @@ function newPlayer({ name, position, hometown, height, jersey }) {
     reach: null,
     natQueue: [],
     natQueueYear: null,
+    investments: { trainer: false, science: false, family: false, agent: false },
+    settledAbroad: false,
     talentTier: (function(){
       // Prodigies (the pre-existing 15% flag) are guaranteed at least Elite,
       // so the two systems agree rather than contradicting each other.
@@ -2616,7 +2815,7 @@ function normalizePlayer(p) {
 /* ---------------------------------------------------------
    SMALL UI PIECES
 --------------------------------------------------------- */
-function StatBar({ statKey, value, delta }) {
+const StatBar = memo(function StatBar({ statKey, value, delta }) {
   const meta = STAT_META[statKey];
   const Icon = meta.icon;
   return (
@@ -2634,7 +2833,7 @@ function StatBar({ statKey, value, delta }) {
       ) : <span className="w-8" />}
     </div>
   );
-}
+})
 
 function Meter({ label, value, icon: Icon, color }) {
   return (
@@ -2652,14 +2851,14 @@ function Meter({ label, value, icon: Icon, color }) {
   );
 }
 
-function Badge({ children, icon: Icon }) {
+const Badge = memo(function Badge({ children, icon: Icon }) {
   return (
     <span className="f-mono text-[9px] uppercase tracking-wide px-2.5 py-1 rounded-full inline-flex items-center gap-1.5" style={{ background: "rgba(250,204,21,0.10)", color: C.trophyGold, border: `1px solid rgba(250,204,21,0.35)` }}>
       {Icon && <Icon size={11} color={C.trophyGold} />}
       {children}
     </span>
   );
-}
+})
 
 function PrimaryButton({ children, onClick, disabled, full }) {
   return (
@@ -2699,10 +2898,19 @@ const CREST_PALETTES = [
   ["#DC2626", "#7F1D1D"], ["#A855F7", "#581C87"], ["#EAB308", "#713F12"],
   ["#06B6D4", "#164E63"], ["#6B7280", "#1F2937"],
 ];
+/* Crest colours/initials are pure functions of the club name, but were being
+   recomputed for every row on every render. Cached — club names repeat
+   constantly across the ledger, career summary and offer screens. */
+const _crestPaletteCache = new Map();
 function crestPalette(name) {
+  const key = name || "";
+  const hit = _crestPaletteCache.get(key);
+  if (hit) return hit;
   let hash = 0;
-  for (let i = 0; i < (name || "").length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
-  return CREST_PALETTES[hash % CREST_PALETTES.length];
+  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+  const val = CREST_PALETTES[hash % CREST_PALETTES.length];
+  _crestPaletteCache.set(key, val);
+  return val;
 }
 function crestInitials(name) {
   if (!name) return "??";
@@ -2710,7 +2918,7 @@ function crestInitials(name) {
   if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
   return (words[0][0] + words[words.length - 1][0]).toUpperCase();
 }
-function ClubCrest({ name, size = 44 }) {
+const ClubCrest = memo(function ClubCrest({ name, size = 44 }) {
   const [c1, c2] = crestPalette(name);
   return (
     <div
@@ -2720,26 +2928,26 @@ function ClubCrest({ name, size = 44 }) {
       {crestInitials(name)}
     </div>
   );
-}
+})
 
 /* Bold color-blocked rating badge — the signature "OVR" square. */
-function OvrBadge({ value, size = 64, color }) {
+const OvrBadge = memo(function OvrBadge({ value, size = 64, color }) {
   return (
     <div className="rounded-2xl flex flex-col items-center justify-center flex-shrink-0" style={{ width: size, height: size, background: color || C.amber }}>
       <div className="f-mono font-bold uppercase" style={{ fontSize: size * 0.13, color: "rgba(0,0,0,0.55)", letterSpacing: "0.06em" }}>OVR</div>
       <div className="f-body font-extrabold" style={{ fontSize: size * 0.36, color: "#1A0A00", lineHeight: 1 }}>{value}</div>
     </div>
   );
-}
+})
 
 /* Colored jersey/position pill: "#7 PG" */
-function PosPill({ jersey, position }) {
+const PosPill = memo(function PosPill({ jersey, position }) {
   return (
     <span className="f-body font-bold text-white px-2.5 py-1 rounded-full" style={{ background: C.red, fontSize: 11 }}>
       #{jersey} {position}
     </span>
   );
-}
+})
 
 /* Career timeline — one full-width card per history entry, styled just like
    the per-club summary cards: tinted background, crest, a horizontal info
@@ -2747,8 +2955,25 @@ function PosPill({ jersey, position }) {
    its own line, and — when the entry carries a stat line — every stat laid
    out in one horizontal row so nothing gets cut off or squeezed into a
    fixed-width column. */
-function CareerLedger({ history, maxHeight = 420 }) {
+/* PERFORMANCE: this is the single heaviest component in the game. Every row
+   renders a crest, a 7-cell stat grid and award chips (~35 DOM nodes), and
+   history grows every season — by age 35 that's ~1,400 nodes. It previously
+   re-rendered in full on every player state change (points spent, banner
+   set, navigation), which is what made long careers feel laggy.
+
+   Three fixes: memo() so it only re-renders when history actually changes,
+   useMemo on the reversed copy, and an initial window of recent seasons with
+   an explicit "show all" rather than mounting the entire career at once. */
+const LEDGER_WINDOW = 12;
+const CareerLedger = memo(function CareerLedger({ history, maxHeight = 420 }) {
   const entries = history || [];
+  const [showAll, setShowAll] = useState(false);
+  const ordered = useMemo(() => entries.slice().reverse(), [entries]);
+  const visible = useMemo(
+    () => (showAll ? ordered : ordered.slice(0, LEDGER_WINDOW)),
+    [ordered, showAll]
+  );
+  const hiddenCount = ordered.length - visible.length;
   return (
     <div className="space-y-2.5 overflow-y-auto pr-1" style={{ maxHeight }}>
       {entries.length === 0 && (
@@ -2756,7 +2981,7 @@ function CareerLedger({ history, maxHeight = 420 }) {
           No career history yet.
         </div>
       )}
-      {entries.slice().reverse().map((h, i) => {
+      {visible.map((h, i) => {
         const hasStats = !!h.stats;
         const label = h.clubName || h.tournament || h.tierLabel || "Career Update";
         const [c1, c2] = crestPalette(label);
@@ -2808,9 +3033,18 @@ function CareerLedger({ history, maxHeight = 420 }) {
           </div>
         );
       })}
+      {hiddenCount > 0 && (
+        <button
+          onClick={() => setShowAll(true)}
+          className="w-full f-mono text-[10px] uppercase tracking-widest py-2.5 rounded-xl"
+          style={{ background: C.ink3, color: C.chalkDim, border: `1px solid ${C.line}` }}
+        >
+          Show {hiddenCount} earlier season{hiddenCount > 1 ? "s" : ""}
+        </button>
+      )}
     </div>
   );
-}
+})
 
 /* ---------------------------------------------------------
    START SCREEN
@@ -3031,6 +3265,28 @@ function PlayerCard({ p, overall }) {
           <div className="f-mono text-2xl font-bold" style={{ color: C.chalk }}>{p.height}</div>
           <div className="f-mono text-[9px] uppercase" style={{ color: C.chalkDim }}>cm</div>
         </div>
+        {/* Weight and wingspan were collected at creation and then never shown
+            again — the player couldn't see the frame they'd chosen, or why
+            their attributes were shaped that way. Surfaced here alongside
+            height so the body build stays visible all career. */}
+        {p.weight != null && (
+          <>
+            <div className="h-8 w-px" style={{ background: C.line }} />
+            <div className="text-center">
+              <div className="f-mono text-2xl font-bold" style={{ color: C.chalk }}>{p.weight}</div>
+              <div className="f-mono text-[9px] uppercase" style={{ color: C.chalkDim }}>kg</div>
+            </div>
+          </>
+        )}
+        {p.wingspan != null && (
+          <>
+            <div className="h-8 w-px" style={{ background: C.line }} />
+            <div className="text-center">
+              <div className="f-mono text-2xl font-bold" style={{ color: C.chalk }}>{p.wingspan}</div>
+              <div className="f-mono text-[9px] uppercase" style={{ color: C.chalkDim }}>span</div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -3039,7 +3295,7 @@ function PlayerCard({ p, overall }) {
 /* ---------------------------------------------------------
    HUB SCREEN
 --------------------------------------------------------- */
-function Hub({ player, onPlaySeason, onRetireConsider, banner }) {
+function Hub({ player, onPlaySeason, onRetireConsider, onManageInvestments, banner }) {
   const overall = computeOverall(player.stats, player.position);
   return (
     <div className="min-h-full w-full px-4 py-6 sm:py-10" style={{ background: C.ink }}>
@@ -3093,6 +3349,24 @@ function Hub({ player, onPlaySeason, onRetireConsider, banner }) {
           )}
         </div>
 
+        {/* Career investments — only meaningful once there's a salary to spend. */}
+        {player.age >= 18 && player.contractSalary > 0 && (
+          <button onClick={onManageInvestments}
+            className="w-full flex items-center gap-3 mt-4 px-4 py-3 rounded-2xl"
+            style={{ background: C.ink2, border: `1px solid ${investmentPct(player) > 0 ? C.amber : C.line}` }}>
+            <span className="text-[17px]">💼</span>
+            <div className="text-left flex-1 min-w-0">
+              <div className="f-display text-[13px]" style={{ color: C.chalk }}>Career Investments</div>
+              <div className="f-body text-[10px] mt-0.5" style={{ color: C.chalkDim }}>
+                {investmentPct(player) > 0
+                  ? `${Object.keys(INVESTMENTS).filter(k => player.investments && player.investments[k]).length} active · ${rm(investmentUpkeep(player))}/mo`
+                  : "Spend on your career — trainer, physio, family, agent"}
+              </div>
+            </div>
+            <ChevronRight size={15} color={C.chalkDim} />
+          </button>
+        )}
+
         {player.history.length > 0 && (
           <div className="rounded-2xl p-4 mt-4" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
             <div className="f-display text-xs uppercase tracking-wide mb-3 flex items-center gap-1" style={{ color: C.chalkDim }}>
@@ -3102,7 +3376,7 @@ function Hub({ player, onPlaySeason, onRetireConsider, banner }) {
           </div>
         )}
 
-        <div className="flex gap-3 mt-6">
+        <div className="flex gap-3 mt-4">
           <PrimaryButton full onClick={onPlaySeason}>Continue <ChevronRight size={14} className="inline ml-1" /></PrimaryButton>
           {player.age >= 30 && <SecondaryButton onClick={onRetireConsider}>Retire</SecondaryButton>}
         </div>
@@ -3212,6 +3486,135 @@ function BodySetup({ player, onConfirm }) {
         <PrimaryButton full onClick={() => onConfirm({ height, weight, wingspan, reach })}>
           Continue <ChevronRight size={14} className="inline ml-1" />
         </PrimaryButton>
+      </div>
+    </div>
+  );
+}
+
+function InvestmentsScreen({ player, onConfirm, onBack }) {
+  const [sel, setSel] = useState(() => ({ ...(player.investments || {}) }));
+  const salary = player.contractSalary || 0;
+  const pct = Object.keys(INVESTMENTS).reduce((t, k) => t + (sel[k] ? INVESTMENTS[k].pct : 0), 0);
+  const upkeep = Math.round(salary * pct);
+  const net = salary - upkeep;
+  const banked = net * 12;
+  const projected = player.money + banked * Math.max(1, 34 - player.age);
+  const tierNow = wealthTier(projected);
+
+  const META = {
+    trainer: { icon: "🏋️", sub: "Extra individual sessions year-round.",
+      eff: ["+1 attribute point every season"] },
+    science: { icon: "🩺", sub: "Load management, recovery and treatment.",
+      eff: ["Injury risk halved", "Slower decline after 33", "+1 playable season"] },
+    family: { icon: "🏠", sub: "Send money home and fly them out to see you.",
+      eff: ["No settling-in dip when you move abroad", "A bad season stops spiralling"] },
+    agent: { icon: "📈", sub: "Real representation. Gets you seen, gets you in the room.",
+      eff: ["Scouts rate you 3 higher for overseas moves"], risk: true },
+  };
+
+  const toggle = (k) => {
+    const would = pct + (sel[k] ? -INVESTMENTS[k].pct : INVESTMENTS[k].pct);
+    if (!sel[k] && would > INVESTMENT_MAX_PCT) return;
+    setSel(a => ({ ...a, [k]: !a[k] }));
+  };
+
+  const barColor = pct > 0.6 ? C.red : pct > 0.45 ? C.trophyGold : "#10B981";
+
+  return (
+    <div className="min-h-full w-full flex items-start justify-center px-4 py-8" style={{ background: C.ink }}>
+      <div className="max-w-md w-full">
+        <div className="rounded-[20px] p-4 mb-3.5" style={{ background: C.ink2, border: `1px solid ${C.amber}` }}>
+          <div className="flex items-center gap-3.5">
+            <div>
+              <div className="f-mono text-[22px] leading-none" style={{ color: C.amberBright }}>{rm(salary)}</div>
+              <div className="f-mono text-[10px] uppercase tracking-widest mt-1" style={{ color: C.chalkDim }}>Monthly salary</div>
+            </div>
+            <div className="ml-auto text-right">
+              <div className="f-mono text-[19px] leading-none" style={{ color: pct > 0.6 ? C.red : C.chalk }}>{rm(net)}</div>
+              <div className="f-mono text-[10px] uppercase tracking-widest mt-1" style={{ color: C.chalkDim }}>Take-home</div>
+            </div>
+          </div>
+          <div className="h-[7px] rounded-full mt-3 overflow-hidden" style={{ background: C.ink3 }}>
+            <div className="h-full rounded-full" style={{ width: `${Math.min(100, pct * 100)}%`, background: barColor, transition: "width .18s" }} />
+          </div>
+          <div className="flex justify-between mt-1.5">
+            <span className="f-mono text-[9px]" style={{ color: C.chalkDim }}>{Math.round(pct * 100)}% committed</span>
+            <span className="f-mono text-[9px]" style={{ color: C.chalkDim }}>Max {Math.round(INVESTMENT_MAX_PCT * 100)}%</span>
+          </div>
+        </div>
+
+        {salary <= 0 && (
+          <p className="f-body text-[11px] mb-3 px-1" style={{ color: C.trophyGold }}>
+            You're not earning yet — investments become available once you sign a contract.
+          </p>
+        )}
+
+        {Object.keys(INVESTMENTS).map(k => {
+          const inv = INVESTMENTS[k], m = META[k], on = !!sel[k];
+          const would = pct + (on ? 0 : inv.pct);
+          const locked = !on && (would > INVESTMENT_MAX_PCT || salary <= 0);
+          return (
+            <div key={k} onClick={() => !locked && toggle(k)}
+              className="rounded-2xl px-4 py-3.5 mb-2"
+              style={{ background: on ? "#171310" : C.ink2, border: `1px solid ${on ? C.amber : C.line}`, opacity: locked ? 0.45 : 1 }}>
+              <div className="flex items-start gap-3">
+                <div className="w-5 h-5 rounded-md flex items-center justify-center shrink-0 mt-0.5 f-mono text-[12px]"
+                  style={{ background: on ? C.amber : "transparent", border: `1.5px solid ${on ? C.amber : C.line}`, color: C.ink }}>
+                  {on ? "✓" : ""}
+                </div>
+                <span className="text-[19px] w-7 text-center shrink-0">{m.icon}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="f-display text-[13.5px]" style={{ color: C.chalk }}>
+                    {inv.label}
+                    {m.risk && (
+                      <span className="f-mono text-[8.5px] ml-1.5 px-1.5 py-0.5 rounded-full"
+                        style={{ color: C.trophyGold, background: "rgba(250,204,21,0.1)", border: "1px solid rgba(250,204,21,0.35)" }}>HIGH RISK</span>
+                    )}
+                  </div>
+                  <div className="f-body text-[10.5px] mt-0.5" style={{ color: C.chalkDim }}>{m.sub}</div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="f-mono text-[14px]" style={{ color: C.amberBright }}>{Math.round(inv.pct * 100)}%</div>
+                  <div className="f-mono text-[9px]" style={{ color: C.chalkDim }}>{rm(Math.round(salary * inv.pct))}/mo</div>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-1.5 mt-2.5 pl-[52px]">
+                {m.eff.map((e, i) => (
+                  <span key={i} className="f-mono text-[9px] px-2 py-1 rounded-full"
+                    style={{ background: C.ink3, color: "#10B981", border: `1px solid ${C.line}` }}>{e}</span>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+
+        <div className="rounded-2xl px-4 py-3 mt-3" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+          <div className="f-mono text-[10px] uppercase tracking-widest mb-2" style={{ color: C.chalkDim }}>Retirement outlook</div>
+          {WEALTH_TIERS.map(t => {
+            const isNow = t.id === tierNow.id;
+            return (
+              <div key={t.id} className="flex items-center gap-2 py-1.5"
+                style={{ opacity: isNow ? 1 : 0.32, borderBottom: t.id === "nothing_left" ? "none" : `1px solid ${C.line}` }}>
+                <span className="f-display text-[11.5px] w-[92px] shrink-0" style={{ color: isNow ? C.trophyGold : C.chalkDim }}>{t.label}</span>
+                <span className="f-body text-[9.5px] flex-1" style={{ color: C.chalkDim }}>{isNow ? t.note : ""}</span>
+                <span className="f-mono text-[9px]" style={{ color: C.chalkDim }}>{t.min ? rm(t.min) + "+" : "—"}</span>
+              </div>
+            );
+          })}
+        </div>
+
+        {pct > 0.6 && (
+          <p className="f-body text-[10.5px] mt-2.5 px-1" style={{ color: C.red }}>
+            Overcommitted — a released or injured season could leave you unable to keep these up.
+          </p>
+        )}
+
+        <div className="grid grid-cols-3 gap-2.5 mt-4">
+          <SecondaryButton full onClick={onBack}>Back</SecondaryButton>
+          <div className="col-span-2">
+            <PrimaryButton full onClick={() => onConfirm(sel)}>Confirm</PrimaryButton>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -3653,14 +4056,14 @@ function U15SelectionScreen({ player, selected, onContinue }) {
 /* ---------------------------------------------------------
    U15 TOURNAMENT RESULTS SCREEN
 --------------------------------------------------------- */
-function StatCell({ label, value }) {
+const StatCell = memo(function StatCell({ label, value }) {
   return (
     <div className="text-center">
       <div className="f-mono text-lg font-bold" style={{ color: C.chalk }}>{value}</div>
       <div className="f-mono text-[9px] uppercase" style={{ color: C.chalkDim }}>{label}</div>
     </div>
   );
-}
+})
 
 function U15TournamentScreen({ player, onContinue }) {
   const u15 = player.u15Stats;
@@ -4848,6 +5251,50 @@ function ResultScreen({ summary, onContinue }) {
                 </div>
               </div>
             )}
+
+            {/* League context: where this stat line actually ranks. Without
+                this you post 22 PPG with no idea whether that's good. */}
+            {summary.leagueBoard && (
+              <div className="mt-3 pt-3" style={{ borderTop: `1px solid ${C.line}` }}>
+                <div className="f-mono text-[9px] uppercase tracking-widest mb-2" style={{ color: C.chalkDim }}>
+                  League Leaders · {summary.leagueLabel}
+                </div>
+                {[["ppg", "Points"], ["rpg", "Rebounds"], ["apg", "Assists"]].map(([key, label]) => {
+                  const rows = summary.leagueBoard.boards[key] || [];
+                  const myRank = summary.leagueBoard.ranks[key];
+                  const inTop = rows.some(r => r.me);
+                  return (
+                    <div key={key} className="mb-2.5">
+                      <div className="flex items-baseline justify-between mb-1">
+                        <span className="f-mono text-[9.5px] uppercase tracking-wide" style={{ color: C.amberBright }}>{label}</span>
+                        <span className="f-mono text-[9px]" style={{ color: myRank <= 3 ? C.trophyGold : C.chalkDim }}>
+                          You: {myRank}{myRank === 1 ? "st" : myRank === 2 ? "nd" : myRank === 3 ? "rd" : "th"} of {summary.leagueBoard.fieldSize}
+                        </span>
+                      </div>
+                      {rows.slice(0, 3).map((r, i) => (
+                        <div key={i} className="flex items-center gap-2 py-[3px]"
+                          style={r.me ? { background: "rgba(249,115,22,0.08)", marginLeft: -6, marginRight: -6, paddingLeft: 6, paddingRight: 6, borderRadius: 6 } : {}}>
+                          <span className="f-mono text-[9px] w-3" style={{ color: r.me ? C.amberBright : C.chalkDim }}>{i + 1}</span>
+                          <span className="f-body text-[10.5px] flex-1 truncate" style={{ color: r.me ? C.amberBright : C.chalk }}>
+                            {r.me ? "You" : r.name}
+                            {r.clubName && <span style={{ color: C.chalkDim }}> · {r.clubName}</span>}
+                          </span>
+                          <span className="f-mono text-[11px]" style={{ color: r.me ? C.amberBright : C.chalk }}>{r.value.toFixed(1)}</span>
+                        </div>
+                      ))}
+                      {!inTop && (
+                        <div className="flex items-center gap-2 py-[3px] mt-0.5"
+                          style={{ background: "rgba(249,115,22,0.08)", marginLeft: -6, marginRight: -6, paddingLeft: 6, paddingRight: 6, borderRadius: 6 }}>
+                          <span className="f-mono text-[9px] w-3" style={{ color: C.amberBright }}>{myRank}</span>
+                          <span className="f-body text-[10.5px] flex-1" style={{ color: C.amberBright }}>You</span>
+                          <span className="f-mono text-[11px]" style={{ color: C.amberBright }}>{summary.leagueStats[key].toFixed(1)}</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
@@ -5887,15 +6334,38 @@ export default function App() {
     })();
   }, []);
 
-  const save = async (p) => {
+  /* Saves are fire-and-forget: nothing in the UI awaits the result, so the
+     serialize + write is deferred out of the current frame. Previously a
+     ~40KB stringify + synchronous localStorage write happened inline during
+     state updates, which showed up as stutter on longer careers. */
+  /* These read + JSON.parse from localStorage. Called inline in JSX they ran
+     on every render while their screen was open, and returned a fresh object
+     each time — which also defeated memoisation downstream. Recomputed only
+     when the screen actually changes. */
+  const galleryData = useMemo(
+    () => (screen === "achievement_gallery" ? loadAchievementGallery() : null),
+    [screen]
+  );
+  const hofData = useMemo(
+    () => (screen === "hall_of_fame" ? loadHallOfFame() : null),
+    [screen]
+  );
+
+  const saveTimer = useRef(null);
+  const save = (p) => {
     syncAchievementGallery(p);
-    try {
-      if (hasArtifactStorage) {
-        await window.storage.set("career", JSON.stringify(p), false);
-      } else if (typeof window !== "undefined" && window.localStorage) {
-        window.localStorage.setItem("hoops_life_career", JSON.stringify(p));
-      }
-    } catch (e) {}
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    const snapshot = p;
+    saveTimer.current = setTimeout(async () => {
+      try {
+        const json = JSON.stringify(snapshot);
+        if (hasArtifactStorage) {
+          await window.storage.set("career", json, false);
+        } else if (typeof window !== "undefined" && window.localStorage) {
+          window.localStorage.setItem("hoops_life_career", json);
+        }
+      } catch (e) {}
+    }, 0);
   };
   const clearSave = async () => {
     try {
@@ -7103,6 +7573,14 @@ export default function App() {
     p.morale = clamp(p.morale + sim.moraleDelta);
     p.popularity = clamp(p.popularity + sim.popularityDelta);
     p.money += sim.moneyDelta;
+    /* Career investments are charged monthly against the contract salary.
+       This is what turns money from a scoreboard into a resource — and what
+       makes the retirement wealth tier a genuine trade-off. */
+    const upkeep = investmentUpkeep(p) * 12;
+    if (upkeep > 0) {
+      p.money = Math.max(0, p.money - upkeep);
+      p.investmentSpend = (p.investmentSpend || 0) + upkeep;
+    }
     p.peakOverall = Math.max(p.peakOverall, sim.overall);
     // Season quality feeds next season's attribute-point pool: a breakout
     // year earns you more development points than a season on the bench.
@@ -7115,10 +7593,20 @@ export default function App() {
     let gamesPlayed = null;
     let wonChampionship = false;
     let injury = null;
+    let leagueBoard = null;
     if (p.stage === "pro" && !p.abroad && p.clubId && p.league) {
       const role = p.starterStatus || "Bench";
       leagueStats = generateLeagueSeasonStats(p.stats, p.position, p.league, role, p.height);
       leagueLabel = LEAGUE[p.league].short;
+
+      /* League context: build the NPC pool on first entry, age it every
+         season after, then rank the player's line against it. */
+      p = ensureNpcPool(p, p.league);
+      if (p.npcAgedYear !== p.year) {
+        p = ageNpcPool(p, p.league);
+        p.npcAgedYear = p.year;
+      }
+      leagueBoard = buildLeagueBoard(p, p.league, leagueStats);
 
       // Games per season: MBL ~30-40, D-Leagues ~20-25.
       const fullGames = p.league === "mbl" ? randInt(30, 40) : randInt(20, 25);
@@ -7127,6 +7615,9 @@ export default function App() {
       // Base risk rises with age and fatigue; young, fresh players are safer.
       let injuryChance = 0.06 + Math.max(0, p.age - 30) * 0.015 + Math.max(0, p.fatigue - 60) * 0.002;
       injuryChance = clamp(injuryChance, 0.04, 0.28);
+      // Sports science: load management and proper treatment roughly halve
+      // how often a season gets derailed.
+      if (hasInvestment(p, "science")) injuryChance *= 0.5;
       if (Math.random() < injuryChance) {
         const serious = Math.random() < 0.45; // ~45% of injuries are season-wrecking
         if (serious) {
@@ -7219,7 +7710,15 @@ export default function App() {
     if (p.stage === "pro" && p.abroad && p.overseasTierId) {
       const tier = ALL_OVERSEAS_TIERS.find(t => t.id === p.overseasTierId);
       if (tier) {
-        const overallOs = computeOverall(p.stats, p.position);
+        let overallOs = computeOverall(p.stats, p.position);
+        /* Settling-in dip: a real form penalty in the first season(s) abroad
+           for a player whose family isn't supported. Halves each season so it
+           fades rather than being permanent. */
+        if (p.settlingDip) {
+          overallOs = Math.max(1, overallOs - p.settlingDip);
+          p.settlingDip = Math.floor(p.settlingDip / 2);
+          if (p.settlingDip === 0) p.settledAbroad = true;
+        }
         const band = overseasRoleBand(tier, overallOs);
         p.starterStatus = band.role; // role can shift with rating, same as domestic
         leagueStats = generateOverseasStats(p.stats, p.position, p.height, band.role, tier.id);
@@ -7271,7 +7770,7 @@ export default function App() {
       note: sim.note,
       moneyDelta: sim.moneyDelta,
       popularityDelta: sim.popularityDelta,
-      leagueStats, leagueLabel, leagueAwards,
+      leagueStats, leagueLabel, leagueAwards, leagueBoard,
       gamesPlayed, wonChampionship, injury,
     });
     setPlayer(p);
@@ -7317,7 +7816,19 @@ export default function App() {
     let heightMsg = null;
     if (p.heightWillGrow && p.age <= p.heightGrowthCutoff) {
       const grow = randInt(1, 3);
-      p.height = Math.min(p.height + grow, 208);
+      /* Wingspan has to grow with height. Previously only p.height changed,
+         so a spurt silently shrank the player's reach — and a short player
+         near the wingspan floor could end up BELOW the legal minimum
+         (154cm/150cm span growing to 163cm left a -13 reach against a -6
+         limit). Arms grow slightly faster than height in a real spurt, so
+         wingspan gains a touch more, then gets clamped to stay legal.
+         Cap now matches BODY_LIMITS rather than a stale hard-coded 208. */
+      p.height = Math.min(p.height + grow, BODY_LIMITS.height[1]);
+      if (p.wingspan != null) {
+        const armGrow = grow + (Math.random() < 0.35 ? 1 : 0);
+        p.wingspan = clampWingspan(p.height, p.wingspan + armGrow);
+        p.reach = p.wingspan - p.height;
+      }
       heightMsg = `Growth spurt — you're now ${p.height}cm.`;
     }
 
@@ -7341,6 +7852,9 @@ export default function App() {
       const yearsPast = p.age - 32;            // 1 at age 33, 2 at 34, ...
       let declinePerStat = 1 + Math.floor(yearsPast * 0.8); // grows each year
       if (p.slowDecliner) declinePerStat = Math.max(1, Math.round(declinePerStat * 0.5));
+      // Sports science keeps the body going a year or two longer than it
+      // otherwise would.
+      if (hasInvestment(p, "science")) declinePerStat = Math.max(1, declinePerStat - 1);
       STAT_LIST.forEach(s => {
         const drop = randInt(Math.max(0, declinePerStat - 1), declinePerStat + 1);
         p.stats[s] = clamp(p.stats[s] - drop, 1, 99);
@@ -7682,8 +8196,16 @@ export default function App() {
     // outright, as long as the player already qualifies for some tier.
     if (p.stage === "pro" && !p.abroad && p.clubId) {
       const overallD = computeOverall(p.stats, p.position);
-      const qualifyingTier = highestOverseasTier(overallD);
+      // An elite agent gets a borderline player in front of the right people,
+      // effectively lowering the rating at which overseas clubs will look.
+      const scoutedAs = overallD + (hasInvestment(p, "agent") ? AGENT_RATING_BOOST : 0);
+      const qualifyingTier = highestOverseasTier(scoutedAs);
       const guaranteed = !!choice.guaranteesOverseasOffer && !!qualifyingTier;
+      /* Elite agent buys ACCESS. Note a per-season roll bonus is worthless
+         here: the roll repeats every eligible season, so 75% compounds to
+         ~100% anyway (measured 99.5% vs 99.8% — no effect). The agent's real
+         value is getting you SEEN at a rating scouts would otherwise pass
+         over, which is a threshold change, not a probability change. */
       if (qualifyingTier && (guaranteed || Math.random() < OVERSEAS_OFFER_CHANCE)) {
         const band = overseasRoleBand(qualifyingTier, overallD);
         const teams = pick3(qualifyingTier.teams);
@@ -7765,6 +8287,14 @@ export default function App() {
     return false;
   };
 
+  const handleManageInvestments = () => setScreen("investments");
+  const handleConfirmInvestments = (sel) => {
+    const p = { ...player, investments: { ...sel } };
+    setPlayer(p);
+    save(p);
+    setScreen("hub");
+  };
+
   const handleRetireConsider = () => {
     const retiredPlayer = { ...player, retired: true, retireReason: "You walk away on your own terms." };
     saveToHallOfFame(retiredPlayer, buildCareerSummary(retiredPlayer.history));
@@ -7803,6 +8333,18 @@ export default function App() {
     const offer = player.pendingOverseasOffer;
     if (!offer) return;
     let p = { ...player, pendingClubOffers: null };
+    /* Moving abroad used to have NO downside at all. A young Malaysian
+       landing in Europe or the NBA should take time to settle — unless
+       family is being supported and flown out, which removes the dip.
+       Applied once, on the first move abroad only. */
+    if (!p.abroadEver && !hasInvestment(p, "family")) {
+      const dip = randInt(OVERSEAS_SETTLING_DIP[0], OVERSEAS_SETTLING_DIP[1]);
+      p.settlingDip = dip;
+      p.morale = clamp(p.morale - 10);
+    } else {
+      p.settlingDip = 0;
+      p.settledAbroad = true;
+    }
     // Leaving the domestic system entirely — clear club/league state.
     p.clubId = null; p.starterStatus = offer.role; p.league = null; p.semiProClub = null;
     p.abroad = true; p.abroadEver = true;
@@ -7974,24 +8516,28 @@ export default function App() {
           banner={banner}
           onPlaySeason={handlePlaySeason}
           onRetireConsider={handleRetireConsider}
+          onManageInvestments={handleManageInvestments}
         />
       )}
       {screen === "body_setup" && player && <BodySetup player={player} onConfirm={handleConfirmBody} />}
       {screen === "creation_build" && player && <AttributeBuilder player={player} points={player.seasonPoints || 0} creation onConfirm={handleConfirmCreationBuild} />}
+      {screen === "investments" && player && (
+        <InvestmentsScreen player={player} onConfirm={handleConfirmInvestments} onBack={() => setScreen("hub")} />
+      )}
       {screen === "training" && player && <AttributeBuilder player={player} points={player.seasonPoints || 0} onConfirm={handleConfirmTraining} />}
       {screen === "event" && currentEvent && <EventScreen event={currentEvent} onChoose={handleChooseEvent} />}
       {screen === "result" && summary && <ResultScreen summary={summary} onContinue={handleContinueAfterResult} />}
       {screen === "retired" && player && <RetiredScreen player={player} onPlayAgain={handlePlayAgain} onViewHallOfFame={() => setScreen("hall_of_fame")} onViewAchievements={() => setScreen("achievement_gallery")} />}
       {screen === "hall_of_fame" && (
         <HallOfFameScreen
-          entries={loadHallOfFame()}
+          entries={hofData || []}
           onBack={() => setScreen("start")}
           onPlayAgain={handlePlayAgain}
         />
       )}
       {screen === "achievement_gallery" && (
         <AchievementGalleryScreen
-          gallery={loadAchievementGallery()}
+          gallery={galleryData || {}}
           onBack={() => setScreen("start")}
         />
       )}
