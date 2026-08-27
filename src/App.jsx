@@ -84,7 +84,7 @@ const C = {
   chalkDim: "#71717A",
 };
 
-const FontStyle = () => (
+const FontStyle = memo(() => (
   <style>{`
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
     .f-display{ font-family:'Inter', sans-serif; font-weight:800; letter-spacing:-0.01em; }
@@ -108,7 +108,7 @@ const FontStyle = () => (
     ::-webkit-scrollbar{ width:8px; height:8px; }
     ::-webkit-scrollbar-thumb{ background:#262626; border-radius:8px; }
   `}</style>
-);
+));
 
 /* ---------------------------------------------------------
    GAME DATA
@@ -390,7 +390,10 @@ function generateOverseasStats(stats, position, height, role, tierId) {
   const rpg = clamp(round1((1 + rpgPosBonus + stats.rebounding * 0.11 + stats.athleticism * 0.02) * m * randFloat(0.85, 1.15)), 0.3, 17);
   const apg = clamp(round1((0.4 + apgPosBonus + stats.playmaking * 0.045) * m * randFloat(0.85, 1.15)), 0.2, 9);
   const spg = clamp(round1((-0.9 + stats.defense * 0.042 + stats.athleticism * 0.005) * m * randFloat(0.85, 1.15)), 0.2, 3.1);
-  const bpg = computeBlocks(stats, position, height, m) + (Math.random() < 0.6 ? nudge.bpg : 0);
+  // round1 AFTER the nudge — computeBlocks already rounds, so adding the
+  // nudge afterwards reintroduced float error (1.9 + 0.3 = 2.1999999999999997,
+  // which rendered raw and overflowed its box).
+  const bpg = round1(computeBlocks(stats, position, height, m) + (Math.random() < 0.6 ? nudge.bpg : 0));
   const fgPct = computeFgPct(stats, position, 20, 0.3, 0.06, 0.92, 1.08, 15, 65, pctMult);
   const threePct = clamp(round1((12 + nudge.threePct + Math.max(0, stats.shooting - 25) * 0.4 + Math.max(0, stats.iq - 30) * 0.12) * pctMult * randFloat(0.85, 1.15)), 0, 52);
   return { ppg, rpg, apg, spg, bpg, fgPct, threePct, role };
@@ -1861,23 +1864,90 @@ function npcAttributes(pos, target) {
   return out;
 }
 
+/* Deterministic PRNG so an NPC's attributes can be rebuilt from a seed
+   rather than stored. Saves ~15KB per save file — full attribute objects
+   tripled the payload (7.6KB -> 22.8KB), and localStorage.setItem is
+   synchronous, so that showed up as stutter on screen transitions. */
+function npcRand(seed) {
+  let x = seed >>> 0;
+  return () => {
+    x = (x * 1664525 + 1013904223) >>> 0;
+    return x / 4294967296;
+  };
+}
+/* Rebuild an NPC's attribute spread from its seed. Memoised in a module-level
+   cache keyed by seed+ovr — this is derived data, never persisted. */
+const _npcStatCache = new Map();
+function npcStatsFromSeed(pos, ovr, seed) {
+  /* Key on the SEED only. Keying on ovr too meant every NPC got a fresh key
+     each season as they developed, so 40 NPCs x 20 seasons blew past the
+     400-entry cap and forced repeated full clears. The seed fixes the SHAPE
+     of the spread; the rating just shifts it, applied below. */
+  const key = `${pos}|${seed}`;
+  const cached = _npcStatCache.get(key);
+  if (cached) {
+    const out = {};
+    STAT_LIST.forEach(k => { out[k] = clamp(cached.base[k] + (ovr - cached.ovr), 1, 99); });
+    return out;
+  }
+  const rnd = npcRand(seed);
+  const w = posWeights(pos);
+  const pool = [...STAT_LIST];
+  const s1 = pool.splice(Math.floor(rnd() * pool.length), 1)[0];
+  const s2 = pool.splice(Math.floor(rnd() * pool.length), 1)[0];
+  const wk = pool.splice(Math.floor(rnd() * pool.length), 1)[0];
+  const out = {};
+  STAT_LIST.forEach(k => {
+    let v = ovr + (w[k] - 1 / 6) * 40;
+    if (k === s1) v += 10 + rnd() * 8;
+    else if (k === s2) v += 4 + rnd() * 6;
+    else if (k === wk) v -= 10 + rnd() * 10;
+    else v += (rnd() - 0.5) * 8;
+    out[k] = clamp(Math.round(v), 1, 99);
+  });
+  if (_npcStatCache.size > 400) _npcStatCache.clear();
+  _npcStatCache.set(key, { base: out, ovr });
+  return out;
+}
+/* Name and club are also derived from the seed rather than stored — the
+   strings dominated the payload (a name plus a club name is ~45 bytes per
+   NPC before JSON overhead). Only pos/ovr/seed/age/height persist. */
+function npcNameFromSeed(seed) {
+  const a = NPC_FIRST[seed % NPC_FIRST.length];
+  const b = NPC_LAST[(seed >>> 7) % NPC_LAST.length];
+  return `${a} ${b}`;
+}
+function npcClubFromSeed(seed, leagueId) {
+  const pool = leagueId === "mbl" ? PRO_CLUBS : SEMI_PRO_CLUBS;
+  return pool[(seed >>> 15) % pool.length].name;
+}
+/* Resolve a stored NPC record into a full one for display/simulation. */
+function npcResolve(n, leagueId) {
+  if (n.stats && n.name) return n;
+  return {
+    ...n,
+    name: n.name || npcNameFromSeed(n.seed),
+    clubName: n.clubName || npcClubFromSeed(n.seed, leagueId),
+    stats: n.stats || npcStatsFromSeed(n.pos, n.ovr, n.seed),
+  };
+}
+
 function makeNpc(leagueId, usedNames) {
   const cfg = NPC_LEAGUE_CFG[leagueId] || NPC_LEAGUE_CFG.mbl;
   const pos = POSITIONS[randInt(0, POSITIONS.length - 1)].id;
   const ovr = Math.round(cfg.floor + Math.pow(Math.random(), cfg.curve) * cfg.span);
-  let name, guard = 0;
+  // Roll seeds until the derived name is unused, so duplicates stay rare
+  // without needing to store the name itself.
+  let seed, guard = 0;
   do {
-    name = `${NPC_FIRST[randInt(0, NPC_FIRST.length - 1)]} ${NPC_LAST[randInt(0, NPC_LAST.length - 1)]}`;
-  } while (usedNames.has(name) && ++guard < 40);
-  usedNames.add(name);
-  const clubPool = leagueId === "mbl" ? PRO_CLUBS : SEMI_PRO_CLUBS;
-  const club = clubPool[randInt(0, clubPool.length - 1)];
+    seed = (Math.random() * 0xffffffff) >>> 0;
+  } while (usedNames.has(npcNameFromSeed(seed)) && ++guard < 40);
+  usedNames.add(npcNameFromSeed(seed));
+  // Persisted fields only — name, club and attributes are all derived.
   return {
-    id: `npc_${leagueId}_${Math.random().toString(36).slice(2, 8)}`,
-    name, pos, clubName: club.name,
+    pos, ovr, seed,
     age: randInt(19, 31),
     height: pos === "C" ? randInt(198, 212) : pos === "PF" ? randInt(193, 205) : randInt(178, 196),
-    stats: npcAttributes(pos, ovr),
   };
 }
 
@@ -1885,7 +1955,11 @@ function makeNpc(leagueId, usedNames) {
    time a player competes in that league. */
 function ensureNpcPool(p, leagueId) {
   if (!leagueId || !NPC_LEAGUE_CFG[leagueId]) return p;
-  const pools = { ...(p.npcPools || {}) };
+  /* Only the current league's pool is ever displayed, but a player who came
+     up through U20 -> U23 -> MBL was carrying all three on the save forever.
+     Drop the ones no longer in use. */
+  const pools = {};
+  if (p.npcPools && p.npcPools[leagueId]) pools[leagueId] = p.npcPools[leagueId];
   const cfg = NPC_LEAGUE_CFG[leagueId];
   let list = pools[leagueId] ? [...pools[leagueId]] : [];
   const used = new Set(list.map(n => n.name));
@@ -1904,11 +1978,10 @@ function ageNpcPool(p, leagueId) {
   const list = p.npcPools[leagueId].map(n => {
     const age = n.age + 1;
     if (age > randInt(33, 37)) return null;           // retires
-    const stats = { ...n.stats };
     const delta = age < 25 ? randInt(0, 2) : age < 29 ? randInt(0, 1) : -randInt(0, 2);
-    if (delta) STAT_LIST.forEach(k => { stats[k] = clamp(stats[k] + delta, 1, 99); });
-    used.add(n.name);
-    return { ...n, age, stats };
+    used.add(npcNameFromSeed(n.seed));
+    // Development shifts the rating; attributes are re-derived from it.
+    return { ...n, age, ovr: clamp((n.ovr || 65) + delta, 1, 99) };
   }).filter(Boolean);
   while (list.length < cfg.size) list.push(makeNpc(leagueId, used));
   return { ...p, npcPools: { ...p.npcPools, [leagueId]: list } };
@@ -1916,10 +1989,79 @@ function ageNpcPool(p, leagueId) {
 
 /* Season stat lines for every NPC in a league, plus the player's own
    line, ranked. Returns the leaderboards and the player's rank in each. */
+/* League standings. Club strength comes from prestige, with the player's
+   own club nudged by how well they personally played — a star lifts their
+   side, a bench player doesn't. Deterministic per season so revisiting the
+   screen shows the same table. */
+function buildStandings(p, leagueId, myLine, seasonSeed) {
+  const clubs = leagueId === "mbl" ? PRO_CLUBS : SEMI_PRO_CLUBS;
+  const games = leagueId === "mbl" ? 24 : 20;
+  const rnd = npcRand(seasonSeed >>> 0);
+  const myClub = getClub(p.clubId);
+  const rows = clubs.map(c => {
+    // Prestige 30-100 maps to a baseline win rate of roughly .25-.75.
+    let strength = 0.25 + ((c.prestige || 50) - 30) / 140;
+    if (myClub && c.id === myClub.id && myLine) {
+      // Your production tilts your own club's season.
+      strength += clamp((myLine.tr || 50) - 50, -25, 30) * 0.004;
+    }
+    strength = Math.max(0.08, Math.min(0.92, strength + (rnd() - 0.5) * 0.18));
+    const w = Math.round(strength * games);
+    return {
+      id: c.id, name: c.name, w, l: games - w,
+      pct: w / games,
+      me: !!(myClub && c.id === myClub.id),
+    };
+  }).sort((a, b) => b.pct - a.pct || b.w - a.w);
+  const playoffCut = Math.min(4, Math.max(2, Math.floor(rows.length / 2)));
+  const myIndex = rows.findIndex(r => r.me);
+  return { rows, playoffCut, myPlace: myIndex >= 0 ? myIndex + 1 : null };
+}
+
+/* Award race. Rather than a bare probability, each contender carries the
+   stat line that justifies it, so the player can see WHY they're behind. */
+function buildAwardRace(p, leagueId, myLine, board) {
+  if (!board || !myLine) return null;
+  const contenders = [];
+  const seen = new Set();
+  const pushFrom = (key, label) => {
+    (board.boards[key] || []).slice(0, 3).forEach(r => {
+      const id = r.me ? "__ME__" : r.name;
+      if (seen.has(id)) {
+        const c = contenders.find(x => x.id === id);
+        if (c) c.cases.push(`${r.value.toFixed(1)} ${label}`);
+        return;
+      }
+      seen.add(id);
+      contenders.push({ id, name: r.name, clubName: r.clubName, me: !!r.me,
+        cases: [`${r.value.toFixed(1)} ${label}`], score: 0 });
+    });
+  };
+  pushFrom("ppg", "PPG");
+  pushFrom("rpg", "RPG");
+  pushFrom("apg", "APG");
+  // Score = how many leaderboards you appear near the top of, weighted to scoring.
+  contenders.forEach(c => {
+    c.score = c.cases.reduce((t, cs) => t + (cs.includes("PPG") ? 1.6 : 1.0), 0);
+  });
+  // Take the top 4 FIRST, then share the odds among them — normalising over
+  // everyone and slicing afterwards left the displayed odds summing to ~81%.
+  contenders.sort((a, b) => b.score - a.score);
+  const top = contenders.slice(0, 4);
+  const total = top.reduce((t, c) => t + c.score, 0) || 1;
+  let running = 0;
+  top.forEach((c, i) => {
+    if (i === top.length - 1) c.odds = Math.max(0, 100 - running);   // absorb rounding
+    else { c.odds = Math.round((c.score / total) * 100); running += c.odds; }
+  });
+  return top;
+}
+
 const NPC_LEADER_KEYS = ["ppg", "rpg", "apg", "spg", "bpg"];
 function buildLeagueBoard(p, leagueId, myLine) {
   const list = (p.npcPools && p.npcPools[leagueId]) || [];
-  const rows = list.map(n => {
+  const rows = list.map(raw => {
+    const n = npcResolve(raw, leagueId);
     const ovr = computeOverall(n.stats, n.pos);
     const cfg = NPC_LEAGUE_CFG[leagueId];
     const rel = (ovr - cfg.floor) / cfg.span;
@@ -2018,7 +2160,10 @@ function generateLeagueSeasonStats(stats, position, leagueId, role, height) {
   const rpg = clamp(round1((1 + rpgPosBonus + stats.rebounding * 0.11 + stats.athleticism * 0.02) * m * randFloat(0.85, 1.15)), 0.3, 17);
   const apg = clamp(round1((0.4 + apgPosBonus + stats.playmaking * 0.045) * m * randFloat(0.85, 1.15)), 0.2, 9);
   const spg = clamp(round1((-0.9 + stats.defense * 0.042 + stats.athleticism * 0.005) * m * randFloat(0.85, 1.15)), 0.2, 3.1);
-  const bpg = computeBlocks(stats, position, height, m) + (Math.random() < 0.6 ? nudge.bpg : 0);
+  // round1 AFTER the nudge — computeBlocks already rounds, so adding the
+  // nudge afterwards reintroduced float error (1.9 + 0.3 = 2.1999999999999997,
+  // which rendered raw and overflowed its box).
+  const bpg = round1(computeBlocks(stats, position, height, m) + (Math.random() < 0.6 ? nudge.bpg : 0));
   const fgPct = computeFgPct(stats, position, 20, 0.3, 0.06, 0.92, 1.08, 15, 65, pctMult);
   const threePct = clamp(round1((12 + nudge.threePct + Math.max(0, stats.shooting - 25) * 0.4 + Math.max(0, stats.iq - 30) * 0.12) * pctMult * randFloat(0.85, 1.15)), 0, 52);
   const tr = clamp(Math.round((ppg / 25) * 32 + (rpg / 13) * 16 + (apg / 6) * 14 + (spg / 3.1) * 12 + (bpg / 3.2) * 8 + (fgPct / 58) * 12 + (threePct / 45) * 6), 0, 100);
@@ -4769,6 +4914,12 @@ function ClubOffersScreen({ player, offers, context, onJoin, onStay, onRetire })
       sub: `${context.oldClubName} let you go. These clubs are willing to take you on.` },
     bankrupt: { icon: Newspaper, color: C.red, kicker: "Club Folded", title: "Time to Find a New Home",
       sub: `${context.oldClubName} folded. You're a free agent — pick your next move.` },
+    /* An established pro without a club. Previously every clubless path fell
+       back to "join", so a veteran returning from overseas — or caught by the
+       clubless safety net — was told they were "Turning Pro" and choosing
+       their "First Club" for the fifth time. */
+    free_agent: { icon: Newspaper, color: C.teal, kicker: "Free Agent", title: "Choose Your Next Club",
+      sub: "You're without a club. These sides have a place for you." },
   };
   if (context.studyTrack) {
     headings.join = { icon: Brain, color: "#22D3EE", kicker: "Student-Athlete", title: "Choose a Semi-Pro Home",
@@ -5146,7 +5297,145 @@ function OverseasOffersScreen({ player, offer, onSign, onDecline }) {
 /* ---------------------------------------------------------
    RESULT SCREEN
 --------------------------------------------------------- */
-function ResultScreen({ summary, onContinue }) {
+/* League context on the season recap — Standings / Leaders / Award Race
+   behind tabs. Tabbed rather than stacked so the recap stays short: all
+   three at once pushed the Continue button far below the fold. */
+const LeagueContext = memo(function LeagueContext({ summary }) {
+  const [tab, setTab] = useState("standings");
+  const board = summary.leagueBoard;
+  const standings = summary.leagueStandings;
+  const race = summary.awardRace;
+  const TABS = [
+    ["standings", "Standings", !!standings],
+    ["leaders", "Leaders", !!board],
+    ["race", "Award Race", !!(race && race.length)],
+  ].filter(t => t[2]);
+  if (!TABS.length) return null;
+  const active = TABS.some(t => t[0] === tab) ? tab : TABS[0][0];
+  const ord = (n) => n === 1 ? "1st" : n === 2 ? "2nd" : n === 3 ? "3rd" : `${n}th`;
+
+  return (
+    <div className="mt-4 pt-3" style={{ borderTop: `1px solid ${C.line}` }}>
+      <div className="flex gap-1.5 mb-3">
+        {TABS.map(([id, label]) => (
+          <button key={id} onClick={() => setTab(id)}
+            className="flex-1 f-mono text-[10px] uppercase tracking-wide py-2 rounded-xl"
+            style={active === id
+              ? { background: C.amber, color: C.ink, border: `1px solid ${C.amber}`, fontWeight: 800 }
+              : { background: C.ink3, color: C.chalkDim, border: `1px solid ${C.line}` }}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {active === "standings" && standings && (
+        <>
+          <div className="f-mono text-[9px] uppercase tracking-widest text-center mb-2" style={{ color: C.chalkDim }}>
+            {summary.leagueLabel} · {summary.leagueYear} Regular Season
+          </div>
+          <div className="rounded-2xl px-3" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+            {standings.rows.map((r, i) => (
+              <div key={r.id} className="flex items-center gap-2.5 py-2"
+                style={{
+                  borderBottom: i === standings.rows.length - 1 ? "none" : `1px solid ${C.line}`,
+                  ...(r.me ? { background: "rgba(249,115,22,0.07)", marginLeft: -12, marginRight: -12, paddingLeft: 12, paddingRight: 12, borderLeft: `2px solid ${C.amber}` } : {}),
+                }}>
+                <span className="f-mono text-[11px] w-3 text-right shrink-0" style={{ color: r.me ? C.amberBright : C.chalkDim }}>{i + 1}</span>
+                <ClubCrest name={r.name} size={22} />
+                <span className="f-body text-[11.5px] flex-1 truncate" style={{ color: r.me ? C.amberBright : C.chalk, fontWeight: r.me ? 700 : 400 }}>
+                  {r.name}
+                </span>
+                {i === 0 && (
+                  <span className="f-mono text-[8px] px-1.5 py-0.5 rounded-full shrink-0"
+                    style={{ background: "rgba(250,204,21,0.15)", color: C.trophyGold }}>1st</span>
+                )}
+                {r.me && (
+                  <span className="f-mono text-[8px] px-1.5 py-0.5 rounded-full shrink-0"
+                    style={{ background: "rgba(249,115,22,0.2)", color: C.amberBright }}>YOU</span>
+                )}
+                <span className="f-mono text-[10.5px] shrink-0" style={{ color: C.chalkDim }}>{r.w}-{r.l}</span>
+                <span className="f-mono text-[10.5px] w-9 text-right shrink-0" style={{ color: r.me ? C.amberBright : C.chalk }}>
+                  {r.pct.toFixed(3).slice(1)}
+                </span>
+              </div>
+            ))}
+          </div>
+          {standings.myPlace && (
+            <p className="f-body text-[10px] mt-2" style={{ color: C.chalkDim }}>
+              Top {standings.playoffCut} make the playoffs. You're{" "}
+              <b style={{ color: standings.myPlace <= standings.playoffCut ? C.amberBright : C.red }}>{ord(standings.myPlace)}</b>
+              {standings.myPlace <= standings.playoffCut ? " — in the playoff picture." : " — outside the cut."}
+            </p>
+          )}
+        </>
+      )}
+
+      {active === "leaders" && board && (
+        <>
+          {[["ppg", "Points"], ["rpg", "Rebounds"], ["apg", "Assists"]].map(([key, label]) => {
+            const rows = board.boards[key] || [];
+            const myRank = board.ranks[key];
+            const inTop = rows.slice(0, 3).some(r => r.me);
+            return (
+              <div key={key} className="mb-2.5">
+                <div className="flex items-baseline justify-between mb-1">
+                  <span className="f-mono text-[9.5px] uppercase tracking-wide" style={{ color: C.amberBright }}>{label}</span>
+                  <span className="f-mono text-[9px]" style={{ color: myRank <= 3 ? C.trophyGold : C.chalkDim }}>
+                    You: {ord(myRank)} of {board.fieldSize}
+                  </span>
+                </div>
+                {rows.slice(0, 3).map((r, i) => (
+                  <div key={i} className="flex items-center gap-2 py-[3px]"
+                    style={r.me ? { background: "rgba(249,115,22,0.08)", marginLeft: -6, marginRight: -6, paddingLeft: 6, paddingRight: 6, borderRadius: 6 } : {}}>
+                    <span className="f-mono text-[9px] w-3" style={{ color: r.me ? C.amberBright : C.chalkDim }}>{i + 1}</span>
+                    <span className="f-body text-[10.5px] flex-1 truncate" style={{ color: r.me ? C.amberBright : C.chalk }}>
+                      {r.me ? "You" : r.name}
+                      {r.clubName && <span style={{ color: C.chalkDim }}> · {r.clubName}</span>}
+                    </span>
+                    <span className="f-mono text-[11px]" style={{ color: r.me ? C.amberBright : C.chalk }}>{r.value.toFixed(1)}</span>
+                  </div>
+                ))}
+                {!inTop && (
+                  <div className="flex items-center gap-2 py-[3px] mt-0.5"
+                    style={{ background: "rgba(249,115,22,0.08)", marginLeft: -6, marginRight: -6, paddingLeft: 6, paddingRight: 6, borderRadius: 6 }}>
+                    <span className="f-mono text-[9px] w-3" style={{ color: C.amberBright }}>{myRank}</span>
+                    <span className="f-body text-[10.5px] flex-1" style={{ color: C.amberBright }}>You</span>
+                    <span className="f-mono text-[11px]" style={{ color: C.amberBright }}>{summary.leagueStats[key].toFixed(1)}</span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </>
+      )}
+
+      {active === "race" && race && (
+        <>
+          <div className="f-mono text-[9px] uppercase tracking-widest text-center mb-2" style={{ color: C.chalkDim }}>
+            Most Valuable Player
+          </div>
+          {race.map((c, i) => (
+            <div key={i} className="mb-2.5">
+              <div className="flex items-center gap-2">
+                <span className="f-body text-[11.5px] flex-1 truncate" style={{ color: c.me ? C.amberBright : C.chalk, fontWeight: c.me ? 700 : 400 }}>
+                  {c.me ? "You" : c.name}
+                  {c.clubName && <span className="f-mono text-[9px]" style={{ color: C.chalkDim }}> · {c.clubName}</span>}
+                </span>
+                <span className="f-mono text-[11px]" style={{ color: c.me ? C.amberBright : C.chalkDim }}>{c.odds}%</span>
+              </div>
+              <div className="h-[5px] rounded-full mt-1.5 overflow-hidden" style={{ background: C.ink3 }}>
+                <div className="h-full rounded-full" style={{ width: `${c.odds}%`, background: c.me ? C.amber : C.chalkDim }} />
+              </div>
+              <div className="f-mono text-[9px] mt-1" style={{ color: C.chalkDim }}>{c.cases.join(" · ")}</div>
+            </div>
+          ))}
+        </>
+      )}
+    </div>
+  );
+});
+
+const ResultScreen = memo(function ResultScreen({ summary, onContinue }) {
   return (
     <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
       <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
@@ -5252,48 +5541,8 @@ function ResultScreen({ summary, onContinue }) {
               </div>
             )}
 
-            {/* League context: where this stat line actually ranks. Without
-                this you post 22 PPG with no idea whether that's good. */}
-            {summary.leagueBoard && (
-              <div className="mt-3 pt-3" style={{ borderTop: `1px solid ${C.line}` }}>
-                <div className="f-mono text-[9px] uppercase tracking-widest mb-2" style={{ color: C.chalkDim }}>
-                  League Leaders · {summary.leagueLabel}
-                </div>
-                {[["ppg", "Points"], ["rpg", "Rebounds"], ["apg", "Assists"]].map(([key, label]) => {
-                  const rows = summary.leagueBoard.boards[key] || [];
-                  const myRank = summary.leagueBoard.ranks[key];
-                  const inTop = rows.some(r => r.me);
-                  return (
-                    <div key={key} className="mb-2.5">
-                      <div className="flex items-baseline justify-between mb-1">
-                        <span className="f-mono text-[9.5px] uppercase tracking-wide" style={{ color: C.amberBright }}>{label}</span>
-                        <span className="f-mono text-[9px]" style={{ color: myRank <= 3 ? C.trophyGold : C.chalkDim }}>
-                          You: {myRank}{myRank === 1 ? "st" : myRank === 2 ? "nd" : myRank === 3 ? "rd" : "th"} of {summary.leagueBoard.fieldSize}
-                        </span>
-                      </div>
-                      {rows.slice(0, 3).map((r, i) => (
-                        <div key={i} className="flex items-center gap-2 py-[3px]"
-                          style={r.me ? { background: "rgba(249,115,22,0.08)", marginLeft: -6, marginRight: -6, paddingLeft: 6, paddingRight: 6, borderRadius: 6 } : {}}>
-                          <span className="f-mono text-[9px] w-3" style={{ color: r.me ? C.amberBright : C.chalkDim }}>{i + 1}</span>
-                          <span className="f-body text-[10.5px] flex-1 truncate" style={{ color: r.me ? C.amberBright : C.chalk }}>
-                            {r.me ? "You" : r.name}
-                            {r.clubName && <span style={{ color: C.chalkDim }}> · {r.clubName}</span>}
-                          </span>
-                          <span className="f-mono text-[11px]" style={{ color: r.me ? C.amberBright : C.chalk }}>{r.value.toFixed(1)}</span>
-                        </div>
-                      ))}
-                      {!inTop && (
-                        <div className="flex items-center gap-2 py-[3px] mt-0.5"
-                          style={{ background: "rgba(249,115,22,0.08)", marginLeft: -6, marginRight: -6, paddingLeft: 6, paddingRight: 6, borderRadius: 6 }}>
-                          <span className="f-mono text-[9px] w-3" style={{ color: C.amberBright }}>{myRank}</span>
-                          <span className="f-body text-[10.5px] flex-1" style={{ color: C.amberBright }}>You</span>
-                          <span className="f-mono text-[11px]" style={{ color: C.amberBright }}>{summary.leagueStats[key].toFixed(1)}</span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+            {(summary.leagueBoard || summary.leagueStandings) && (
+              <LeagueContext summary={summary} />
             )}
           </div>
         )}
@@ -5302,7 +5551,7 @@ function ResultScreen({ summary, onContinue }) {
       </div>
     </div>
   );
-}
+})
 
 /* ---------------------------------------------------------
    RETIRED SCREEN
@@ -6351,13 +6600,25 @@ export default function App() {
     [screen]
   );
 
+  /* True once the player has signed at least one professional contract.
+     Used to stop the "Turning Pro / Choose Your First Club" headline
+     reappearing every time a veteran becomes a free agent. */
+  const hasTurnedProBefore = (p) =>
+    !!(p && ((p.clubHistory && p.clubHistory.length > 0) ||
+             (p.achievements && p.achievements.includes("turned_pro"))));
+  const joinOrFreeAgent = (p, extra = {}) =>
+    ({ mode: hasTurnedProBefore(p) ? "free_agent" : "join", ...extra });
+
   const saveTimer = useRef(null);
   const save = (p) => {
-    syncAchievementGallery(p);
     if (saveTimer.current) clearTimeout(saveTimer.current);
     const snapshot = p;
     saveTimer.current = setTimeout(async () => {
       try {
+        // Deferred with the write: this reads + parses + writes localStorage,
+        // which was still blocking the main thread on any season that
+        // unlocked an achievement.
+        syncAchievementGallery(snapshot);
         const json = JSON.stringify(snapshot);
         if (hasArtifactStorage) {
           await window.storage.set("career", json, false);
@@ -7356,12 +7617,13 @@ export default function App() {
     // Same safety net as the season-continue flow: never load into the hub
     // with a clubless pro player stuck with no way to sign.
     if (p && p.stage === "pro" && !p.abroad && !p.clubId) {
-      const offers = generateClubOffers(p, { count: 3, firstProSigning: !p.league });
-      const np = { ...p, achievements: Array.from(new Set([...p.achievements, "turned_pro"])) };
+      const veteran = hasTurnedProBefore(p);
+      const offers = generateClubOffers(p, { count: 3, firstProSigning: !veteran && !p.league });
+      const np = veteran ? p : { ...p, achievements: Array.from(new Set([...p.achievements, "turned_pro"])) };
       setPlayer(np);
       save(np);
       setClubOffers(offers);
-      setClubOfferContext({ mode: "join" });
+      setClubOfferContext(joinOrFreeAgent(np));
       setScreen("club_offers");
       return;
     }
@@ -7594,6 +7856,8 @@ export default function App() {
     let wonChampionship = false;
     let injury = null;
     let leagueBoard = null;
+    let leagueStandings = null;
+    let awardRace = null;
     if (p.stage === "pro" && !p.abroad && p.clubId && p.league) {
       const role = p.starterStatus || "Bench";
       leagueStats = generateLeagueSeasonStats(p.stats, p.position, p.league, role, p.height);
@@ -7607,6 +7871,8 @@ export default function App() {
         p.npcAgedYear = p.year;
       }
       leagueBoard = buildLeagueBoard(p, p.league, leagueStats);
+      leagueStandings = buildStandings(p, p.league, leagueStats, (p.year || 2026) * 31 + p.seasonNum);
+      awardRace = buildAwardRace(p, p.league, leagueStats, leagueBoard);
 
       // Games per season: MBL ~30-40, D-Leagues ~20-25.
       const fullGames = p.league === "mbl" ? randInt(30, 40) : randInt(20, 25);
@@ -7770,14 +8036,15 @@ export default function App() {
       note: sim.note,
       moneyDelta: sim.moneyDelta,
       popularityDelta: sim.popularityDelta,
-      leagueStats, leagueLabel, leagueAwards, leagueBoard,
+      leagueStats, leagueLabel, leagueAwards, leagueBoard, leagueStandings, awardRace,
+      leagueYear: p.year,
       gamesPlayed, wonChampionship, injury,
     });
     setPlayer(p);
     setScreen("result");
   };
 
-  const handleContinueAfterResult = () => {
+  const handleContinueAfterResult = useCallback(() => {
     let p = { ...player, stats: { ...player.stats } };
     p.age += 1;
     p.seasonNum += 1;
@@ -8242,12 +8509,13 @@ export default function App() {
     // it (e.g. an edge case carried over from an older save), catch it here.
     // Players on a UBA scholarship have no club by design, so they're exempt.
     if (p.stage === "pro" && !p.abroad && !p.uba && !p.pendingUbaOffer && !p.clubId) {
-      const offers = generateClubOffers(p, { count: 3, firstProSigning: !p.league });
-      const np = { ...p, achievements: Array.from(new Set([...p.achievements, "turned_pro"])) };
+      const veteran = hasTurnedProBefore(p);
+      const offers = generateClubOffers(p, { count: 3, firstProSigning: !veteran && !p.league });
+      const np = veteran ? p : { ...p, achievements: Array.from(new Set([...p.achievements, "turned_pro"])) };
       setPlayer(np);
       save(np);
       setClubOffers(offers);
-      setClubOfferContext({ mode: "join" });
+      setClubOfferContext(joinOrFreeAgent(np));
       setScreen("club_offers");
       return;
     }
@@ -8268,7 +8536,8 @@ export default function App() {
 
     setBanner(bannerMsg);
     setScreen("hub");
-  };
+  }, [player, pending]);
+
 
   // Any flow that lands back on the hub mid-season must also drain the queue,
   // otherwise a pending contract situation would be silently dropped.
@@ -8379,7 +8648,7 @@ export default function App() {
       setPlayer(p);
       save(p);
       setClubOffers(offers);
-      setClubOfferContext({ mode: "join" });
+      setClubOfferContext(joinOrFreeAgent(p));
       setScreen("club_offers");
       return;
     }
