@@ -2795,8 +2795,14 @@ function talentMult(id) {
    from 22 to 30, so 89% of guards and 99% of centres drifted past the MBL
    threshold just by showing up. Lower base makes prime-years progress feel
    earned and keeps MBL a milestone rather than a formality. The late-career
-   values fall proportionally less, so veterans still have something to spend. */
-const ATTR_BASE_POINTS = [[17, 10], [22, 11], [26, 12], [30, 10], [33, 6], [Infinity, 3]];
+   values fall proportionally less, so veterans still have something to spend.
+   Nudged +2 across the board after real playtesting showed even a
+   reasonably-played career (even-split spending, not min-maxed) only
+   reached 70+ overall about 1 time in 5 — simulated at 20k careers per
+   variant: even-split 70+ rate went 18.7% -> 30.4%, efficient-spend 70+
+   went 33.0% -> 46.1%, while the 80+ ceiling barely moved (1.1% -> 4.8%),
+   so the top tier stays rare rather than becoming trivial. */
+const ATTR_BASE_POINTS = [[17, 12], [22, 13], [26, 14], [30, 12], [33, 8], [Infinity, 5]];
 function attrBasePoints(age) {
   for (const [ceil, v] of ATTR_BASE_POINTS) if (age <= ceil) return v;
   return 4;
@@ -3175,7 +3181,7 @@ function newPlayer({ name, position, hometown, height, jersey }) {
     relationships: { coach: 50, team: 50, family: 60 },
     stage: "youth",
     teamName: `${shortHome(hometown)} Youth Selection`,
-    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null,
+    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false,
     nationalTeam: false, nationalCaps: 0,
     achievements: [],
     peakOverall: overall,
@@ -3199,7 +3205,7 @@ function normalizePlayer(p) {
     mblContributor: false, wonderkid: false, hadMblSeason: false, semiProClub: null,
     contractSalary: 0, contractYearsLeft: 0,
     mssmPendingReveal: false, age18MssmResolved: false, lastSeasonLeagueAwards: [], studying: false, studyDecisionResolved: false, studyGraduated: false,
-    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null,
+    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false,
     nationalTeam: false, nationalCaps: 0, morale: 60, fatigue: 20,
     popularity: 5, money: 0, highlyTalented: false,
     slowDecliner: false, slowStartNextSeason: false,
@@ -5709,13 +5715,39 @@ const LeagueContext = memo(function LeagueContext({ summary }) {
 
 const ResultScreen = memo(function ResultScreen({ summary, onContinue }) {
   const [advancing, setAdvancing] = useState(false);
+  const [advanceError, setAdvanceError] = useState(false);
   /* Paint the pressed state first, THEN run the off-season on the next
      frame. Doing both in the same tick meant the button never visibly
-     responded while the main thread was busy. */
+     responded while the main thread was busy.
+     Bug fix: `advancing` was only ever set true, never reset. If onContinue
+     didn't end in a screen change for ANY reason — an exception on some
+     edge-case save, or the app-level re-entrancy guard in
+     handleContinueAfterResult firing at a bad moment — this button stayed
+     disabled forever with literally nothing left to retry it. A season
+     that fails to advance normally unmounts this screen (screen changes
+     away from "result"), which is what actually resets `advancing` in the
+     success case; the fallback below only fires if that DIDN'T happen. */
   const handleAdvance = () => {
     if (advancing) return;
     setAdvancing(true);
-    requestAnimationFrame(() => setTimeout(onContinue, 0));
+    setAdvanceError(false);
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        try {
+          onContinue();
+        } catch (e) {
+          console.error("Season transition failed:", e);
+          setAdvancing(false);
+          setAdvanceError(true);
+          return;
+        }
+        // Safety net: if this screen is still mounted ~1.5s later, the
+        // transition silently didn't happen (e.g. blocked by a stale
+        // re-entrancy guard) rather than throwing. Re-enable the button
+        // instead of leaving the player stuck with no way to retry.
+        setTimeout(() => setAdvancing(false), 1500);
+      }, 0);
+    });
   };
   return (
     <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
@@ -8111,6 +8143,12 @@ export default function App() {
     if (choice.flag === "nationalTeam") p.nationalTeam = true;
     if (choice.slowStart) p.slowStartNextSeason = true;
     if (choice.achievement) p.achievements = Array.from(new Set([...p.achievements, choice.achievement]));
+    // "Play to impress" (overseas_scout event) guarantees this season's
+    // overseas-offer check bypasses the usual per-season roll. Carried on
+    // the player object since the choice made here is read back later, in a
+    // DIFFERENT click (handleContinueAfterResult) — `choice` itself is out
+    // of scope there.
+    if (choice.guaranteesOverseasOffer) p.pendingGuaranteedOverseasOffer = true;
 
     const sim = simulateSeason(p);
     p.morale = clamp(p.morale + sim.moraleDelta);
@@ -8333,11 +8371,16 @@ export default function App() {
      seemed to need 3-4 presses. The ref guards re-entry so a burst of taps
      can't run it twice, and the button below shows a pressed state
      immediately so the tap always registers visually. */
-  const advancingRef = useRef(false);
+  /* Previously guarded with a 600ms-locked ref (advancingRef) as a second,
+     app-level re-entrancy lock on top of ResultScreen's own `advancing`
+     state. That extra lock was the actual bug: if it was ever left `true`
+     when this ran again (a stray re-entrant call, timer drift), every
+     future call became a silent, total no-op — no state change, no error,
+     nothing left to retry it, since ResultScreen's button was ALSO already
+     disabled. ResultScreen already fully prevents re-entrant calls on its
+     own (button disables synchronously on click), so this second lock was
+     redundant as well as unsafe. Removed rather than re-timed. */
   const handleContinueAfterResult = useCallback(() => {
-    if (advancingRef.current) return;
-    advancingRef.current = true;
-    setTimeout(() => { advancingRef.current = false; }, 600);
     let p = { ...player, stats: { ...player.stats } };
     p.age += 1;
     p.seasonNum += 1;
@@ -8756,16 +8799,22 @@ export default function App() {
     // Gated on raw overall, not the popularity-blended domestic "rating" —
     // otherwise a merely-decent player with high local fame could wrongly
     // qualify for offers meant for genuinely elite basketball ability.
-    // choice.guaranteesOverseasOffer (e.g. "Scouts Are Watching" → Play to
-    // impress) bypasses the usual per-season roll and guarantees an offer
-    // outright, as long as the player already qualifies for some tier.
+    // p.pendingGuaranteedOverseasOffer (set by the "Scouts Are Watching" ->
+    // Play to impress choice, back in handleChooseEvent) bypasses the usual
+    // per-season roll and guarantees an offer outright, as long as the
+    // player already qualifies for some tier. Read from the player object
+    // rather than a local `choice` — the choice that set this flag was made
+    // on a different click, in a different function's scope.
     if (p.stage === "pro" && !p.abroad && p.clubId) {
       const overallD = computeOverall(p.stats, p.position);
       // An elite agent gets a borderline player in front of the right people,
       // effectively lowering the rating at which overseas clubs will look.
       const scoutedAs = overallD + (hasInvestment(p, "agent") ? AGENT_RATING_BOOST : 0);
       const qualifyingTier = highestOverseasTier(scoutedAs);
-      const guaranteed = !!choice.guaranteesOverseasOffer && !!qualifyingTier;
+      const guaranteed = !!p.pendingGuaranteedOverseasOffer && !!qualifyingTier;
+      // One-shot: this season's guarantee shouldn't silently keep applying
+      // to every future season's check too.
+      if (p.pendingGuaranteedOverseasOffer) p.pendingGuaranteedOverseasOffer = false;
       /* Elite agent buys ACCESS. Note a per-season roll bonus is worthless
          here: the roll repeats every eligible season, so 75% compounds to
          ~100% anyway (measured 99.5% vs 99.8% — no effect). The agent's real
