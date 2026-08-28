@@ -1832,6 +1832,96 @@ const LEAGUE_TIER_ANCHOR = { mbl: 60, u20: 55, u23: 55, asia: 72, europe: 79, nb
    NPCs persist on the save and age with the player, so chasing the
    same scorer across several seasons is a real arc.
 ============================================================ */
+const NPC_ROSTER = [
+  { name: "Ting Chun Hong", pos: "SG", tags: ["MVP","TOP_SCORER"], startAge: 28, ovr: 90, league: "mbl" },
+  { name: "Wong Yi Hou", pos: "SF", tags: ["MVP","TOP_SCORER"], startAge: 29, ovr: 85, league: "mbl" },
+  { name: "Anthony Liew", pos: "C", tags: ["TOP_REBOUNDER","DPOY"], startAge: 29, ovr: 82, league: "mbl" },
+  { name: "John Wong", pos: "SG", tags: ["MVP","TOP_SCORER"], startAge: 30, ovr: 85, league: "mbl" },
+  { name: "Ong Wei Yong", pos: "PG", tags: ["TOP_ASSIST"], startAge: 31, ovr: 80, league: "mbl" },
+  { name: "Heng Yee Tong", pos: "PG", tags: ["TOP_ASSIST"], startAge: 31, ovr: 80, league: "mbl" },
+  { name: "Jayson Lee", pos: "SF", tags: ["TOP_SCORER"], startAge: 32, ovr: 80, league: "mbl" },
+  { name: "Ooi Xian Fu", pos: "SG", tags: ["MVP","TOP_SCORER"], startAge: 32, ovr: 85, league: "mbl" },
+  { name: "Nicholas Tem", pos: "SF", tags: ["TOP_SCORER"], startAge: 33, ovr: 80, league: "mbl" },
+  { name: "Wee Yong Gan", pos: "SG", tags: ["TOP_SCORER"], startAge: 34, ovr: 80, league: "mbl" },
+  { name: "Matthew Chin", pos: "PF", tags: ["TOP_REBOUNDER"], startAge: 34, ovr: 80, league: "mbl" },
+  { name: "MAEGEN", pos: "C", tags: ["TOP_REBOUNDER"], startAge: 35, ovr: 80, league: "mbl" },
+  { name: "Lim Chee Wei", pos: "PG", tags: ["TOP_ASSIST","MVP"], startAge: 22, ovr: 73, league: "mbl" },
+  { name: "Hiew Jia Hao", pos: "SF", tags: ["TOP_SCORER","MVP"], startAge: 22, ovr: 73, league: "mbl" },
+  { name: "Lee Jing Hung", pos: "PF", tags: ["TOP_REBOUNDER"], startAge: 22, ovr: 68, league: "mbl" },
+  { name: "Tan Chi Sheng", pos: "PG", tags: ["TOP_ASSIST"], startAge: 23, ovr: 68, league: "mbl" },
+  { name: "Brian Tang", pos: "SG", tags: [], startAge: 23, ovr: 68, league: "mbl" },
+  { name: "John Tang", pos: "SG", tags: ["TOP_SCORER"], startAge: 23, ovr: 68, league: "mbl" },
+  { name: "Te Yi Hang", pos: "SF", tags: [], startAge: 23, ovr: 68, league: "mbl" },
+  { name: "Cheah Zi Hong", pos: "PG", tags: ["TOP_ASSIST","TOP_SCORER"], startAge: 24, ovr: 70, league: "mbl" },
+  { name: "Chua Xin Zhi", pos: "C", tags: ["TOP_REBOUNDER","DPOY"], startAge: 24, ovr: 70, league: "mbl" },
+  { name: "Lim Wan Seong", pos: "PF", tags: ["TOP_REBOUNDER"], startAge: 24, ovr: 68, league: "mbl" },
+  { name: "Keshmendip", pos: "SF", tags: ["TOP_SCORER"], startAge: 24, ovr: 68, league: "mbl" },
+  { name: "Lai Kok Weng", pos: "SG", tags: ["TOP_SCORER"], startAge: 24, ovr: 68, league: "mbl" },
+  { name: "Edward Siau", pos: "PG", tags: ["TOP_SCORER","TOP_ASSIST"], startAge: 25, ovr: 70, league: "mbl" },
+  { name: "Phan Zheng Hao", pos: "C", tags: ["DPOY"], startAge: 25, ovr: 68, league: "mbl" },
+  { name: "Chong Zhen Yang", pos: "SF", tags: ["TOP_SCORER","MVP"], startAge: 25, ovr: 75, league: "mbl" },
+  { name: "Khoo Wei Lin", pos: "PG", tags: ["TOP_SCORER","TOP_ASSIST","MVP"], startAge: 18, ovr: 70, league: "mbl" },
+  { name: "Chua Yen Joon", pos: "SF", tags: [], startAge: 18, ovr: 58, league: "mbl" },
+  { name: "Siau Gen Liang", pos: "PF", tags: ["TOP_REBOUNDER"], startAge: 18, ovr: 58, league: "mbl" },
+  { name: "Yap Jin Xi", pos: "C", tags: ["TOP_REBOUNDER","DPOY","MVP"], startAge: 19, ovr: 65, league: "mbl" },
+  { name: "Lee Yong Ding", pos: "SG", tags: ["TOP_SCORER"], startAge: 19, ovr: 58, league: "mbl" },
+  { name: "Matthew Lim", pos: "PG", tags: ["TOP_ASSIST"], startAge: 19, ovr: 58, league: "mbl" },
+  { name: "Oscar Tan", pos: "SF", tags: ["TOP_SCORER"], startAge: 19, ovr: 58, league: "mbl" },
+  { name: "Ang Chuen Heng", pos: "SG", tags: ["TOP_SCORER"], startAge: 19, ovr: 58, league: "mbl" },
+  { name: "Yin Wei Sheng", pos: "PF", tags: ["TOP_REBOUNDER","DPOY"], startAge: 20, ovr: 60, league: "mbl" },
+  { name: "Aw Xun Yi", pos: "PG", tags: ["MVP"], startAge: 20, ovr: 61, league: "mbl" },
+  { name: "Brandon Kho", pos: "C", tags: ["DPOY"], startAge: 20, ovr: 58, league: "mbl" },
+  { name: "Ing Zhin Yuen", pos: "C", tags: [], startAge: 20, ovr: 58, league: "mbl" },
+  { name: "Ng Zhi Yi", pos: "PF", tags: [], startAge: 20, ovr: 58, league: "mbl" },
+  { name: "James Siau", pos: "SF", tags: ["TOP_SCORER"], startAge: 21, ovr: 58, league: "mbl" },
+  { name: "Ng Man Bing", pos: "PG", tags: ["TOP_ASSIST"], startAge: 21, ovr: 58, league: "mbl" },
+  { name: "Ng Man Biu", pos: "PG", tags: ["TOP_ASSIST"], startAge: 21, ovr: 58, league: "mbl" },
+  { name: "Tan Yu Xiang", pos: "PF", tags: ["TOP_REBOUNDER","DPOY","MVP"], startAge: 20, ovr: 57, league: "u23" },
+  { name: "Bennedict Ong", pos: "SG", tags: ["TOP_SCORER","MVP"], startAge: 20, ovr: 55, league: "u23" },
+  { name: "Teng Kai Sheng", pos: "PG", tags: ["TOP_SCORER","TOP_ASSIST","MVP"], startAge: 21, ovr: 57, league: "u23" },
+  { name: "Jeremie Tan", pos: "C", tags: ["TOP_SCORER","DPOY"], startAge: 15, ovr: 42, league: "u20" },
+  { name: "San Chu Huay", pos: "PG", tags: ["TOP_ASSIST"], startAge: 15, ovr: 40, league: "u20" },
+  { name: "Sham Wei Kun", pos: "SG", tags: [], startAge: 15, ovr: 40, league: "u20" },
+  { name: "Lucas Tai", pos: "SF", tags: ["TOP_SCORER"], startAge: 16, ovr: 40, league: "u20" },
+  { name: "Lim Kuan Yit", pos: "PG", tags: ["TOP_ASSIST"], startAge: 16, ovr: 40, league: "u20" },
+];
+/* Tag -> attribute boost. Applied zero-sum around the player's target
+   overall (same bias-subtraction technique used in bodyModifiers): every
+   named player's WEIGHTED overall stays anchored near their authored
+   rating, while the tagged stat(s) rise and the rest fall to compensate.
+   This is what makes a "TOP_SCORER" reliably shooting-heavy without
+   inflating their overall beyond what was authored. */
+const NPC_TAG_BOOST = {
+  TOP_SCORER: { shooting: 14, athleticism: 6 },
+  TOP_ASSIST: { playmaking: 16, iq: 6 },
+  TOP_REBOUNDER: { rebounding: 16, athleticism: 6 },
+  DPOY: { defense: 16, iq: 6 },
+};
+function namedNpcStats(pos, ovr, tags) {
+  const w = posWeights(pos);
+  const raw = {}; STAT_LIST.forEach(k => { raw[k] = 0; });
+  const touched = new Set();
+  (tags || []).forEach(tag => {
+    const b = NPC_TAG_BOOST[tag];
+    if (b) Object.keys(b).forEach(k => { raw[k] += b[k]; touched.add(k); });
+  });
+  if ((tags || []).includes("MVP")) {
+    /* No single stat means "best player" — boost whichever attributes
+       matter most for this position. MUST skip anything another tag
+       already boosted: an MVP+TOP_SCORER wing was double-stacking shooting
+       (+14 from the tag, +6 more from MVP picking it again as a top-weighted
+       stat), pushing a single attribute to 99 and the league-leader PPG to
+       37 against a calibrated ~28 ceiling. */
+    const untouched = STAT_LIST.filter(k => !touched.has(k)).sort((a, b2) => w[b2] - w[a]);
+    untouched.slice(0, 2).forEach(k => { raw[k] += 6; });
+  }
+  let bias = 0;
+  STAT_LIST.forEach(k => { bias += raw[k] * (w[k] || 0); });
+  const out = {};
+  STAT_LIST.forEach(k => { out[k] = clamp(Math.round(ovr + raw[k] - bias), 1, 99); });
+  return out;
+}
+
 const NPC_LEAGUE_CFG = {
   mbl: { size: 40, floor: 65, curve: 4.5, span: 17 },
   u23: { size: 36, floor: 52, curve: 3.8, span: 20 },
@@ -1932,6 +2022,94 @@ function npcResolve(n, leagueId) {
   };
 }
 
+/* Fast name -> roster-entry lookup. */
+const NPC_ROSTER_BY_NAME = {};
+NPC_ROSTER.forEach(r => { NPC_ROSTER_BY_NAME[r.name] = r; });
+
+/* Simple deterministic string hash, used to give named players a fixed
+   club/height rather than storing those on the save. */
+function _strHash(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
+  return h;
+}
+function namedNpcClub(name, leagueId) {
+  const pool = leagueId === "mbl" ? PRO_CLUBS : SEMI_PRO_CLUBS;
+  return pool[_strHash(name) % pool.length].name;
+}
+const NPC_ARCHETYPE_HEIGHT = { PG: 183, SG: 190, SF: 196, PF: 202, C: 208 };
+
+/* Which league a named player is CURRENTLY in — from persisted state if the
+   season has run at least once, otherwise their roster starting point. */
+function namedNpcCurrentLeague(p, entry) {
+  const st = p.namedNpcs && p.namedNpcs[entry.name];
+  return st ? st.league : entry.league;
+}
+function namedNpcRetired(p, entry) {
+  const st = p.namedNpcs && p.namedNpcs[entry.name];
+  return st ? !!st.retired : false;
+}
+/* How many authored roster players currently occupy a given league — used
+   to size the procedural filler pool so the two systems don't overlap. */
+function activeNamedCountForLeague(p, leagueId) {
+  return NPC_ROSTER.filter(r => !namedNpcRetired(p, r) && namedNpcCurrentLeague(p, r) === leagueId).length;
+}
+
+/* Initialise (once) the persisted state for all 51 authored players: age,
+   rating, current league, and a randomly rolled retirement age (same 33-38
+   band the procedural system already uses). Idempotent — safe to call every
+   season. Only ~150 bytes on the save (three numbers x 51), since name/pos/
+   tags live in the hardcoded roster, never persisted. */
+function ensureNamedNpcState(p) {
+  if (p.namedNpcs) return p;
+  const state = {};
+  NPC_ROSTER.forEach(r => {
+    state[r.name] = { age: r.startAge, ovr: r.ovr, league: r.league, retireAge: randInt(33, 38), retired: false };
+  });
+  return { ...p, namedNpcs: state };
+}
+
+/* Advance every authored player one season: ageing, growth/decline (reusing
+   the SAME age-banded curve the procedural system uses, so a Veteran and a
+   random D-Leaguer age the same way), U20->U23->MBL promotion, and
+   retirement. Called unconditionally once per season regardless of what
+   league the PLAYER is in — Next Gen players need to progress through their
+   own ladder even while you're off at U15 trials or playing overseas. */
+function advanceNamedNpcs(p) {
+  p = ensureNamedNpcState(p);
+  const state = {};
+  Object.keys(p.namedNpcs).forEach(name => {
+    const n = { ...p.namedNpcs[name] };
+    if (!n.retired) {
+      n.age += 1;
+      if (n.age > n.retireAge) {
+        n.retired = true;
+      } else {
+        const delta = n.age < 25 ? randInt(0, 2) : n.age < 29 ? randInt(0, 1) : -randInt(0, 2);
+        n.ovr = clamp(n.ovr + delta, 1, 99);
+        if (n.league === "u20" && n.age > 20) n.league = "u23";
+        if ((n.league === "u20" || n.league === "u23") && n.ovr >= MBL_RATING_THRESHOLD) n.league = "mbl";
+      }
+    }
+    state[name] = n;
+  });
+  return { ...p, namedNpcs: state };
+}
+
+/* Resolve one authored roster entry into a full display/stat-generation
+   record for the league they're CURRENTLY in. */
+function resolveNamedNpc(p, entry, leagueId) {
+  const st = p.namedNpcs && p.namedNpcs[entry.name];
+  const age = st ? st.age : entry.startAge;
+  const ovr = st ? st.ovr : entry.ovr;
+  return {
+    name: entry.name, pos: entry.pos, age,
+    clubName: namedNpcClub(entry.name, leagueId),
+    height: NPC_ARCHETYPE_HEIGHT[entry.pos] || 190,
+    stats: namedNpcStats(entry.pos, ovr, entry.tags),
+  };
+}
+
 function makeNpc(leagueId, usedNames) {
   const cfg = NPC_LEAGUE_CFG[leagueId] || NPC_LEAGUE_CFG.mbl;
   const pos = POSITIONS[randInt(0, POSITIONS.length - 1)].id;
@@ -1961,9 +2139,16 @@ function ensureNpcPool(p, leagueId) {
   const pools = {};
   if (p.npcPools && p.npcPools[leagueId]) pools[leagueId] = p.npcPools[leagueId];
   const cfg = NPC_LEAGUE_CFG[leagueId];
+  // Only generate as many procedural fillers as authored roster players
+  // DON'T already cover for this league, so the two systems never overlap.
+  // MBL alone has 43 authored players against a 40 target, so it typically
+  // needs zero filler; U20/U23 lean almost entirely on procedural fill.
+  const target = Math.max(0, cfg.size - activeNamedCountForLeague(p, leagueId));
   let list = pools[leagueId] ? [...pools[leagueId]] : [];
-  const used = new Set(list.map(n => n.name));
-  while (list.length < cfg.size) list.push(makeNpc(leagueId, used));
+  const usedNames = new Set(list.map(n => n.name));
+  NPC_ROSTER.forEach(r => usedNames.add(r.name)); // never collide with an authored name
+  while (list.length < target) list.push(makeNpc(leagueId, usedNames));
+  if (list.length > target) list = list.slice(0, target);
   pools[leagueId] = list;
   return { ...p, npcPools: pools };
 }
@@ -1993,9 +2178,15 @@ function ageNpcPool(p, leagueId) {
    own club nudged by how well they personally played — a star lifts their
    side, a bench player doesn't. Deterministic per season so revisiting the
    screen shows the same table. */
-function buildStandings(p, leagueId, myLine, seasonSeed) {
+function buildStandings(p, leagueId, myLine, seasonSeed, wonTitle, totalGames) {
   const clubs = leagueId === "mbl" ? PRO_CLUBS : SEMI_PRO_CLUBS;
-  const games = leagueId === "mbl" ? 24 : 20;
+  /* Must match the SAME season length the player's own games-played count
+     uses (fullGames, rolled 30-40 for MBL / 20-25 for D-League) — a hardcoded
+     24/20 here meant the standings table showed every club at a fixed game
+     count while the player's own recap said "29 games" from a season that
+     was actually 40 games long. Falls back to the old constants only if no
+     game count was supplied (keeps this callable from older code paths). */
+  const games = totalGames || (leagueId === "mbl" ? 24 : 20);
   const rnd = npcRand(seasonSeed >>> 0);
   const myClub = getClub(p.clubId);
   const rows = clubs.map(c => {
@@ -2013,6 +2204,24 @@ function buildStandings(p, leagueId, myLine, seasonSeed) {
       me: !!(myClub && c.id === myClub.id),
     };
   }).sort((a, b) => b.pct - a.pct || b.w - a.w);
+  /* If the player actually won the title, their club must finish top of the
+     table — otherwise the recap showed "Champions" next to a 4th-place
+     10-14 record, which is nonsense. Swap them with the leader and give
+     them a record that justifies it. */
+  if (wonTitle) {
+    const mi = rows.findIndex(r => r.me);
+    if (mi > 0) {
+      const top = rows[0];
+      const mine = rows[mi];
+      const w = Math.max(mine.w, top.w + 1, Math.round(games * 0.62));
+      mine.w = Math.min(games, w);
+      mine.l = games - mine.w;
+      mine.pct = mine.w / games;
+      rows.splice(mi, 1);
+      rows.unshift(mine);
+      rows.sort((a, b) => (a.me ? -1 : b.me ? 1 : 0) || b.pct - a.pct);
+    }
+  }
   const playoffCut = Math.min(4, Math.max(2, Math.floor(rows.length / 2)));
   const myIndex = rows.findIndex(r => r.me);
   return { rows, playoffCut, myPlace: myIndex >= 0 ? myIndex + 1 : null };
@@ -2058,21 +2267,34 @@ function buildAwardRace(p, leagueId, myLine, board) {
 }
 
 const NPC_LEADER_KEYS = ["ppg", "rpg", "apg", "spg", "bpg"];
+function roleForRating(ovr, cfg) {
+  const rel = (ovr - cfg.floor) / cfg.span;
+  return rel > 0.75 ? "Starter"
+    : rel > 0.4 ? (Math.random() < 0.75 ? "Starter" : "Rotation")
+    : rel > 0.18 ? (Math.random() < 0.45 ? "Starter" : "Rotation") : "Rotation";
+}
 function buildLeagueBoard(p, leagueId, myLine) {
+  const cfg = NPC_LEAGUE_CFG[leagueId];
+  // Authored roster players currently active in this league.
+  const namedRows = NPC_ROSTER
+    .filter(r => !namedNpcRetired(p, r) && namedNpcCurrentLeague(p, r) === leagueId)
+    .map(entry => {
+      const n = resolveNamedNpc(p, entry, leagueId);
+      const ovr = computeOverall(n.stats, n.pos);
+      const role = roleForRating(ovr, cfg);
+      return { name: n.name, clubName: n.clubName, pos: n.pos,
+        ...generateLeagueSeasonStats(n.stats, n.pos, leagueId, role, n.height) };
+    });
+  // Procedural filler for whatever's left of the target size.
   const list = (p.npcPools && p.npcPools[leagueId]) || [];
-  const rows = list.map(raw => {
+  const proceduralRows = list.map(raw => {
     const n = npcResolve(raw, leagueId);
     const ovr = computeOverall(n.stats, n.pos);
-    const cfg = NPC_LEAGUE_CFG[leagueId];
-    const rel = (ovr - cfg.floor) / cfg.span;
-    const role = rel > 0.75 ? "Starter"
-      : rel > 0.4 ? (Math.random() < 0.75 ? "Starter" : "Rotation")
-      : rel > 0.18 ? (Math.random() < 0.45 ? "Starter" : "Rotation") : "Rotation";
-    return {
-      name: n.name, clubName: n.clubName, pos: n.pos,
-      ...generateLeagueSeasonStats(n.stats, n.pos, leagueId, role, n.height),
-    };
+    const role = roleForRating(ovr, cfg);
+    return { name: n.name, clubName: n.clubName, pos: n.pos,
+      ...generateLeagueSeasonStats(n.stats, n.pos, leagueId, role, n.height) };
   });
+  const rows = [...namedRows, ...proceduralRows];
   const mine = myLine ? { name: "__ME__", clubName: null, pos: p.position, me: true, ...myLine } : null;
   const all = mine ? [...rows, mine] : rows;
   const boards = {}, ranks = {};
@@ -2186,7 +2408,51 @@ const LEAGUE_AWARD_META = {
   roty:         { label: "Rookie of the Year", short: "ROTY" },          // MBL, first MBL season only
 };
 
-function rollLeagueAwards(st, { leagueId, role, isFirstMblSeason }) {
+/* Season awards.
+
+   Stat-leader awards (Top Scorer, Top Rebounder, etc.) are now DECIDED BY
+   THE LEADERBOARD, not rolled independently. Previously this function only
+   saw the player's own line, so a 23.4 PPG season had a ~28% shot at Top
+   Scorer even while sitting 7th of 41 — the recap awarded a title the
+   standings flatly contradicted. If you did not lead the category, you
+   cannot win it.
+
+   Voted awards (MVP, DPOY, Team of the Tournament) stay probabilistic —
+   they aren't decided by a single number — but are now GATED on actually
+   being near the top of something, so they can't appear out of nowhere. */
+function rollLeagueAwards(st, { leagueId, role, isFirstMblSeason, board }) {
+  // Ranks are 1-based within the league field (NPC pool + the player).
+  const rank = (k) => (board && board.ranks && board.ranks[k]) || null;
+  const leads = (k) => rank(k) === 1;
+  const topN = (k, n) => { const r = rank(k); return r != null && r <= n; };
+  if (board && board.ranks) {
+    const awards = [];
+    if (leads("ppg")) awards.push("top_scorer");
+    if (leads("rpg")) awards.push("top_rebounder");
+    if (leads("apg")) awards.push("top_assists");
+    if (leads("spg")) awards.push("top_steals");
+    if (leads("bpg")) awards.push("top_blocks");
+    const chanceB = (val, lo, hi, max) => clamp((val - lo) / (hi - lo), 0, 1) * max;
+    /* DPOY: "top 3 in steals OR blocks" was far too loose — a point guard
+       leads steals almost by default and was winning it ~55% of seasons.
+       Require leading a defensive category outright, or being top-3 in
+       BOTH, and lower the vote chance. */
+    const defElite = leads("spg") || leads("bpg") || (topN("spg", 3) && topN("bpg", 3));
+    if (defElite && Math.random() < chanceB(st.tr, 66, 100, 0.34)) awards.push("dpoy");
+    // Team of the season: top-5 in any major category.
+    if ((topN("ppg", 5) || topN("rpg", 5) || topN("apg", 5)) && Math.random() < chanceB(st.tr, 62, 100, 0.55)) awards.push("tot");
+    // MVP: top-3 in something major, then the vote.
+    if ((topN("ppg", 3) || topN("rpg", 3) || topN("apg", 3)) && Math.random() < chanceB(st.tr, 70, 100, 0.45)) awards.push("mvp");
+    const mblB = leagueId === "mbl";
+    if (mblB && role === "Rotation" && Math.random() < chanceB(st.tr, 66, 96, 0.20)) awards.push("sixth_man");
+    if (mblB && isFirstMblSeason && Math.random() < chanceB(st.tr, 60, 92, 0.34)) awards.push("roty");
+    return awards;
+  }
+  // Fallback for contexts with no league field (kept for safety).
+  return rollLeagueAwardsLegacy(st, { leagueId, role, isFirstMblSeason });
+}
+
+function rollLeagueAwardsLegacy(st, { leagueId, role, isFirstMblSeason }) {
   const chance = (val, lo, hi, max) => clamp((val - lo) / (hi - lo), 0, 1) * max;
   const mbl = leagueId === "mbl";
   // Minimum stat average required to even be in the running for a stat-leader
@@ -2848,9 +3114,15 @@ function rollClubEvent(p) {
   releaseChance = clamp(releaseChance, 0, 0.6);
   if (Math.random() < releaseChance) return { type: "released" };
 
-  // Transfer-window opportunity: a chance each season to weigh other offers.
-  let offerChance = 0.28;
-  if (rating > club.prestige + 10) offerChance += 0.2; // outgrowing the club draws suitors
+  /* Transfer-window opportunity. This used to fire ~8 of 15 seasons for a
+     good player: outgrowing your club pushed the chance to 0.48 and a strong
+     player at a mid-table side trips that EVERY year, so the offers screen
+     kept yanking them out of contracts that had years left. That reads as
+     "my club keeps getting rid of me". Now it's rare while a deal is
+     running, and only common once the contract is nearly up. */
+  const yearsLeft = typeof p.contractYearsLeft === "number" ? p.contractYearsLeft : 0;
+  let offerChance = yearsLeft >= 2 ? 0.06 : 0.28;
+  if (rating > club.prestige + 10) offerChance += yearsLeft >= 2 ? 0.05 : 0.2;
   if (p.relationships.coach < 40 || p.morale < 40) offerChance += 0.12; // unhappy players look around
   offerChance = clamp(offerChance, 0, 0.75);
   if (Math.random() < offerChance) return { type: "offers" };
@@ -5436,6 +5708,15 @@ const LeagueContext = memo(function LeagueContext({ summary }) {
 });
 
 const ResultScreen = memo(function ResultScreen({ summary, onContinue }) {
+  const [advancing, setAdvancing] = useState(false);
+  /* Paint the pressed state first, THEN run the off-season on the next
+     frame. Doing both in the same tick meant the button never visibly
+     responded while the main thread was busy. */
+  const handleAdvance = () => {
+    if (advancing) return;
+    setAdvancing(true);
+    requestAnimationFrame(() => setTimeout(onContinue, 0));
+  };
   return (
     <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
       <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
@@ -5547,7 +5828,7 @@ const ResultScreen = memo(function ResultScreen({ summary, onContinue }) {
           </div>
         )}
 
-        <PrimaryButton full onClick={onContinue}>Continue <ChevronRight size={14} className="inline ml-1" /></PrimaryButton>
+        <PrimaryButton full disabled={advancing} onClick={handleAdvance}>{advancing ? "Advancing…" : (<>Continue <ChevronRight size={14} className="inline ml-1" /></>)}</PrimaryButton>
       </div>
     </div>
   );
@@ -7871,7 +8152,6 @@ export default function App() {
         p.npcAgedYear = p.year;
       }
       leagueBoard = buildLeagueBoard(p, p.league, leagueStats);
-      leagueStandings = buildStandings(p, p.league, leagueStats, (p.year || 2026) * 31 + p.seasonNum);
       awardRace = buildAwardRace(p, p.league, leagueStats, leagueBoard);
 
       // Games per season: MBL ~30-40, D-Leagues ~20-25.
@@ -7919,12 +8199,15 @@ export default function App() {
         p.morale = clamp(p.morale + 10);
         p.achievements = Array.from(new Set([...p.achievements, p.league === "mbl" ? "mbl_champion" : "dleague_champion"]));
       }
+      // Built AFTER the title roll — it needs to know whether you won, or the
+      // table can show you 4th while the recap calls you champions.
+      leagueStandings = buildStandings(p, p.league, leagueStats, (p.year || 2026) * 31 + p.seasonNum, wonChampionship, fullGames);
 
       // Track whether this is the player's first-ever MBL season (for Rookie of the Year).
       const isFirstMblSeason = p.league === "mbl" && !p.hadMblSeason;
       if (p.league === "mbl") p.hadMblSeason = true;
 
-      leagueAwards = rollLeagueAwards(leagueStats, { leagueId: p.league, role, isFirstMblSeason });
+      leagueAwards = rollLeagueAwards(leagueStats, { leagueId: p.league, role, isFirstMblSeason, board: leagueBoard });
 
       // Badges from notable seasons.
       if ((p.league === "u20" || p.league === "u23") && leagueStats.tr >= 78) {
@@ -8044,12 +8327,27 @@ export default function App() {
     setScreen("result");
   };
 
+  /* The off-season resolution is ~490 lines and runs synchronously: ageing,
+     decline, contract events, national team, overseas, retirement. On a
+     phone that can block long enough to swallow taps, which is why Continue
+     seemed to need 3-4 presses. The ref guards re-entry so a burst of taps
+     can't run it twice, and the button below shows a pressed state
+     immediately so the tap always registers visually. */
+  const advancingRef = useRef(false);
   const handleContinueAfterResult = useCallback(() => {
+    if (advancingRef.current) return;
+    advancingRef.current = true;
+    setTimeout(() => { advancingRef.current = false; }, 600);
     let p = { ...player, stats: { ...player.stats } };
     p.age += 1;
     p.seasonNum += 1;
     p.year = (p.year || (2011 + player.age)) + 1;
     p.fatigue = clamp(p.fatigue - 10);
+    // Every authored rival advances one season here, unconditionally — this
+    // is the ONE point every season passes through regardless of the
+    // player's own league, age or overseas status, which is what lets Next
+    // Gen NPCs climb their own ladder even while you're off at U15 trials.
+    p = advanceNamedNpcs(p);
 
     // Natural maturation: every attribute develops each off-season — held
     // back before 23 on purpose, so most players are genuinely still
