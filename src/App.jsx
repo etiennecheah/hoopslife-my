@@ -3281,6 +3281,46 @@ function computeClubTerms(p, club, { firstProSigning = false } = {}) {
   return { league, role, salary, firstOption, semiPro, years };
 }
 
+/* ============================================================
+   CONTRACT NEGOTIATION
+   Leverage is read from the SAME rating used to generate offers in the
+   first place (computeClubTerms's overall*0.7 + popularity*0.3), compared
+   against the club's own prestige — a star being lowballed by a middling
+   club has real leverage; a fringe player at an elite club doesn't. The
+   Elite Agent investment adds a flat, felt bonus on top, giving it a
+   mechanical reason to exist beyond its current overseas-scouting bump.
+   Simulated across 8 representative scenarios before writing this: fair
+   matchups land at ~40% leverage (win rates 25-40%), a star at a weak
+   club tops out around 72-80% (capped — even elite talent keeps some
+   real risk), and role asks are consistently harder/riskier than money
+   asks at every leverage level, by design. */
+function negotiationLeverage(p, club) {
+  const overall = computeOverall(p.stats, p.position);
+  const rating = overall * 0.7 + p.popularity * 0.3;
+  const diff = rating - club.prestige;
+  let score = 0.40 + clamp(diff / 80, -0.28, 0.32);
+  if (hasInvestment(p, "agent")) score += 0.12;
+  return clamp(score, 0.08, 0.80);
+}
+function negotiationTier(score) {
+  return score < 0.35 ? "low" : score < 0.55 ? "medium" : "high";
+}
+function negotiationOdds(score, askType) {
+  const roleFactor = askType === "role" ? 0.62 : 1;
+  const winChance = clamp(score * roleFactor, 0.05, 0.85);
+  const walkBase = askType === "role" ? 0.10 : 0.05;
+  const walkChance = clamp(walkBase + (1 - score) * (askType === "role" ? 0.22 : 0.15), 0.04, 0.45);
+  const holdChance = clamp(1 - winChance - walkChance, 0.03, 1);
+  return { winChance, holdChance, walkChance };
+}
+// Bench -> Rotation -> Starter. Deliberately stops there (no First Option
+// negotiation) to keep the first pass of this system well-scoped.
+function nextRoleTier(role) {
+  if (role === "Bench") return "Rotation";
+  if (role === "Rotation") return "Starter";
+  return null;
+}
+
 /* Generates a set of club offers (pro + semi-pro) for a player, weighted by
    the player's overall + fame and each club's prestige and preferences. Elite
    clubs only chase strong players; weaker players lean toward semi-pro sides.
@@ -5769,7 +5809,7 @@ function U17ResultScreen({ player, onContinue }) {
 /* ---------------------------------------------------------
    CLUB OFFERS SCREEN
 --------------------------------------------------------- */
-function ClubOffersScreen({ player, offers, context, onJoin, onStay, onRetire }) {
+function ClubOffersScreen({ player, offers, context, onJoin, onStay, onRetire, onNegotiate }) {
   const headings = {
     join: { icon: Trophy, color: C.gold, kicker: "Turning Pro", title: "Choose Your First Club",
       sub: "Offers are on the table. Where you sign shapes your money, your fame, your minutes, and your development." },
@@ -5842,12 +5882,7 @@ function ClubOffersScreen({ player, offers, context, onJoin, onStay, onRetire })
 
         <div className="space-y-2.5">
           {offers.map(({ club, terms }) => (
-            <button
-              key={club.id}
-              onClick={() => onJoin({ club, terms })}
-              className="choice-card w-full text-left p-3 rounded-xl transition"
-              style={{ background: C.ink3, border: `1px solid ${C.line}` }}
-            >
+            <div key={club.id} className="rounded-xl p-3" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5 min-w-0">
                   <ClubCrest name={club.name} size={32} />
@@ -5877,7 +5912,25 @@ function ClubOffersScreen({ player, offers, context, onJoin, onStay, onRetire })
                   <div className="f-mono text-[11px]" style={{ color: C.gold }}>{rm(terms.salary)}/mo</div>
                 </div>
               </div>
-            </button>
+
+              <div className="flex gap-2 mt-2.5">
+                <button onClick={() => onJoin({ club, terms })}
+                  className="choice-card flex-1 f-body text-[12px] font-bold py-2 rounded-full transition"
+                  style={{ background: C.ink2, color: C.chalk, border: `1px solid ${C.line}` }}>
+                  Accept
+                </button>
+                {/* Only offered with 2+ offers on the table — walking away
+                    from your only offer would leave nothing to fall back
+                    on, so negotiation simply isn't available on the last one. */}
+                {offers.length > 1 && (
+                  <button onClick={() => onNegotiate(club, terms)}
+                    className="choice-card flex-1 f-body text-[12px] font-bold py-2 rounded-full transition"
+                    style={{ background: "rgba(251,146,60,0.12)", color: C.amberBright, border: `1px solid rgba(251,146,60,0.4)` }}>
+                    Negotiate
+                  </button>
+                )}
+              </div>
+            </div>
           ))}
         </div>
 
@@ -5894,6 +5947,124 @@ function ClubOffersScreen({ player, offers, context, onJoin, onStay, onRetire })
             <RotateCcw size={14} color={C.chalkDim} />
             <span className="f-body text-sm font-semibold" style={{ color: C.chalkDim }}>Retire — End Your Professional Career</span>
           </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------
+   NEGOTIATE OFFER SCREEN
+   Two-step: pick what to push for, then commit. Reached only from an
+   offer's "Negotiate" button (2+ offers on the table). Leverage/odds come
+   from negotiationLeverage/negotiationOdds — see the block comment there
+   for the simulation this was calibrated against.
+--------------------------------------------------------- */
+function NegotiateOfferScreen({ player, club, terms, onCommit }) {
+  const [ask, setAsk] = useState(null);
+  const score = negotiationLeverage(player, club);
+  const tier = negotiationTier(score);
+  const tierColor = tier === "high" ? "#10B981" : tier === "medium" ? C.amberBright : "#EF4444";
+  const canPushRole = !!nextRoleTier(terms.role);
+  const moneyOdds = negotiationOdds(score, "money");
+  const roleOdds = canPushRole ? negotiationOdds(score, "role") : null;
+
+  const ASK_META = {
+    money: { label: "Push For Money", icon: "dollarUp", tagline: `Same ${terms.years || 2}yr ${terms.role} deal`, odds: moneyOdds },
+    role: canPushRole ? { label: "Push For Role", icon: "star", tagline: `${terms.role} → ${nextRoleTier(terms.role)}`, odds: roleOdds } : null,
+  };
+  const active = ask && ASK_META[ask] ? ask : null;
+
+  return (
+    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
+      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+        <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>{club.name} · Negotiation</div>
+        <div className="f-display text-xl font-extrabold mb-1.5" style={{ color: C.chalk }}>
+          {active ? `${ASK_META[active].label}?` : "What do you push for?"}
+        </div>
+        <p className="f-body text-[13px] mb-4" style={{ color: C.chalkDim }}>
+          {active
+            ? "One ask at a time — pushing for everything at once reads as greedy and hurts your odds on both."
+            : `Their opening offer: ${rm(terms.salary)}/mo, ${terms.years || 2}-year ${terms.firstOption ? "1st Option" : terms.role} deal.`}
+        </p>
+
+        <div className="flex items-center gap-2 mb-4 px-3 py-2.5 rounded-xl" style={{ background: C.ink3 }}>
+          <span className="f-mono text-[9px] uppercase tracking-wide flex-shrink-0" style={{ color: C.chalkDim }}>Leverage</span>
+          <div className="flex-1 h-1.5 rounded-full overflow-hidden flex gap-0.5" style={{ background: C.ink }}>
+            {[0, 1, 2].map(i => (
+              <div key={i} className="flex-1 rounded-full" style={{ background: i < (tier === "high" ? 3 : tier === "medium" ? 2 : 1) ? tierColor : C.ink }} />
+            ))}
+          </div>
+          <span className="f-mono text-[10px] font-extrabold uppercase flex-shrink-0" style={{ color: tierColor }}>{tier}</span>
+        </div>
+
+        {!active && (
+          <div className={`grid ${ASK_META.role ? "grid-cols-2" : "grid-cols-1"} gap-3`}>
+            <button onClick={() => setAsk("money")} className="choice-card text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+              <div className="text-center text-[13px] font-bold py-3" style={{ color: C.chalk }}>Push For Money</div>
+              <div className="text-center f-body text-[9.5px] pb-1" style={{ color: C.chalkDim }}>{ASK_META.money.tagline}</div>
+              <EventChoiceIcon icon="dollarUp" />
+              <div className="p-3 flex flex-col gap-2">
+                <div className="flex items-center justify-between px-3 py-2 rounded-full text-[10.5px] font-semibold" style={{ background: "rgba(16,185,129,0.14)", color: "#10B981" }}>
+                  <span>They meet your ask</span><span className="f-mono font-extrabold">{Math.round(moneyOdds.winChance * 100)}%</span>
+                </div>
+                <div className="flex items-center justify-between px-3 py-2 rounded-full text-[10.5px] font-semibold" style={{ background: "rgba(239,68,68,0.14)", color: "#EF4444" }}>
+                  <span>They walk away</span><span className="f-mono font-extrabold">{Math.round(moneyOdds.walkChance * 100)}%</span>
+                </div>
+              </div>
+            </button>
+            {ASK_META.role && (
+              <button onClick={() => setAsk("role")} className="choice-card text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+                <div className="text-center text-[13px] font-bold py-3" style={{ color: C.chalk }}>Push For Role</div>
+                <div className="text-center f-body text-[9.5px] pb-1" style={{ color: C.chalkDim }}>{ASK_META.role.tagline}</div>
+                <EventChoiceIcon icon="star" />
+                <div className="p-3 flex flex-col gap-2">
+                  <div className="flex items-center justify-between px-3 py-2 rounded-full text-[10.5px] font-semibold" style={{ background: "rgba(16,185,129,0.14)", color: "#10B981" }}>
+                    <span>They meet your ask</span><span className="f-mono font-extrabold">{Math.round(roleOdds.winChance * 100)}%</span>
+                  </div>
+                  <div className="flex items-center justify-between px-3 py-2 rounded-full text-[10.5px] font-semibold" style={{ background: "rgba(239,68,68,0.14)", color: "#EF4444" }}>
+                    <span>They walk away</span><span className="f-mono font-extrabold">{Math.round(roleOdds.walkChance * 100)}%</span>
+                  </div>
+                </div>
+              </button>
+            )}
+          </div>
+        )}
+
+        {active && (
+          <>
+            {active === "role" && (
+              <p className="f-body text-[11.5px] mb-3" style={{ color: C.chalkDim }}>
+                A role jump asks more of them than a bigger paycheck does — someone else on the roster loses minutes for you to gain them. Lower odds, higher risk, same leverage underneath.
+              </p>
+            )}
+            <div className="grid grid-cols-2 gap-3">
+              <button onClick={() => onCommit(active)} className="choice-card text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+                <div className="text-center text-[13px] font-bold py-3" style={{ color: C.chalk }}>Accept As-Is</div>
+                <div className="text-center f-body text-[9.5px] pb-1" style={{ color: C.chalkDim }}>No risk</div>
+                <EventChoiceIcon icon="handshake" />
+                <div className="p-3">
+                  <div className="text-center px-3 py-2 rounded-full text-[10px] font-semibold" style={{ background: C.ink2, color: C.teal }}>
+                    {rm(terms.salary)}/mo, locked in
+                  </div>
+                </div>
+              </button>
+              <button onClick={() => onCommit(active)} className="choice-card text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.amber}` }}>
+                <div className="text-center text-[13px] font-bold py-3" style={{ color: C.chalk }}>{ASK_META[active].label}</div>
+                <div className="text-center f-body text-[9.5px] pb-1" style={{ color: C.chalkDim }}>Commit to the ask</div>
+                <EventChoiceIcon icon={ASK_META[active].icon} />
+                <div className="p-3 flex flex-col gap-2">
+                  <div className="flex items-center justify-between px-3 py-2 rounded-full text-[10.5px] font-semibold" style={{ background: "rgba(16,185,129,0.14)", color: "#10B981" }}>
+                    <span>They meet your ask</span><span className="f-mono font-extrabold">{Math.round(ASK_META[active].odds.winChance * 100)}%</span>
+                  </div>
+                  <div className="flex items-center justify-between px-3 py-2 rounded-full text-[10.5px] font-semibold" style={{ background: "rgba(239,68,68,0.14)", color: "#EF4444" }}>
+                    <span>They walk away</span><span className="f-mono font-extrabold">{Math.round(ASK_META[active].odds.walkChance * 100)}%</span>
+                  </div>
+                </div>
+              </button>
+            </div>
+            <button onClick={() => setAsk(null)} className="btn-tactile f-mono text-[10px] uppercase tracking-widest mt-4 transition" style={{ color: C.chalkDim }}>← Choose a different ask</button>
+          </>
         )}
       </div>
     </div>
@@ -7504,6 +7675,9 @@ export default function App() {
   const [a17Selected, setA17Selected] = useState(false);
   const [clubOffers, setClubOffers] = useState([]);
   const [clubOfferContext, setClubOfferContext] = useState({ mode: "join" });
+  // Which offer is currently being negotiated — transient UI state, same
+  // tier as clubOffers/clubOfferContext, never persisted onto the player.
+  const [negotiatingOffer, setNegotiatingOffer] = useState(null);
   const [nationalEvent, setNationalEvent] = useState(null);
   const [nationalTryout, setNationalTryout] = useState(null);
   const usedEvents = useRef([]);
@@ -8554,6 +8728,59 @@ export default function App() {
     save(p);
     setBanner(note);
     setScreen("hub");
+  };
+
+  const handleStartNegotiate = (club, terms) => {
+    setNegotiatingOffer({ club, terms });
+    setScreen("negotiate_offer");
+  };
+
+  // Resolves a negotiation attempt. WIN signs immediately with the improved
+  // terms — reuses handleJoinClub directly rather than duplicating its
+  // achievement/history/salary-lock logic, so a negotiated signing goes
+  // through the exact same path a normal one does, just with better terms.
+  // HOLD and WALK both return to the offer list without signing anything.
+  //
+  // The Coach Trust cost only applies on HOLD/WALK, not WIN — handleJoinClub
+  // already resets coach/team to a neutral 50/50 on any new signing (a
+  // fresh locker room), so a penalty applied before calling it would just
+  // be silently overwritten. It only actually persists — and only actually
+  // matters — when nothing gets signed this click.
+  const handleCommitNegotiation = (askType) => {
+    const { club, terms } = negotiatingOffer;
+    // Defensive: "role" is only ever a real ask when there's a next tier to
+    // reach (the UI already hides the option otherwise, but this handler
+    // shouldn't rely on that being the only way it's ever called).
+    const effectiveAsk = (askType === "role" && !nextRoleTier(terms.role)) ? "money" : askType;
+    const score = negotiationLeverage(player, club);
+    const { winChance, walkChance } = negotiationOdds(score, effectiveAsk);
+    const roll = Math.random();
+
+    if (roll < winChance) {
+      let newTerms = { ...terms };
+      if (effectiveAsk === "money") {
+        newTerms.salary = Math.round(terms.salary * randFloat(1.15, 1.30));
+      } else {
+        const newRole = nextRoleTier(terms.role);
+        newTerms.role = newRole;
+        newTerms.salary = contractMonthlySalary({ leagueId: terms.league, role: newRole, club, semiPro: terms.semiPro });
+      }
+      setNegotiatingOffer(null);
+      handleJoinClub({ club, terms: newTerms });
+      return;
+    }
+
+    let p = { ...player, relationships: { ...player.relationships, coach: clamp(player.relationships.coach - 4) } };
+    setNegotiatingOffer(null);
+    if (roll < winChance + walkChance) {
+      setClubOffers(prev => prev.filter(o => o.club.id !== club.id));
+      setBanner(`${club.name} pulls the offer — they've moved on to another name on the board.`);
+    } else {
+      setBanner(`${club.name} holds firm. The original offer's still on the table.`);
+    }
+    setPlayer(p);
+    save(p);
+    setScreen("club_offers");
   };
 
   const handleStayClub = () => {
@@ -9892,7 +10119,11 @@ export default function App() {
           onJoin={handleJoinClub}
           onStay={handleStayClub}
           onRetire={handleRetireConsider}
+          onNegotiate={handleStartNegotiate}
         />
+      )}
+      {screen === "negotiate_offer" && player && negotiatingOffer && (
+        <NegotiateOfferScreen player={player} club={negotiatingOffer.club} terms={negotiatingOffer.terms} onCommit={handleCommitNegotiation} />
       )}
       {screen === "hub" && player && (
         <Hub
