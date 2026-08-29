@@ -63,6 +63,12 @@ const IconGlassCannon = svgIcon(<><circle cx="12" cy="12" r="8"/><path d="M13 5l
 const IconKampungLegend = svgIcon(<><path d="M4 12l8-7 8 7"/><path d="M6 11v9h12v-9"/><path d="M12 15l-1.5 2h3z" fill="currentColor" stroke="none"/></>);
 const IconRebelsCrossover = svgIcon(<><circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 17c4-1 8-6 9-10"/><path d="M14.5 6.5l2.5.5.5 2.5"/></>);
 const IconStreetKing = svgIcon(<><path d="M4 18h16l-1.5-8-3.5 3-3-6-3 6-3.5-3z"/><path d="M4 20h16"/></>);
+// Rival-tied achievements — two figures at different heights (you rose
+// above), an open door swinging shut (a chance that closed on their side
+// first), and a tipped scale (the head-to-head settled, permanently).
+const IconRivalBeaten = svgIcon(<><circle cx="7" cy="14" r="3"/><circle cx="17" cy="16" r="3" opacity="0.4"/><path d="M7 8v3M5 9l2-2 2 2"/></>);
+const IconRivalGotAway = svgIcon(<><rect x="6" y="3" width="9" height="18" rx="1"/><circle cx="12.5" cy="12" r="0.6" fill="currentColor" stroke="none"/><path d="M17 4l3 2v13l-3 2" opacity="0.5"/></>);
+const IconSettledScore = svgIcon(<><path d="M12 3v15"/><path d="M5 7h14"/><path d="M5 7l-2.5 5.5a3 3 0 0 0 5 0z"/><path d="M19 7l2.5 5.5a3 3 0 0 1-5 0z" opacity="0.4"/><path d="M8 21h8"/></>);
 
 
 
@@ -549,6 +555,9 @@ const ACHIEVEMENT_META = {
   turned_pro: { label: "Turned Pro", icon: IconTurnedPro },
   club_loyal: { label: "One-Club Loyalty", icon: IconClubLoyal },
   journeyman: { label: "Well-Travelled", icon: IconJourneyman },
+  rival_beaten: { label: "Rival Beaten", icon: IconRivalBeaten },
+  the_one_that_got_away: { label: "The One That Got Away", icon: IconRivalGotAway },
+  settled_score: { label: "Settled Score", icon: IconSettledScore },
   mbl_debut: { label: "MBL Debut", icon: IconDebut },
   mbl_starter: { label: "MBL Starter", icon: IconStarter },
   wonderkid: { label: "Wonderkid", icon: IconWonderkid },
@@ -3234,6 +3243,17 @@ function checkAchievements(p) {
   if (p.peakOverall >= 88) set.add("elite_talent");
   if (p.seasonNum >= 15) set.add("veteran");
   if (p.clubHistory && p.clubHistory.length >= 4) set.add("journeyman");
+  /* Rival-tied achievements. All three read player.rival, which nothing
+     else in the game reads or is affected by — purely additive, same
+     achievement system, no new mechanics. Peak overall only ever rises for
+     both sides, so "beaten" and "got away" fire once and stay earned even
+     if the gap later closes back up; that's the intended behaviour for a
+     badge marking a moment that happened, not a currently-true state. */
+  if (p.rival) {
+    if (p.peakOverall > p.rival.peakOverall) set.add("rival_beaten");
+    if (p.rival.caps > 0 && (p.nationalCaps || 0) === 0) set.add("the_one_that_got_away");
+    if ((p.mblTitles || 0) > 0 && (p.mblTitles || 0) > p.rival.titles) set.add("settled_score");
+  }
   return Array.from(set);
 }
 
@@ -3526,7 +3546,7 @@ function newPlayer({ name, position, hometown, height, jersey }) {
     relationships: { coach: 50, team: 50, family: 60 },
     stage: "youth",
     teamName: `${shortHome(hometown)} Youth Selection`,
-    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null, rival: null, tradeRequestCooldown: 0, seasonsAtClub: 0,
+    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null, rival: null, tradeRequestCooldown: 0, seasonsAtClub: 0, mblTitles: 0,
     nationalTeam: false, nationalCaps: 0,
     achievements: [],
     peakOverall: overall,
@@ -3550,7 +3570,7 @@ function normalizePlayer(p) {
     mblContributor: false, wonderkid: false, hadMblSeason: false, semiProClub: null,
     contractSalary: 0, contractYearsLeft: 0,
     mssmPendingReveal: false, age18MssmResolved: false, lastSeasonLeagueAwards: [], studying: false, studyDecisionResolved: false, studyGraduated: false,
-    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null, rival: null, tradeRequestCooldown: 0, seasonsAtClub: 0,
+    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null, rival: null, tradeRequestCooldown: 0, seasonsAtClub: 0, mblTitles: 0,
     nationalTeam: false, nationalCaps: 0, morale: 60, fatigue: 20,
     popularity: 5, money: 0, highlyTalented: false,
     slowDecliner: false, slowStartNextSeason: false,
@@ -9402,6 +9422,10 @@ export default function App() {
         p.popularity = clamp(p.popularity + 10);
         p.morale = clamp(p.morale + 10);
         p.achievements = Array.from(new Set([...p.achievements, p.league === "mbl" ? "mbl_champion" : "dleague_champion"]));
+        // MBL titles only, matching how the rival's own title count is
+        // tracked (advanceRivalOneSeason only increments r.titles on an
+        // MBL win) — keeps the "Settled Score" comparison apples-to-apples.
+        if (p.league === "mbl") p.mblTitles = (p.mblTitles || 0) + 1;
       }
       // Built AFTER the title roll — it needs to know whether you won, or the
       // table can show you 4th while the recap calls you champions.
