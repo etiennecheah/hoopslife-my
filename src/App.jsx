@@ -2050,12 +2050,33 @@ const NPC_LEAGUE_CFG = {
   u23: { size: 36, floor: 52, curve: 3.8, span: 20 },
   u20: { size: 36, floor: 48, curve: 3.8, span: 20 },
 };
-const NPC_FIRST = ["Farid","Danial","Wong","Aiman","Ravi","Hafiz","Marcus","Tan","Syafiq","Lim",
-  "Arjun","Nazrin","Chong","Iskandar","Kumar","Zulhelmi","Lee","Bala","Amirul","Ong",
-  "Haziq","Vinod","Yusof","Cheng","Rizal"];
-const NPC_LAST = ["Rahman","Osman","Jia Hao","Zulkifli","Chandran","Ismail","Anak Jelani","Wei Sheng",
-  "Hakim","Chee Keong","Menon","Aziz","Yew Ming","Shah","Raj","Bakar","Kang Wei","Krishnan",
-  "Hakimi","Boon Huat","Sivam","Mokhtar","Swee Lim","Nathan","Danish"];
+/* Full names, one flat list — replaces the old NPC_FIRST x NPC_LAST random
+   pairing (25 x 25 = 625 combos), which mixed naming traditions in ways
+   that didn't read as real Malaysian names ("Wong Zulkifli", "Ravi Wei
+   Sheng"). Each entry here is already a coherent whole, so there's no
+   pairing left to get wrong. 48 names — comfortably above the "40-60 to
+   avoid repeats" range discussed with the person, and not a power of two,
+   but at this size the seed-modulo bias toward earlier entries is not
+   something a player would ever notice in play. Used by both the filler
+   NPCs across MBL/U20/U23 boards (npcNameFromSeed) and the Rival system
+   (rollRival) — the 51-player authored roster (NPC_ROSTER) is untouched,
+   this only covers names nothing else names for you. */
+const NPC_FILLER_NAMES = [
+  "Amir Hakimi Rosli", "Farid Zulkarnain", "Danial Haziq Rahman", "Aiman Syafiq Ismail",
+  "Hafiz Iskandar", "Zulhelmi Aziz", "Amirul Hakim Bakar", "Haziq Mokhtar",
+  "Rizal Firdaus", "Nazrin Shah Osman", "Adam Haikal", "Aidil Danish",
+  "Amsyar Rosli", "Naufal Hakim", "Iqbal Rahman", "Syamil Hakimi",
+  "Fitri Zulkifli", "Akmal Haris",
+  "Wong Jia Hao", "Tan Wei Sheng", "Lim Kang Wei", "Chong Boon Huat",
+  "Lee Chee Keong", "Ong Yew Ming", "Cheng Swee Lim", "Chan Zhi Yang",
+  "Yap Wei Jian", "Teoh Jun Kai", "Khoo Chun Ming", "Ho Kar Weng",
+  "Chin Yong Han", "Ng Jian Hao", "Goh Wei Lun",
+  "Ravi Chandran", "Arjun Menon", "Kumar Krishnan", "Bala Sivam",
+  "Vinod Nathan", "Suresh Raj", "Deva Kumar", "Prakash Nair",
+  "Naveen Pillai", "Manoj Subramaniam",
+  "Jerome Anak Bunsu", "Alexius Anak Rimong", "Nicholas Sagau", "Timothy Ujing",
+  "Ambrose Anak Nyanggau",
+];
 
 /* ============================================================
    RIVAL NPC — generated once at U15 selection, advances one season
@@ -2089,7 +2110,7 @@ function rollRival(playerPosition, playerHometown, customName, customPosition) {
   // Different state for narrative contrast — never the player's own.
   const otherStates = HOMETOWNS.filter(h => h !== playerHometown);
   const hometown = pick(otherStates.length ? otherStates : HOMETOWNS);
-  const name = (customName && customName.trim()) ? customName.trim().slice(0, 24) : `${pick(NPC_FIRST)} ${pick(NPC_LAST)}`;
+  const name = (customName && customName.trim()) ? customName.trim().slice(0, 24) : pick(NPC_FILLER_NAMES);
   return {
     name, position, hometown, talentTier,
     // Rolled once, not per-season, so each rival develops consistently:
@@ -2241,9 +2262,7 @@ function npcStatsFromSeed(pos, ovr, seed) {
    strings dominated the payload (a name plus a club name is ~45 bytes per
    NPC before JSON overhead). Only pos/ovr/seed/age/height persist. */
 function npcNameFromSeed(seed) {
-  const a = NPC_FIRST[seed % NPC_FIRST.length];
-  const b = NPC_LAST[(seed >>> 7) % NPC_LAST.length];
-  return `${a} ${b}`;
+  return NPC_FILLER_NAMES[seed % NPC_FILLER_NAMES.length];
 }
 function npcClubFromSeed(seed, leagueId) {
   const pool = leagueId === "mbl" ? PRO_CLUBS : DLEAGUE_CLUBS;
