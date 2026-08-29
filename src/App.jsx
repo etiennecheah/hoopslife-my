@@ -3320,6 +3320,63 @@ function nextRoleTier(role) {
   if (role === "Rotation") return "Starter";
   return null;
 }
+// Used to tell an upgrade from a downgrade when role shifts on its own
+// between seasons (not via signing/negotiation), so the player gets the
+// right framing rather than always reading as bad news.
+const ROLE_RANK = { Bench: 0, Rotation: 1, Starter: 2 };
+
+/* ============================================================
+   TRADE REQUEST — a player-initiated exit, distinct from Trade Rumors
+   (which is club-initiated and only ever fires when Team Chemistry is
+   already low). Deliberately shares its sibling relationship with the
+   Contract Negotiation system above: same "make a case, see the odds"
+   shape, reusing the SAME rating formula (overall*0.7 + popularity*0.3).
+   One asymmetry, on purpose: low Team Chemistry HELPS the case here
+   (a club unhappy with you is more willing to let you go), the opposite
+   of how it factors into negotiation. Simulated across 6 representative
+   scenarios before writing this: a genuinely justified ask (a benched
+   player at a struggling relationship) lands a clean grant most of the
+   time (~65% case strength); an unjustified one (a happy Starter asking
+   anyway) risks real harsh consequences (~50% harsh-deny chance) rather
+   than just quietly failing. */
+function tradeRequestCase(p, club, reason) {
+  const overall = computeOverall(p.stats, p.position);
+  const rating = overall * 0.7 + p.popularity * 0.3;
+  let base;
+  if (reason === "role") {
+    base = p.starterStatus === "Bench" ? 0.55 : p.starterStatus === "Rotation" ? 0.35 : 0.15;
+  } else if (reason === "contender") {
+    const diff = rating - club.prestige;
+    base = 0.30 + clamp(diff / 100, -0.20, 0.35);
+  } else {
+    base = 0.22; // "fresh" — no specific grievance, weakest baseline case
+  }
+  const chemBoost = (50 - p.relationships.team) / 100;
+  base += chemBoost * 0.4;
+  return clamp(base, 0.08, 0.75);
+}
+// Splits the case strength into four outcomes. Among grants, a stronger
+// player (rating well above the league's MBL bar) is more likely to land
+// a real transfer-window outcome rather than just being cut loose with no
+// leverage; among denials, a weaker case draws a harsher response.
+function tradeRequestOutcome(caseStrength, p) {
+  const overall = computeOverall(p.stats, p.position);
+  const ratingBand = clamp((overall - 45) / 40, 0.1, 0.9);
+  const grantChance = caseStrength;
+  const grantWellShare = clamp(0.3 + ratingBand * 0.5, 0.15, 0.9);
+  const harshShare = clamp(0.6 - caseStrength * 0.7, 0.1, 0.7);
+  return {
+    grantWell: grantChance * grantWellShare,
+    grantPoorly: grantChance * (1 - grantWellShare),
+    denySoft: (1 - grantChance) * (1 - harshShare),
+    denyHarsh: (1 - grantChance) * harshShare,
+  };
+}
+const TRADE_REQUEST_REASONS = [
+  { id: "role", label: "Bigger Role", icon: "star", tagline: p => `Still ${p.starterStatus || "Bench"}` },
+  { id: "contender", label: "Chase a Contender", icon: "trophyCash", tagline: () => "A real shot at winning" },
+  { id: "fresh", label: "Fresh Start", icon: "doorExit", tagline: () => "No specific complaint" },
+];
 
 /* Generates a set of club offers (pro + semi-pro) for a player, weighted by
    the player's overall + fame and each club's prestige and preferences. Elite
@@ -3469,7 +3526,7 @@ function newPlayer({ name, position, hometown, height, jersey }) {
     relationships: { coach: 50, team: 50, family: 60 },
     stage: "youth",
     teamName: `${shortHome(hometown)} Youth Selection`,
-    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null, rival: null,
+    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null, rival: null, tradeRequestCooldown: 0, seasonsAtClub: 0,
     nationalTeam: false, nationalCaps: 0,
     achievements: [],
     peakOverall: overall,
@@ -3493,7 +3550,7 @@ function normalizePlayer(p) {
     mblContributor: false, wonderkid: false, hadMblSeason: false, semiProClub: null,
     contractSalary: 0, contractYearsLeft: 0,
     mssmPendingReveal: false, age18MssmResolved: false, lastSeasonLeagueAwards: [], studying: false, studyDecisionResolved: false, studyGraduated: false,
-    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null, rival: null,
+    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null, rival: null, tradeRequestCooldown: 0, seasonsAtClub: 0,
     nationalTeam: false, nationalCaps: 0, morale: 60, fatigue: 20,
     popularity: 5, money: 0, highlyTalented: false,
     slowDecliner: false, slowStartNextSeason: false,
@@ -4013,7 +4070,7 @@ function PlayerCard({ p, overall }) {
 /* ---------------------------------------------------------
    HUB SCREEN
 --------------------------------------------------------- */
-function Hub({ player, onPlaySeason, onRetireConsider, onManageInvestments, banner }) {
+function Hub({ player, onPlaySeason, onRetireConsider, onManageInvestments, onRequestTrade, banner }) {
   const overall = computeOverall(player.stats, player.position);
   const [tab, setTab] = useState("attrs");
   // Same conditional-tab pattern as the season recap's League Context tabs
@@ -4169,6 +4226,35 @@ function Hub({ player, onPlaySeason, onRetireConsider, onManageInvestments, bann
                   </div>
                 </div>
                 <ChevronRight size={15} color={C.chalkDim} />
+              </button>
+            )}
+
+            {/* Trade Request — the "player asks to leave" mirror of Trade
+                Rumors (which is club-initiated and only fires on low Team
+                Chemistry). Doesn't appear at all until a full season has
+                been played at the club; shown disabled with the countdown
+                during a post-denial cooldown, rather than just vanishing,
+                so it's clear WHY it's unavailable rather than looking gone. */}
+            {player.clubId && !player.abroad && (player.seasonsAtClub || 0) >= 1 && (
+              <button onClick={() => (player.tradeRequestCooldown > 0 ? null : onRequestTrade())}
+                disabled={player.tradeRequestCooldown > 0}
+                className={player.tradeRequestCooldown > 0 ? "w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition" : "choice-card w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition"}
+                style={{
+                  background: C.ink2,
+                  border: `1px solid ${player.tradeRequestCooldown > 0 ? C.line : "rgba(251,146,60,0.4)"}`,
+                  opacity: player.tradeRequestCooldown > 0 ? 0.55 : 1,
+                  cursor: player.tradeRequestCooldown > 0 ? "not-allowed" : "pointer",
+                }}>
+                <span className="text-[17px]">🚪</span>
+                <div className="text-left flex-1 min-w-0">
+                  <div className="f-display text-[13px]" style={{ color: C.chalk }}>Request a Trade</div>
+                  <div className="f-body text-[10px] mt-0.5" style={{ color: C.chalkDim }}>
+                    {player.tradeRequestCooldown > 0
+                      ? `${player.tradeRequestCooldown} season${player.tradeRequestCooldown === 1 ? "" : "s"} until you can ask again`
+                      : `You've been at ${player.teamName} ${player.seasonsAtClub} season${player.seasonsAtClub === 1 ? "" : "s"}`}
+                  </div>
+                </div>
+                {!(player.tradeRequestCooldown > 0) && <ChevronRight size={15} color={C.chalkDim} />}
               </button>
             )}
 
@@ -6066,6 +6152,61 @@ function NegotiateOfferScreen({ player, club, terms, onCommit }) {
             <button onClick={() => setAsk(null)} className="btn-tactile f-mono text-[10px] uppercase tracking-widest mt-4 transition" style={{ color: C.chalkDim }}>← Choose a different ask</button>
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------
+   TRADE REQUEST SCREEN
+   Reached from the Hub's Career tab. Single-step, unlike negotiation's
+   two-step ask-then-commit — reason and commitment are the same click
+   here, since "which reason, then whether to go through with it" would
+   be one decision split into two for no real benefit.
+--------------------------------------------------------- */
+function TradeRequestScreen({ player, club, onCommit }) {
+  const cases = TRADE_REQUEST_REASONS.map(r => ({ ...r, strength: tradeRequestCase(player, club, r.id) }));
+  const avgStrength = cases.reduce((a, c) => a + c.strength, 0) / cases.length;
+  const tier = avgStrength < 0.30 ? "low" : avgStrength < 0.45 ? "medium" : "high";
+  const tierColor = tier === "high" ? "#10B981" : tier === "medium" ? C.amberBright : "#EF4444";
+  return (
+    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
+      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+        <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>{club.name} · Trade Request</div>
+        <div className="f-display text-xl font-extrabold mb-1.5" style={{ color: C.chalk }}>Why do you want out?</div>
+        <p className="f-body text-[13px] mb-4" style={{ color: C.chalkDim }}>
+          The reason isn't flavor — it changes your case. A weak ask can still be granted, just not on your terms, and a bad one can cost you more than a "no."
+        </p>
+
+        <div className="flex items-center gap-2 mb-4 px-3 py-2.5 rounded-xl" style={{ background: C.ink3 }}>
+          <span className="f-mono text-[9px] uppercase tracking-wide flex-shrink-0" style={{ color: C.chalkDim }}>Your Standing</span>
+          <div className="flex-1 h-1.5 rounded-full overflow-hidden flex gap-0.5" style={{ background: C.ink }}>
+            {[0, 1, 2].map(i => (
+              <div key={i} className="flex-1 rounded-full" style={{ background: i < (tier === "high" ? 3 : tier === "medium" ? 2 : 1) ? tierColor : C.ink }} />
+            ))}
+          </div>
+          <span className="f-mono text-[10px] font-extrabold uppercase flex-shrink-0" style={{ color: tierColor }}>{tier}</span>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2">
+          {cases.map(c => (
+            <button key={c.id} onClick={() => onCommit(c.id)} className="choice-card text-left rounded-[18px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+              <div className="text-center text-[11.5px] font-bold pt-2.5" style={{ color: C.chalk }}>{c.label}</div>
+              <div className="text-center f-body text-[8.5px] pb-1" style={{ color: C.chalkDim }}>{c.tagline(player)}</div>
+              <EventChoiceIcon icon={c.icon} />
+              <div className="px-2 pb-2.5">
+                <div className="flex items-center justify-center px-2 py-1.5 rounded-full text-[10px] font-extrabold" style={{ background: "rgba(16,185,129,0.14)", color: "#10B981" }}>
+                  {Math.round(c.strength * 100)}%
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-4 pt-3 flex items-center gap-1.5" style={{ borderTop: `1px solid ${C.line}` }}>
+          <span className="text-[12px]">⚠️</span>
+          <p className="f-body text-[10.5px]" style={{ color: C.chalkDim }}>A denial locks out another request for 2 seasons. A weak case risks a harsh one.</p>
+        </div>
       </div>
     </div>
   );
@@ -8689,6 +8830,9 @@ export default function App() {
     p.clubHistory = Array.from(new Set([...(p.clubHistory || []), club.id]));
     p.relationships = { ...p.relationships, coach: 50, team: 50 };
     p.morale = clamp(p.morale + 6);
+    // Fresh locker room, fresh clock — a Trade Request needs at least one
+    // full season at the club it's aimed at, so this resets on every signing.
+    p.seasonsAtClub = 0;
 
     // Wonderkid flag / MBL debut badge.
     if (p.__proWonderkid && terms.league === "mbl") {
@@ -8781,6 +8925,65 @@ export default function App() {
     setPlayer(p);
     save(p);
     setScreen("club_offers");
+  };
+
+  const handleRequestTrade = () => setScreen("trade_request");
+
+  // Resolves a trade request into one of four outcomes. GRANT_WELL and
+  // GRANT_POORLY both reuse the exact "transfer"/"released" club-offer
+  // context modes that mid-contract transfers and releases already use —
+  // same screen, same flavor headers, nothing new to build there. Only
+  // DENY_SOFT/DENY_HARSH keep the player in place, with a cooldown either
+  // way so this can't just be retried every season until it works.
+  const handleCommitTradeRequest = (reason) => {
+    const club = getClub(player.clubId);
+    const caseStrength = tradeRequestCase(player, club, reason);
+    const { grantWell, grantPoorly, denyHarsh } = tradeRequestOutcome(caseStrength, player);
+    const roll = Math.random();
+    let p = { ...player, relationships: { ...player.relationships }, stats: { ...player.stats } };
+
+    if (roll < grantWell) {
+      const offers = generateClubOffers(p, { count: 3, excludeId: club.id });
+      p.history = [...p.history, { age: p.age, tierLabel: "Transfer Granted", note: `${club.name} agrees to hear offers — word is a few clubs have already been asking.` }];
+      p.achievements = checkAchievements(p);
+      setPlayer(p);
+      save(p);
+      setClubOffers(offers);
+      setClubOfferContext({ mode: "transfer", oldClubName: club.name });
+      setScreen("club_offers");
+      return;
+    }
+    if (roll < grantWell + grantPoorly) {
+      const offers = generateClubOffers(p, { count: 3, excludeId: club.id });
+      const oldClubName = club.name;
+      p.clubId = null; p.teamName = null; p.starterStatus = null;
+      p.contractSalary = 0; p.contractYearsLeft = 0; p.semiProClub = null;
+      p.history = [...p.history, { age: p.age, tierLabel: "Released", note: `"You want out? Don't let the door hit you." ${oldClubName} releases you outright — no say in where you land next.` }];
+      p.achievements = checkAchievements(p);
+      setPlayer(p);
+      save(p);
+      setClubOffers(offers);
+      setClubOfferContext({ mode: "released", oldClubName });
+      setScreen("club_offers");
+      return;
+    }
+
+    // Denied, either way — the cooldown is what stops this from just being
+    // retried every season until the dice cooperate.
+    p.tradeRequestCooldown = 2;
+    if (roll < grantWell + grantPoorly + denyHarsh) {
+      const downgraded = player.starterStatus === "Starter" ? "Rotation" : player.starterStatus === "Rotation" ? "Bench" : player.starterStatus;
+      p.starterStatus = downgraded;
+      p.contractSalary = contractMonthlySalary({ leagueId: player.league, role: downgraded, club, semiPro: !!player.semiProClub });
+      p.relationships.coach = clamp(p.relationships.coach - 10);
+      setBanner(`"Asking to leave? Fine — you can ask for minutes too." ${club.name} heard you, and isn't pretending otherwise.`);
+    } else {
+      p.relationships.coach = clamp(p.relationships.coach - 4);
+      setBanner(`${club.name} says no. You're under contract, and they're not in the business of favors.`);
+    }
+    setPlayer(p);
+    save(p);
+    setScreen("hub");
   };
 
   const handleStayClub = () => {
@@ -9345,6 +9548,11 @@ export default function App() {
     // the rival climbs their own ladder in lockstep with the player's own
     // age, regardless of what screen this season actually routes through.
     if (p.rival) p.rival = advanceRivalOneSeason(p.rival, p.clubId);
+    // Trade Request bookkeeping — both reset on a new signing (handleJoinClub),
+    // so this only ever ticks forward while actually AT a club, same as the
+    // gate that reads them in the Hub's Career tab.
+    if (p.clubId) p.seasonsAtClub = (p.seasonsAtClub || 0) + 1;
+    if (p.tradeRequestCooldown > 0) p.tradeRequestCooldown -= 1;
 
     // Natural maturation: every attribute develops each off-season — held
     // back before 23 on purpose, so most players are genuinely still
@@ -9473,15 +9681,49 @@ export default function App() {
         bannerMsg = bannerMsg || `You've dropped back to the ${LEAGUE[p.league].short} to find your form.`;
         leagueChanged = true;
       } else if (p.league === "mbl") {
-        // Stayed in the MBL: role can shift with rating.
-        const newRole = rating >= MBL_RATING_THRESHOLD + 22 ? "Starter" : rating >= MBL_RATING_THRESHOLD ? "Rotation" : "Bench";
-        if (newRole !== p.starterStatus) { p.starterStatus = newRole; leagueChanged = true; }
+        // Stayed in the MBL: role can shift with rating — using the SAME
+        // club-relative calculation as signing (computeClubTerms), not a
+        // flat league-wide bar. That mismatch used to be the actual bug
+        // here: a player could be correctly awarded Starter at signing
+        // (comfortably ahead of THIS club's own competitiveness) and then
+        // get silently downgraded the very next season purely because a
+        // flat absolute threshold didn't care which club they were at —
+        // dropping even after a season where their rating went UP, as
+        // long as it stayed under the fixed bar. Every previous session's
+        // role checks now go through the one formula that actually
+        // determines a role anywhere in the game.
+        const newRole = computeClubTerms(p, club, { firstProSigning: false }).role;
+        if (newRole !== p.starterStatus) {
+          const oldRole = p.starterStatus;
+          p.starterStatus = newRole;
+          leagueChanged = true;
+          const roleMsg = ROLE_RANK[newRole] > ROLE_RANK[oldRole]
+            ? `Your form's earned you more minutes — you're a ${newRole.toLowerCase()} at ${p.teamName} now.`
+            : `Your role's shifted to ${newRole.toLowerCase()} at ${p.teamName} — the roster and your current form don't line up for ${oldRole.toLowerCase()} minutes right now.`;
+          bannerMsg = bannerMsg ? `${bannerMsg} ${roleMsg}` : roleMsg;
+          // A banner set here can still be silently discarded — later this
+          // same season, an overseas offer, national tryout, or injury can
+          // each take their own early-return path without ever reaching the
+          // final setBanner call. history is never subject to that: it's
+          // baked into `p` itself, so the explanation survives regardless
+          // of what else this season decides is more important to show.
+          p.history = [...p.history, { age: p.age, tierLabel: ROLE_RANK[newRole] > ROLE_RANK[oldRole] ? "Role Increased" : "Role Decreased", note: roleMsg }];
+        }
       } else {
         // Stayed in a pro club's D-League team without promotion — role can
         // still shift with rating, using the same calculation as the offer
         // preview so it never silently drifts out of sync.
         const freshRole = computeClubTerms(p, club, { firstProSigning: false }).role;
-        if (freshRole !== p.starterStatus) { p.starterStatus = freshRole; leagueChanged = true; }
+        if (freshRole !== p.starterStatus) {
+          const oldRole = p.starterStatus;
+          p.starterStatus = freshRole;
+          leagueChanged = true;
+          const roleMsg = ROLE_RANK[freshRole] > ROLE_RANK[oldRole]
+            ? `Your form's earned you more minutes — you're a ${freshRole.toLowerCase()} at ${p.teamName} now.`
+            : `Your role's shifted to ${freshRole.toLowerCase()} at ${p.teamName} — the roster and your current form don't line up for ${oldRole.toLowerCase()} minutes right now.`;
+          bannerMsg = bannerMsg ? `${bannerMsg} ${roleMsg}` : roleMsg;
+          p.history = [...p.history, { age: p.age, tierLabel: ROLE_RANK[freshRole] > ROLE_RANK[oldRole] ? "Role Increased" : "Role Decreased", note: roleMsg }];
+        }
       }
 
       // If the league or role changed, refresh the locked salary to match the new band.
@@ -10125,6 +10367,9 @@ export default function App() {
       {screen === "negotiate_offer" && player && negotiatingOffer && (
         <NegotiateOfferScreen player={player} club={negotiatingOffer.club} terms={negotiatingOffer.terms} onCommit={handleCommitNegotiation} />
       )}
+      {screen === "trade_request" && player && player.clubId && (
+        <TradeRequestScreen player={player} club={getClub(player.clubId)} onCommit={handleCommitTradeRequest} />
+      )}
       {screen === "hub" && player && (
         <Hub
           player={player}
@@ -10132,6 +10377,7 @@ export default function App() {
           onPlaySeason={handlePlaySeason}
           onRetireConsider={handleRetireConsider}
           onManageInvestments={handleManageInvestments}
+          onRequestTrade={handleRequestTrade}
         />
       )}
       {screen === "body_setup" && player && <BodySetup player={player} onConfirm={handleConfirmBody} />}
