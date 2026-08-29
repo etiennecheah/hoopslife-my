@@ -126,6 +126,64 @@ const POSITIONS = [
     weights: { shooting:.05, playmaking:.05, defense:.30, rebounding:.35, athleticism:.15, iq:.10 } },
 ];
 
+/* ============================================================
+   PLAYING STYLE — chosen once at creation, permanent.
+   Deliberately does NOT touch computeOverall(), attribute costs, or any
+   value generateLeagueSeasonStats() already returns (ppg/rpg/apg/spg/bpg/
+   fgPct/threePct/tr). Those numbers are read in 60+ places across awards,
+   standings strength, HBL/shortlist eligibility, and championship odds —
+   changing any of them by identity would mean some identity is simply
+   "better" for a given overall, which is exactly the balance risk to
+   avoid. Style only drives NEW, purely-additive display stats (shot
+   composition — see styleShotProfile()) and narrative flavor text. Two
+   players can share the exact same six attributes, same overall, same
+   tr, same award odds, and still read as different players.
+============================================================ */
+const PLAYING_STYLES = [
+  { id: "slasher", label: "Slasher", icon: "⚡", tagline: "Lives at the rim", bestFit: ["SG", "SF", "PG"] },
+  { id: "3d", label: "3&D", icon: "🎯", tagline: "Space and stop", bestFit: ["SG", "SF", "PF"] },
+  { id: "playmaker", label: "Playmaker", icon: "🧠", tagline: "Pass-first floor general", bestFit: ["PG", "SG"] },
+  { id: "sharpshooter", label: "Sharpshooter", icon: "🏹", tagline: "Catch, gather, fire", bestFit: ["SG", "PG", "SF"] },
+  { id: "anchor", label: "Post Anchor", icon: "🛡️", tagline: "Paint on lockdown", bestFit: ["C", "PF"] },
+  { id: "twoway", label: "Two-Way Wing", icon: "⚙️", tagline: "A bit of everything", bestFit: ["SF", "SG", "PF"] },
+];
+function getPlayingStyle(id) { return PLAYING_STYLES.find(s => s.id === id) || null; }
+
+// Shot-composition bias per style: how a given ppg/threePct DISPLAYS as
+// attempt volume, not how much of it there is. Purely cosmetic — see the
+// block comment above.
+const STYLE_SHOT_BIAS = {
+  slasher:      { three: 0.55, ft: 1.55 },
+  "3d":         { three: 1.55, ft: 0.70 },
+  playmaker:    { three: 0.90, ft: 1.00 },
+  sharpshooter: { three: 1.80, ft: 0.60 },
+  anchor:       { three: 0.30, ft: 1.15 },
+  twoway:       { three: 1.00, ft: 1.00 },
+};
+/* Derives display-only shot-attempt volumes from the ALREADY-COMPUTED
+   ppg/threePct — called after generateLeagueSeasonStats, never inside it,
+   and its output is never read back into tr, awards, or eligibility
+   anywhere. Falls back to a neutral (twoway) split for legacy saves with
+   no playingStyle set, so old careers still get sensible numbers. */
+function styleShotProfile(leagueStats, styleId) {
+  const bias = STYLE_SHOT_BIAS[styleId] || STYLE_SHOT_BIAS.twoway;
+  const tpa = clamp(round1((leagueStats.threePct / 8) * bias.three), 0.2, 12);
+  const fta = clamp(round1((leagueStats.ppg / 6) * bias.ft), 0.2, 11);
+  return { tpa, fta };
+}
+// One-line flavor text for the box score — pure narration, no numeric effect.
+function styleFlavorNote(styleId, profile) {
+  switch (styleId) {
+    case "slasher": return `A season built on getting downhill — ${profile.fta} free-throw attempts a night.`;
+    case "3d": return `Floor-spacer and pest on the other end — ${profile.tpa} three-point attempts a night.`;
+    case "playmaker": return "Ran the offense first, looked for his own shot second.";
+    case "sharpshooter": return `Lived beyond the arc — ${profile.tpa} three-point attempts a night.`;
+    case "anchor": return "Anchored the paint on both ends, letting the offense find him.";
+    case "twoway": return "No single number stands out — the stat sheet that quietly wins games.";
+    default: return null;
+  }
+}
+
 const HOMETOWNS = [
   "Johor", "Kedah", "Kelantan", "Kuala Lumpur",
   "Labuan", "Melaka", "Negeri Sembilan", "Pahang", "Pulau Pinang",
@@ -3233,7 +3291,7 @@ function newPlayer({ name, position, hometown, height, jersey }) {
     relationships: { coach: 50, team: 50, family: 60 },
     stage: "youth",
     teamName: `${shortHome(hometown)} Youth Selection`,
-    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null,
+    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null,
     nationalTeam: false, nationalCaps: 0,
     achievements: [],
     peakOverall: overall,
@@ -3257,7 +3315,7 @@ function normalizePlayer(p) {
     mblContributor: false, wonderkid: false, hadMblSeason: false, semiProClub: null,
     contractSalary: 0, contractYearsLeft: 0,
     mssmPendingReveal: false, age18MssmResolved: false, lastSeasonLeagueAwards: [], studying: false, studyDecisionResolved: false, studyGraduated: false,
-    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null,
+    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null,
     nationalTeam: false, nationalCaps: 0, morale: 60, fatigue: 20,
     popularity: 5, money: 0, highlyTalented: false,
     slowDecliner: false, slowStartNextSeason: false,
@@ -3688,6 +3746,7 @@ function StartScreen({ onStart, savedGame, onContinue, onViewHallOfFame, onViewA
 --------------------------------------------------------- */
 function PlayerCard({ p, overall }) {
   const pos = POSITIONS.find(x => x.id === p.position);
+  const style = p.playingStyle ? getPlayingStyle(p.playingStyle) : null;
   return (
     <div className="rounded-[24px] p-5 relative overflow-hidden" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
       <div className="relative flex items-start gap-3.5">
@@ -3696,6 +3755,12 @@ function PlayerCard({ p, overall }) {
           <div className="flex items-center gap-2 flex-wrap">
             {!p.abroad && <FlagIcon name={p.hometown} size={18} />}
             <PosPill jersey={p.jersey} position={pos.id} />
+            {style && (
+              <span className="f-mono text-[9px] uppercase px-2 py-0.5 rounded-full inline-flex items-center gap-1"
+                style={{ background: "rgba(251,146,60,0.10)", color: C.amberBright, border: `1px solid rgba(251,146,60,0.35)` }}>
+                {style.icon} {style.label}
+              </span>
+            )}
             {p.highlyTalented && (
               <span className="f-mono text-[9px] uppercase flex items-center gap-0.5" style={{ color: C.trophyGold }}>
                 <Gem size={9} /> Prodigy
@@ -4640,6 +4705,49 @@ function OffseasonPlanScreen({ player, onChoose }) {
         <p className="f-body text-[10px] mt-3" style={{ color: C.chalkDim }}>
           *Scout visibility only matters once you already qualify for overseas interest.
         </p>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------
+   CHOOSE IDENTITY SCREEN
+   Shown once, right after Body Setup. Permanent for the career.
+--------------------------------------------------------- */
+function ChooseIdentityScreen({ player, onChoose }) {
+  return (
+    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
+      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+        <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>Career Creation</div>
+        <div className="f-display text-xl font-extrabold mb-1.5" style={{ color: C.chalk }}>Choose Your Identity</div>
+        <p className="f-body text-[13px] mb-4" style={{ color: C.chalkDim }}>
+          How do you want to be known? This shapes how your game shows up on the stat sheet — not how good you are, just what kind of good. Permanent for this career.
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          {PLAYING_STYLES.map(style => {
+            const fits = style.bestFit.includes(player.position);
+            return (
+              <button key={style.id} onClick={() => onChoose(style.id)} className="text-left rounded-[20px] overflow-hidden transition"
+                style={{ background: C.ink3, border: `1px solid ${fits ? "rgba(250,204,21,0.35)" : C.line}` }}>
+                <div className="text-center text-[13px] font-bold pt-3" style={{ color: C.chalk }}>{style.label}</div>
+                <div className="text-center f-body text-[10px] pb-1" style={{ color: C.chalkDim }}>{style.tagline}</div>
+                <div className="text-center py-2" style={{ fontSize: 26 }}>{style.icon}</div>
+                <div className="px-3 pb-3 flex items-center justify-center gap-1 flex-wrap">
+                  {style.bestFit.map(pos => (
+                    <span key={pos} className="f-mono text-[8.5px] uppercase px-2 py-0.5 rounded-full"
+                      style={{
+                        background: pos === player.position ? "rgba(250,204,21,0.10)" : C.ink2,
+                        color: pos === player.position ? C.trophyGold : C.chalkDim,
+                        border: `1px solid ${pos === player.position ? "rgba(250,204,21,0.35)" : C.line}`,
+                      }}>
+                      {pos}
+                    </span>
+                  ))}
+                </div>
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -6056,7 +6164,17 @@ const ResultScreen = memo(function ResultScreen({ summary, onContinue }) {
               <StatCell label="BPG" value={summary.leagueStats.bpg} />
               <StatCell label="FG%" value={`${summary.leagueStats.fgPct}%`} />
               <StatCell label="3P%" value={`${summary.leagueStats.threePct}%`} />
+              {summary.shotProfile && <StatCell label="3PA" value={summary.shotProfile.tpa} />}
+              {summary.shotProfile && <StatCell label="FTA" value={summary.shotProfile.fta} />}
             </div>
+            {summary.styleNote && (
+              <div className="mt-2 flex items-center gap-1.5">
+                {summary.playingStyle && getPlayingStyle(summary.playingStyle) && (
+                  <span className="flex-shrink-0" style={{ fontSize: 12 }}>{getPlayingStyle(summary.playingStyle).icon}</span>
+                )}
+                <p className="f-body text-[10.5px] italic" style={{ color: C.chalkDim }}>{summary.styleNote}</p>
+              </div>
+            )}
             {summary.leagueAwards && summary.leagueAwards.length > 0 && (
               <div className="mt-2">
                 <div className="f-mono text-[9px] uppercase tracking-widest mb-1.5" style={{ color: C.gold }}>Season Awards</div>
@@ -7188,6 +7306,17 @@ export default function App() {
     STAT_LIST.forEach(k => { p.stats[k] = clamp(p.stats[k] + (mods[k] || 0), 1, 99); });
     p.seasonPoints = computeSeasonPoints(p, 0);
     p.creationBuild = true;
+    setPlayer(p);
+    save(p);
+    setScreen("choose_identity");
+  };
+
+  // Playing style is picked once, right after body, before the first
+  // attribute allocation — permanent for the career. Purely a flavor tag;
+  // see the PLAYING_STYLES block comment for what it deliberately doesn't
+  // touch.
+  const handleChooseIdentity = (styleId) => {
+    const p = { ...player, playingStyle: styleId };
     setPlayer(p);
     save(p);
     setScreen("creation_build");
@@ -8627,6 +8756,13 @@ export default function App() {
     // can see this season's awards even though it runs in a separate closure.
     p.lastSeasonLeagueAwards = leagueAwards;
 
+    // Display-only shot-composition flavor for the recap box score. Reads
+    // leagueStats but never writes to it — the object saved into p.history
+    // above is untouched, so nothing here can leak into the Career Timeline
+    // record or anything computed from it later.
+    const shotProfile = leagueStats ? styleShotProfile(leagueStats, p.playingStyle) : null;
+    const styleNote = leagueStats ? styleFlavorNote(p.playingStyle, shotProfile) : null;
+
     setSummary({
       seasonNum: p.seasonNum,
       trainingText: pending.trainingText,
@@ -8639,6 +8775,7 @@ export default function App() {
       leagueStats, leagueLabel, leagueAwards, leagueBoard, leagueStandings, awardRace,
       leagueYear: p.year,
       gamesPlayed, wonChampionship, injury,
+      playingStyle: p.playingStyle, shotProfile, styleNote,
     });
     setPlayer(p);
     setScreen(p.pendingInjuryDecision ? "injury_recovery" : "result");
@@ -9456,6 +9593,7 @@ export default function App() {
         />
       )}
       {screen === "body_setup" && player && <BodySetup player={player} onConfirm={handleConfirmBody} />}
+      {screen === "choose_identity" && player && <ChooseIdentityScreen player={player} onChoose={handleChooseIdentity} />}
       {screen === "creation_build" && player && <AttributeBuilder player={player} points={player.seasonPoints || 0} creation onConfirm={handleConfirmCreationBuild} />}
       {screen === "investments" && player && (
         <InvestmentsScreen player={player} onConfirm={handleConfirmInvestments} onBack={() => setScreen("hub")} />
