@@ -4980,7 +4980,10 @@ function InjuryRecoveryScreen({ pending, onChoose }) {
 --------------------------------------------------------- */
 function OffseasonPlanScreen({ player, onChoose }) {
   // Commercial deals don't fit a minor or a scholarship athlete — the same
-  // rule handleConfirmTraining already applies to financial events.
+  // rule handleConfirmTraining already applies to financial events. The
+  // exact inverse of this condition is also what makes Overseas Camp
+  // sponsored rather than costed below — same "who actually has income"
+  // check, reused rather than duplicated with slightly different logic.
   const canCommercial = player.age >= 18 && !player.hblSeasonPending && !player.uba;
   const PLANS = [
     { id: "summer", label: "Summer League", icon: "trophyCash", risk: "risky",
@@ -4993,7 +4996,9 @@ function OffseasonPlanScreen({ player, onChoose }) {
       pills: [
         { label: "Bonus development points", value: "+2", positive: true },
         { label: "Coach Trust", value: "+5", positive: true },
-        { label: "Cost", value: rm(4000), positive: false },
+        canCommercial
+          ? { label: "Cost", value: rm(4000), positive: false }
+          : { label: "Cost", value: "Sponsored", positive: true },
       ] },
     { id: "rest", label: "Rest & Recover", icon: "bed", risk: "safe",
       pills: [
@@ -9054,11 +9059,27 @@ export default function App() {
       p.pendingGuaranteedOverseasOffer = true;
       note = "Summer League gets you in front of a bigger crowd. ";
     } else if (planId === "camp") {
-      const cost = 4000;
-      p.money = Math.max(0, p.money - cost);
+      // Sponsored, not costed, for anyone without real income — the exact
+      // same population Commercial Tour already excludes for the opposite
+      // reason (age < 18, or on an HBL/UBA scholarship). Previously this
+      // charged everyone RM 4,000 regardless, which for a student with
+      // p.money already at 0 just silently clamped to "free" with no
+      // acknowledgment — same outcome, but accidental rather than earned,
+      // and with no flavor explaining why a broke 16-year-old could still
+      // afford a trip abroad.
+      const noIncome = p.age < 18 || p.hblSeasonPending || p.uba;
       p.relationships.coach = clamp(p.relationships.coach + 5);
       ptsAdjust = 2;
-      note = "An intensive camp abroad, working with international coaches. ";
+      if (noIncome) {
+        const tier = TIER_META[getStateTier(p.hometown)];
+        note = tier.name === "Tier 1"
+          ? `Sponsored by ${p.hometown}'s Elite Programme — an intensive camp abroad, working with international coaches. `
+          : `Family and school pitch in to cover the trip — an intensive camp abroad, working with international coaches. `;
+      } else {
+        const cost = 4000;
+        p.money = Math.max(0, p.money - cost);
+        note = "An intensive camp abroad, working with international coaches. ";
+      }
     } else if (planId === "rest") {
       p.fatigue = clamp(p.fatigue - 25);
       p.restedOffseason = true;
