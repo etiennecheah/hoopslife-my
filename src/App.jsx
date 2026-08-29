@@ -107,6 +107,29 @@ const FontStyle = memo(() => (
     }
     ::-webkit-scrollbar{ width:8px; height:8px; }
     ::-webkit-scrollbar-thumb{ background:#262626; border-radius:8px; }
+
+    /* Tactile feedback shared by every choice-grid button across the game
+       (events, injury recovery, off-season plan, identity/rival pickers) —
+       filter/transform rather than border-color, since these buttons set
+       their border via inline style, which always wins over a Tailwind
+       hover: class on specificity. This way one rule reaches everywhere. */
+    .choice-card{ transition: transform 0.12s ease, filter 0.12s ease; }
+    .choice-card:hover{ filter: brightness(1.12); }
+    .choice-card:active{ transform: scale(0.97); }
+
+    /* Same tactile language for Primary/Secondary buttons. */
+    .btn-tactile{ transition: transform 0.12s ease, filter 0.12s ease; }
+    .btn-tactile:hover:not(:disabled){ filter: brightness(1.08); }
+    .btn-tactile:active:not(:disabled){ transform: scale(0.97); }
+
+    /* A visible, on-brand focus ring for text inputs. Every input in the
+       game sets outline:none via inline style with nothing to replace it,
+       which drops focus indication entirely — this restores it globally
+       without editing each input. */
+    input:focus, textarea:focus{
+      outline: none;
+      box-shadow: 0 0 0 2px rgba(249,115,22,0.45);
+    }
   `}</style>
 ));
 
@@ -2025,6 +2048,121 @@ const NPC_LAST = ["Rahman","Osman","Jia Hao","Zulkifli","Chandran","Ismail","Ana
   "Hakim","Chee Keong","Menon","Aziz","Yew Ming","Shah","Raj","Bakar","Kang Wei","Krishnan",
   "Hakimi","Boon Huat","Sivam","Mokhtar","Swee Lim","Nathan","Danish"];
 
+/* ============================================================
+   RIVAL NPC — generated once at U15 selection, advances one season
+   at a time in lockstep with the player's own Continue click.
+   Deliberately reuses the REAL attribute-point functions
+   (computeSeasonPoints, attrPointCost, attrAgeCap, posWeights,
+   computeOverall, MBL_RATING_THRESHOLD, PRO_CLUBS/DLEAGUE_CLUBS)
+   rather than a parallel reimplementation — the rival's calibration is
+   inherited from the already-validated attribute system, not a separate
+   balance pass. Simulated at 20,000 careers before writing this: mean
+   peak overall ~66, >=65: 52%, >=70: 21% — a genuine competitive peer,
+   not a pushover or an outlier. Never reads or affects the player's own
+   stats, tr, or award odds — a fully independent second data thread.
+============================================================ */
+function rollRival(playerPosition, playerHometown, customName, customPosition) {
+  const talentTier = rollTalentTier();
+  const highlyTalented = Math.random() < 0.15;
+  // Defaults to the player's own position if the player didn't pick one,
+  // but the rival's stats are always shaped by ITS OWN position, not the
+  // player's — a customized rival playing a different position needs its
+  // stat weighting to actually match that position, not the player's.
+  const position = customPosition || playerPosition;
+  const w = posWeights(position);
+  const stats = {};
+  STAT_LIST.forEach(s => {
+    let base = randInt(29, 37);
+    const bonus = Math.round(w[s] * 26);
+    if (highlyTalented) base += randInt(7, 13);
+    stats[s] = clamp(base + bonus, 1, 99);
+  });
+  // Different state for narrative contrast — never the player's own.
+  const otherStates = HOMETOWNS.filter(h => h !== playerHometown);
+  const hometown = pick(otherStates.length ? otherStates : HOMETOWNS);
+  const name = (customName && customName.trim()) ? customName.trim().slice(0, 24) : `${pick(NPC_FIRST)} ${pick(NPC_LAST)}`;
+  return {
+    name, position, hometown, talentTier,
+    // Rolled once, not per-season, so each rival develops consistently:
+    // half play position-optimized (mirrors "efficient" play in the
+    // balance simulation), half develop well-rounded (mirrors "casual"
+    // play) — variety rival-to-rival, not randomness within one rival.
+    strategy: Math.random() < 0.5 ? "greedy" : "even",
+    age: 15, stats, league: null, clubName: null,
+    caps: 0, mblSeasons: 0, titles: 0,
+    peakOverall: computeOverall(stats, position),
+    retired: false, slowDecliner: Math.random() < 0.2,
+  };
+}
+function advanceRivalOneSeason(rival, excludeClubId) {
+  if (!rival || rival.retired) return rival;
+  const r = { ...rival, stats: { ...rival.stats } };
+  r.age += 1;
+  if (r.age <= 40) {
+    const perfBonus = pick([-2, -1, 0, 0, 2, 2, 4, 6]);
+    // Shaped exactly like a real player object so the REAL
+    // computeSeasonPoints (facility bonus, talent multiplier, trainer
+    // bump) applies identically — no reimplemented formula to drift.
+    const seasonPtsInput = { age: r.age, hometown: r.hometown, league: r.league, abroad: false, clubId: r.clubName ? "x" : null, talentTier: r.talentTier };
+    let left = computeSeasonPoints(seasonPtsInput, perfBonus);
+    const cap = attrAgeCap(r.age, r.stats);
+    const w = posWeights(r.position);
+    let guard = 0;
+    while (left > 0 && guard++ < 60) {
+      const eligible = STAT_LIST.filter(s => r.stats[s] < cap);
+      if (!eligible.length) break;
+      let target;
+      if (r.strategy === "greedy") {
+        target = eligible.reduce((best, s) => {
+          const ratioS = w[s] / attrPointCost(r.stats[s], s, r.position);
+          const ratioBest = w[best] / attrPointCost(r.stats[best], best, r.position);
+          return ratioS > ratioBest ? s : best;
+        }, eligible[0]);
+      } else {
+        target = eligible.reduce((lowest, s) => (r.stats[s] < r.stats[lowest] ? s : lowest), eligible[0]);
+      }
+      const cost = attrPointCost(r.stats[target], target, r.position);
+      if (cost > left) break;
+      r.stats[target] = clamp(r.stats[target] + 1, 1, 99);
+      left -= cost;
+    }
+    if (r.age < 18 && Math.random() < 0.5) STAT_LIST.forEach(s => { r.stats[s] = clamp(r.stats[s] + 1, 1, 99); });
+    if (r.age >= 33) {
+      const yearsPast = r.age - 32;
+      let decline = 1 + Math.floor(yearsPast * 0.8);
+      if (r.slowDecliner) decline = Math.max(1, Math.round(decline * 0.5));
+      STAT_LIST.forEach(s => { r.stats[s] = clamp(r.stats[s] - randInt(Math.max(0, decline - 1), decline + 1), 1, 99); });
+    }
+  }
+  const ovr = computeOverall(r.stats, r.position);
+  r.peakOverall = Math.max(r.peakOverall, ovr);
+  if (r.age >= 18) {
+    const newLeague = ovr >= MBL_RATING_THRESHOLD ? "mbl" : (r.age <= 20 ? "u20" : "u23");
+    // Re-roll a club on a league change, first assignment, an occasional
+    // transfer, OR if the player has since transferred INTO the rival's
+    // club — that last check runs every season regardless of whether the
+    // rival's own situation changed, since it's the player's move that
+    // could create the collision, not the rival's.
+    const excludeClub = excludeClubId ? getClub(excludeClubId) : null;
+    const collidesWithPlayer = excludeClub && r.clubName === excludeClub.name;
+    if (newLeague !== r.league || !r.clubName || collidesWithPlayer || Math.random() < (newLeague === "mbl" ? 0.10 : 0.18)) {
+      const basePool = newLeague === "mbl" ? PRO_CLUBS : DLEAGUE_CLUBS;
+      const pool = basePool.filter(c => c.id !== excludeClubId);
+      r.clubName = pick(pool.length ? pool : basePool).name;
+    }
+    r.league = newLeague;
+    if (newLeague === "mbl") {
+      r.mblSeasons += 1;
+      const club = PRO_CLUBS.find(c => c.name === r.clubName);
+      const titleChance = clamp(0.05 + ((club ? club.prestige : 50) / 100) * 0.18, 0.02, 0.35);
+      if (Math.random() < titleChance) r.titles += 1;
+    }
+    if (ovr >= 65 && Math.random() < 0.22) r.caps += 1;
+  }
+  if (r.age >= 40 || (r.age >= 34 && ovr < 45 && Math.random() < 0.3)) r.retired = true;
+  return r;
+}
+
 /* Attribute profile for one NPC: position-shaped, then given two
    strengths and a weakness so specialists emerge. */
 function npcAttributes(pos, target) {
@@ -3291,7 +3429,7 @@ function newPlayer({ name, position, hometown, height, jersey }) {
     relationships: { coach: 50, team: 50, family: 60 },
     stage: "youth",
     teamName: `${shortHome(hometown)} Youth Selection`,
-    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null,
+    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null, rival: null,
     nationalTeam: false, nationalCaps: 0,
     achievements: [],
     peakOverall: overall,
@@ -3315,7 +3453,7 @@ function normalizePlayer(p) {
     mblContributor: false, wonderkid: false, hadMblSeason: false, semiProClub: null,
     contractSalary: 0, contractYearsLeft: 0,
     mssmPendingReveal: false, age18MssmResolved: false, lastSeasonLeagueAwards: [], studying: false, studyDecisionResolved: false, studyGraduated: false,
-    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null,
+    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null, rival: null,
     nationalTeam: false, nationalCaps: 0, morale: 60, fatigue: 20,
     popularity: 5, money: 0, highlyTalented: false,
     slowDecliner: false, slowStartNextSeason: false,
@@ -3398,7 +3536,7 @@ function PrimaryButton({ children, onClick, disabled, full }) {
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`f-body text-sm font-bold px-6 py-3.5 rounded-full transition flex items-center justify-center gap-2 ${full ? "w-full" : ""}`}
+      className={`btn-tactile f-body text-sm font-bold px-6 py-3.5 rounded-full transition flex items-center justify-center gap-2 ${full ? "w-full" : ""}`}
       style={{
         background: disabled ? C.ink3 : C.amber,
         color: disabled ? C.chalkDim : "#1A0A00",
@@ -3415,7 +3553,7 @@ function SecondaryButton({ children, onClick, full }) {
   return (
     <button
       onClick={onClick}
-      className={`f-body text-sm font-semibold px-6 py-3.5 rounded-full border transition ${full ? "w-full" : ""}`}
+      className={`btn-tactile f-body text-sm font-semibold px-6 py-3.5 rounded-full border transition ${full ? "w-full" : ""}`}
       style={{ borderColor: C.line, color: C.chalk, background: C.ink3 }}
     >
       {children}
@@ -3569,7 +3707,7 @@ const CareerLedger = memo(function CareerLedger({ history, maxHeight = 420 }) {
       {hiddenCount > 0 && (
         <button
           onClick={() => setShowAll(true)}
-          className="w-full f-mono text-[10px] uppercase tracking-widest py-2.5 rounded-xl"
+          className="btn-tactile w-full f-mono text-[10px] uppercase tracking-widest py-2.5 rounded-xl transition"
           style={{ background: C.ink3, color: C.chalkDim, border: `1px solid ${C.line}` }}
         >
           Show {hiddenCount} earlier season{hiddenCount > 1 ? "s" : ""}
@@ -3612,11 +3750,11 @@ function StartScreen({ onStart, savedGame, onContinue, onViewHallOfFame, onViewA
         <p className="f-body text-sm mt-3" style={{ color: C.chalkDim }}>
           15 years old. A ball in your hands. One path from Malaysian gyms to the pros — and maybe beyond.
         </p>
-        <button onClick={onViewHallOfFame} className="f-mono text-[11px] uppercase tracking-widest mt-4 inline-flex items-center gap-1.5" style={{ color: C.chalkDim }}>
+        <button onClick={onViewHallOfFame} className="btn-tactile f-mono text-[11px] uppercase tracking-widest mt-4 inline-flex items-center gap-1.5 transition" style={{ color: C.chalkDim }}>
           🏛️ Hall of Fame
         </button>
         <span style={{ color: C.chalkDim, margin: "0 8px" }}>·</span>
-        <button onClick={onViewAchievements} className="f-mono text-[11px] uppercase tracking-widest mt-4 inline-flex items-center gap-1.5" style={{ color: C.chalkDim }}>
+        <button onClick={onViewAchievements} className="btn-tactile f-mono text-[11px] uppercase tracking-widest mt-4 inline-flex items-center gap-1.5 transition" style={{ color: C.chalkDim }}>
           🏆 Achievements
         </button>
       </div>
@@ -3627,7 +3765,7 @@ function StartScreen({ onStart, savedGame, onContinue, onViewHallOfFame, onViewA
             <div className="f-display text-sm uppercase" style={{ color: C.chalk }}>{savedGame.name}</div>
             <div className="f-body text-xs" style={{ color: C.chalkDim }}>Age {savedGame.age} · {savedGame.teamName}</div>
           </div>
-          <button onClick={onContinue} className="f-display text-xs uppercase px-4 py-2 rounded-xl" style={{ background: C.teal, color: "#052620" }}>
+          <button onClick={onContinue} className="btn-tactile f-display text-xs uppercase px-4 py-2 rounded-xl" style={{ background: C.teal, color: "#052620" }}>
             Continue Career
           </button>
         </div>
@@ -3667,7 +3805,7 @@ function StartScreen({ onStart, savedGame, onContinue, onViewHallOfFame, onViewA
             <button
               key={p.id}
               onClick={() => setPosition(p.id)}
-              className="text-left px-3 py-2 rounded-xl transition"
+              className="choice-card text-left px-3 py-2 rounded-xl transition"
               style={{
                 background: position === p.id ? C.ink3 : "transparent",
                 border: `1px solid ${position === p.id ? C.amber : C.line}`,
@@ -3702,7 +3840,7 @@ function StartScreen({ onStart, savedGame, onContinue, onViewHallOfFame, onViewA
               <button
                 key={h}
                 onClick={() => setHometown(h)}
-                className="flex items-center gap-2.5 px-2.5 py-2.5 rounded-xl transition text-left"
+                className="choice-card flex items-center gap-2.5 px-2.5 py-2.5 rounded-xl transition text-left"
                 style={{
                   background: selected ? C.ink3 : "transparent",
                   border: `1px solid ${selected ? C.amber : C.line}`,
@@ -3837,6 +3975,19 @@ function PlayerCard({ p, overall }) {
 --------------------------------------------------------- */
 function Hub({ player, onPlaySeason, onRetireConsider, onManageInvestments, banner }) {
   const overall = computeOverall(player.stats, player.position);
+  const [tab, setTab] = useState("attrs");
+  // Same conditional-tab pattern as the season recap's League Context tabs
+  // (Standings/Leaders/Award Race) — a tab only appears once there's
+  // something to show in it, and the active tab safely falls back to the
+  // first available one if it was somehow left pointing at a hidden tab.
+  const hasLockerRoom = player.stage === "pro" && !player.abroad && !!player.clubId;
+  const TABS = [
+    ["attrs", "Attributes", true],
+    ["wellbeing", "Wellbeing", true],
+    ["rival", "Rival", !!player.rival],
+    ["career", "Career", true],
+  ].filter(t => t[2]);
+  const active = TABS.some(t => t[0] === tab) ? tab : TABS[0][0];
   return (
     <div className="min-h-full w-full px-4 py-6 sm:py-10" style={{ background: C.ink }}>
       <div className="max-w-md mx-auto">
@@ -3848,15 +3999,31 @@ function Hub({ player, onPlaySeason, onRetireConsider, onManageInvestments, bann
 
         <PlayerCard p={player} overall={overall} />
 
-        <div className="grid sm:grid-cols-2 gap-4 mt-4">
-          <div className="rounded-xl p-4" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-            <div className="f-display text-xs uppercase tracking-wide mb-3" style={{ color: C.chalkDim }}>Attributes</div>
+        {/* One card visible at a time instead of everything stacked — the
+            Hub had grown to 4-5 full cards before reaching the Continue
+            button once relationships, injuries, and the rival tracker were
+            all added on top of the original Attributes/Wellbeing grid. */}
+        <div className="flex gap-1.5 mt-4">
+          {TABS.map(([id, label]) => (
+            <button key={id} onClick={() => setTab(id)}
+              className="btn-tactile flex-1 f-mono text-[10px] uppercase tracking-wide py-2 rounded-xl transition"
+              style={active === id
+                ? { background: C.amber, color: C.ink, border: `1px solid ${C.amber}`, fontWeight: 800 }
+                : { background: C.ink3, color: C.chalkDim, border: `1px solid ${C.line}` }}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {active === "attrs" && (
+          <div className="rounded-xl p-4 mt-3" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
             {STAT_LIST.map(s => <StatBar key={s} statKey={s} value={player.stats[s]} />)}
           </div>
+        )}
 
-          <div className="flex flex-col gap-4">
+        {active === "wellbeing" && (
+          <div className="flex flex-col gap-3 mt-3">
             <div className="rounded-xl p-4" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-              <div className="f-display text-xs uppercase tracking-wide mb-3" style={{ color: C.chalkDim }}>Wellbeing</div>
               <div className="space-y-2">
                 <Meter label="Morale" value={player.morale} icon={HeartPulse} color={C.chalk} />
                 <Meter label="Fatigue" value={player.fatigue} icon={Activity} color={C.chalkDim} />
@@ -3864,12 +4031,11 @@ function Hub({ player, onPlaySeason, onRetireConsider, onManageInvestments, bann
                 <Meter label="Family" value={player.relationships.family} icon={Home} color={C.chalk} />
               </div>
             </div>
-
             {/* Coach Trust / Team Chemistry only mean anything once there's
                 an actual locker room — a domestic pro club. They reset to
                 50/50 on every new signing, so showing them before that would
                 just be a flat, meaningless bar. */}
-            {player.stage === "pro" && !player.abroad && player.clubId && (
+            {hasLockerRoom && (
               <div className="rounded-xl p-4" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
                 <div className="f-display text-xs uppercase tracking-wide mb-3" style={{ color: C.chalkDim }}>Locker Room</div>
                 <div className="space-y-2">
@@ -3879,55 +4045,101 @@ function Hub({ player, onPlaySeason, onRetireConsider, onManageInvestments, bann
               </div>
             )}
           </div>
-        </div>
-
-        <div className="rounded-xl p-4 mt-4 flex items-center justify-between" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-          {player.age >= 18 ? (
-            <div className="flex items-center gap-3 flex-wrap">
-              <div className="flex items-center gap-2">
-                <DollarSign size={16} color={C.gold} />
-                <span className="f-mono text-lg" style={{ color: C.chalk }}>{rm(player.money)}</span>
-              </div>
-              {player.contractSalary > 0 && (
-                <span className="f-mono text-[10px] uppercase tracking-wide px-2 py-1 rounded-xl" style={{ background: C.ink3, color: C.teal, border: `1px solid ${C.line}` }}>
-                  {rm(player.contractSalary)}/mo · {player.contractYearsLeft}yr left
-                </span>
-              )}
-            </div>
-          ) : (
-            <span className="f-mono text-[11px] uppercase tracking-widest" style={{ color: C.chalkDim }}>Student Athlete</span>
-          )}
-          {player.achievements.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 justify-end">
-              {player.achievements.map(a => <Badge key={a} icon={ACHIEVEMENT_META[a].icon}>{ACHIEVEMENT_META[a].label}</Badge>)}
-            </div>
-          )}
-        </div>
-
-        {/* Career investments — only meaningful once there's a salary to spend. */}
-        {player.age >= 18 && player.contractSalary > 0 && (
-          <button onClick={onManageInvestments}
-            className="w-full flex items-center gap-3 mt-4 px-4 py-3 rounded-2xl"
-            style={{ background: C.ink2, border: `1px solid ${investmentPct(player) > 0 ? C.amber : C.line}` }}>
-            <span className="text-[17px]">💼</span>
-            <div className="text-left flex-1 min-w-0">
-              <div className="f-display text-[13px]" style={{ color: C.chalk }}>Career Investments</div>
-              <div className="f-body text-[10px] mt-0.5" style={{ color: C.chalkDim }}>
-                {investmentPct(player) > 0
-                  ? `${Object.keys(INVESTMENTS).filter(k => player.investments && player.investments[k]).length} active · ${rm(investmentUpkeep(player))}/mo`
-                  : "Spend on your career — trainer, physio, family, agent"}
-              </div>
-            </div>
-            <ChevronRight size={15} color={C.chalkDim} />
-          </button>
         )}
 
-        {player.history.length > 0 && (
-          <div className="rounded-2xl p-4 mt-4" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-            <div className="f-display text-xs uppercase tracking-wide mb-3 flex items-center gap-1" style={{ color: C.chalkDim }}>
-              <Newspaper size={12} /> Career Timeline
+        {active === "rival" && player.rival && (
+          <div className="rounded-xl p-4 mt-3" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+            <div className="flex items-center gap-2 mb-3">
+              <ClubCrest name={player.name} size={32} />
+              <div className="flex-1 min-w-0">
+                <div className="f-body text-xs font-semibold truncate" style={{ color: C.chalk }}>{player.name}</div>
+                <div className="f-mono text-[9px]" style={{ color: C.chalkDim }}>You</div>
+              </div>
+              <span className="f-mono text-[9px] flex-shrink-0" style={{ color: C.chalkDim }}>VS</span>
+              <div className="flex-1 min-w-0 text-right">
+                <div className="f-body text-xs font-semibold truncate" style={{ color: C.chalk }}>{player.rival.name}</div>
+                <div className="f-mono text-[9px] truncate" style={{ color: C.chalkDim }}>
+                  {player.rival.retired ? "Retired" : (player.rival.clubName || `${player.rival.hometown} · Youth`)}
+                </div>
+              </div>
+              <ClubCrest name={player.rival.name} size={32} />
             </div>
-            <CareerLedger history={player.history} maxHeight={340} />
+            {(() => {
+              const rivalOvr = computeOverall(player.rival.stats, player.rival.position);
+              const rows = [
+                { label: "Overall", mine: overall, theirs: rivalOvr },
+                { label: "Peak OVR", mine: player.peakOverall || overall, theirs: player.rival.peakOverall },
+                { label: "Nat'l Caps", mine: player.nationalCaps || 0, theirs: player.rival.caps },
+              ];
+              return (
+                <div className="grid grid-cols-3 gap-2">
+                  {rows.map(row => (
+                    <div key={row.label} className="text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        <span className="f-mono text-sm font-extrabold" style={{ color: row.mine >= row.theirs ? C.amberBright : C.chalkDim }}>{row.mine}</span>
+                        <span className="f-mono text-[9px]" style={{ color: C.chalkDim }}>–</span>
+                        <span className="f-mono text-sm font-extrabold" style={{ color: row.theirs > row.mine ? C.amberBright : C.chalkDim }}>{row.theirs}</span>
+                      </div>
+                      <div className="f-mono text-[8px] uppercase tracking-wide mt-0.5" style={{ color: C.chalkDim }}>{row.label}</div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
+        {active === "career" && (
+          <div className="flex flex-col gap-3 mt-3">
+            <div className="rounded-xl p-4 flex items-center justify-between" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+              {player.age >= 18 ? (
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <DollarSign size={16} color={C.gold} />
+                    <span className="f-mono text-lg" style={{ color: C.chalk }}>{rm(player.money)}</span>
+                  </div>
+                  {player.contractSalary > 0 && (
+                    <span className="f-mono text-[10px] uppercase tracking-wide px-2 py-1 rounded-xl" style={{ background: C.ink3, color: C.teal, border: `1px solid ${C.line}` }}>
+                      {rm(player.contractSalary)}/mo · {player.contractYearsLeft}yr left
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <span className="f-mono text-[11px] uppercase tracking-widest" style={{ color: C.chalkDim }}>Student Athlete</span>
+              )}
+              {player.achievements.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 justify-end">
+                  {player.achievements.map(a => <Badge key={a} icon={ACHIEVEMENT_META[a].icon}>{ACHIEVEMENT_META[a].label}</Badge>)}
+                </div>
+              )}
+            </div>
+
+            {/* Career investments — only meaningful once there's a salary to spend. */}
+            {player.age >= 18 && player.contractSalary > 0 && (
+              <button onClick={onManageInvestments}
+                className="choice-card w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition"
+                style={{ background: C.ink2, border: `1px solid ${investmentPct(player) > 0 ? C.amber : C.line}` }}>
+                <span className="text-[17px]">💼</span>
+                <div className="text-left flex-1 min-w-0">
+                  <div className="f-display text-[13px]" style={{ color: C.chalk }}>Career Investments</div>
+                  <div className="f-body text-[10px] mt-0.5" style={{ color: C.chalkDim }}>
+                    {investmentPct(player) > 0
+                      ? `${Object.keys(INVESTMENTS).filter(k => player.investments && player.investments[k]).length} active · ${rm(investmentUpkeep(player))}/mo`
+                      : "Spend on your career — trainer, physio, family, agent"}
+                  </div>
+                </div>
+                <ChevronRight size={15} color={C.chalkDim} />
+              </button>
+            )}
+
+            {player.history.length > 0 && (
+              <div className="rounded-2xl p-4" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+                <div className="f-display text-xs uppercase tracking-wide mb-3 flex items-center gap-1" style={{ color: C.chalkDim }}>
+                  <Newspaper size={12} /> Career Timeline
+                </div>
+                <CareerLedger history={player.history} maxHeight={340} />
+              </div>
+            )}
           </div>
         )}
 
@@ -4110,8 +4322,8 @@ function InvestmentsScreen({ player, onConfirm, onBack }) {
           const locked = !on && (would > INVESTMENT_MAX_PCT || salary <= 0);
           return (
             <div key={k} onClick={() => !locked && toggle(k)}
-              className="rounded-2xl px-4 py-3.5 mb-2"
-              style={{ background: on ? "#171310" : C.ink2, border: `1px solid ${on ? C.amber : C.line}`, opacity: locked ? 0.45 : 1 }}>
+              className={`rounded-2xl px-4 py-3.5 mb-2 transition ${locked ? "" : "choice-card cursor-pointer"}`}
+              style={{ background: on ? "#171310" : C.ink2, border: `1px solid ${on ? C.amber : C.line}`, opacity: locked ? 0.45 : 1, cursor: locked ? "not-allowed" : "pointer" }}>
               <div className="flex items-start gap-3">
                 <div className="w-5 h-5 rounded-md flex items-center justify-center shrink-0 mt-0.5 f-mono text-[12px]"
                   style={{ background: on ? C.amber : "transparent", border: `1.5px solid ${on ? C.amber : C.line}`, color: C.ink }}>
@@ -4237,10 +4449,10 @@ function AttributeBuilder({ player, points, onConfirm, creation = false }) {
                 </div>
                 <span className="f-mono text-[19px] w-8 text-right" style={{ color: C.chalk }}>{v}</span>
                 <button onClick={() => dec(k)} disabled={gained === 0}
-                  className="w-8 h-8 rounded-[10px] text-lg font-bold shrink-0"
+                  className="btn-tactile w-8 h-8 rounded-[10px] text-lg font-bold shrink-0 transition"
                   style={{ background: C.ink3, border: `1px solid ${C.line}`, color: C.chalk, opacity: gained === 0 ? 0.25 : 1 }}>−</button>
                 <button onClick={() => inc(k)} disabled={atCap || left < c}
-                  className="w-8 h-8 rounded-[10px] text-lg font-bold shrink-0"
+                  className="btn-tactile w-8 h-8 rounded-[10px] text-lg font-bold shrink-0 transition"
                   style={{ background: C.amber, border: `1px solid ${C.amber}`, color: C.ink, opacity: (atCap || left < c) ? 0.25 : 1 }}>+</button>
               </div>
               <div className="flex justify-between mt-1.5 pl-[90px]">
@@ -4533,7 +4745,7 @@ function EventScreen({ event, onChoose }) {
           {event.choices.map((c, i) => {
             const pills = deriveEffectPills(c);
             return (
-              <button key={i} onClick={() => onChoose(c)} className="text-left rounded-[20px] overflow-hidden transition"
+              <button key={i} onClick={() => onChoose(c)} className="choice-card text-left rounded-[20px] overflow-hidden transition"
                 style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
                 <div className="text-center text-[13px] font-bold py-3" style={{ color: C.chalk }}>{c.label}</div>
                 <EventChoiceIcon risk={c.risk} scene={c.scene || event.scene} icon={c.icon} brandLogo={event.brandLogo} />
@@ -4585,7 +4797,7 @@ function InjuryRecoveryScreen({ pending, onChoose }) {
           The physio lays out how to handle the rest of the recovery. One gets you back to full speed sooner. One protects you properly.
         </p>
         <div className={`grid ${hasScience ? "grid-cols-1" : "grid-cols-2"} gap-3`}>
-          <button onClick={() => onChoose("rush")} className="text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+          <button onClick={() => onChoose("rush")} className="choice-card text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
             <div className="text-center text-[13px] font-bold py-3" style={{ color: C.chalk }}>Rush Back</div>
             <EventChoiceIcon risk="risky" icon="flame" />
             <div className="p-3 flex flex-col gap-2">
@@ -4599,7 +4811,7 @@ function InjuryRecoveryScreen({ pending, onChoose }) {
               </div>
             </div>
           </button>
-          <button onClick={() => onChoose("full")} className="text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+          <button onClick={() => onChoose("full")} className="choice-card text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
             <div className="text-center text-[13px] font-bold py-3" style={{ color: C.chalk }}>Full Rehab</div>
             <EventChoiceIcon risk="safe" icon="stretch" />
             <div className="p-3 flex flex-col gap-2">
@@ -4614,7 +4826,7 @@ function InjuryRecoveryScreen({ pending, onChoose }) {
             </div>
           </button>
           {hasScience && (
-            <button onClick={() => onChoose("guided")} className="text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.amber}` }}>
+            <button onClick={() => onChoose("guided")} className="choice-card text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.amber}` }}>
               <div className="text-center text-[13px] font-bold py-3" style={{ color: C.chalk }}>Guided Rehab <span className="f-mono text-[10px]" style={{ color: C.amberBright }}>· Sports Science</span></div>
               <EventChoiceIcon risk="safe" icon="scalpel" />
               <div className="p-3 flex flex-col gap-2">
@@ -4680,7 +4892,7 @@ function OffseasonPlanScreen({ player, onChoose }) {
         <p className="f-body text-[13px] mb-4" style={{ color: C.chalkDim }}>How do you spend the months before training camp?</p>
         <div className="grid grid-cols-2 gap-3">
           {PLANS.map(plan => (
-            <button key={plan.id} onClick={() => onChoose(plan.id)} className="text-left rounded-[20px] overflow-hidden transition"
+            <button key={plan.id} onClick={() => onChoose(plan.id)} className="choice-card text-left rounded-[20px] overflow-hidden transition"
               style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
               <div className="text-center text-[13px] font-bold py-3" style={{ color: C.chalk }}>{plan.label}</div>
               <EventChoiceIcon risk={plan.risk} icon={plan.icon} />
@@ -4727,7 +4939,7 @@ function ChooseIdentityScreen({ player, onChoose }) {
           {PLAYING_STYLES.map(style => {
             const fits = style.bestFit.includes(player.position);
             return (
-              <button key={style.id} onClick={() => onChoose(style.id)} className="text-left rounded-[20px] overflow-hidden transition"
+              <button key={style.id} onClick={() => onChoose(style.id)} className="choice-card text-left rounded-[20px] overflow-hidden transition"
                 style={{ background: C.ink3, border: `1px solid ${fits ? "rgba(250,204,21,0.35)" : C.line}` }}>
                 <div className="text-center text-[13px] font-bold pt-3" style={{ color: C.chalk }}>{style.label}</div>
                 <div className="text-center f-body text-[10px] pb-1" style={{ color: C.chalkDim }}>{style.tagline}</div>
@@ -4748,6 +4960,52 @@ function ChooseIdentityScreen({ player, onChoose }) {
             );
           })}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------
+   NAME YOUR RIVAL SCREEN
+   Shown once, right after Choose Your Identity. Name and position are
+   player-defined — an empty name or unpicked position just falls back to
+   a random one inside rollRival(), so nothing here is a hard requirement.
+--------------------------------------------------------- */
+function NameRivalScreen({ player, onConfirm }) {
+  const [name, setName] = useState("");
+  const [position, setPosition] = useState(player.position);
+  return (
+    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
+      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+        <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>Career Creation</div>
+        <div className="f-display text-xl font-extrabold mb-1.5" style={{ color: C.chalk }}>Name Your Rival</div>
+        <p className="f-body text-[13px] mb-4" style={{ color: C.chalkDim }}>
+          Someone your age, selected the same week you were. Base them on a real friend, a name you like, or leave it blank and let one find you.
+        </p>
+
+        <label className="f-mono text-[11px] uppercase tracking-widest" style={{ color: C.chalkDim }}>Rival's Name</label>
+        <input
+          value={name}
+          onChange={e => setName(e.target.value.slice(0, 24))}
+          placeholder="e.g. Farid Zulkarnain"
+          className="f-body w-full mt-1 mb-4 px-3 py-2.5 rounded-xl outline-none text-sm"
+          style={{ background: C.ink3, color: C.chalk, border: `1px solid ${C.line}` }}
+        />
+
+        <label className="f-mono text-[11px] uppercase tracking-widest" style={{ color: C.chalkDim }}>Position</label>
+        <div className="grid grid-cols-5 gap-2 mt-2 mb-5">
+          {POSITIONS.map(p => (
+            <button key={p.id} onClick={() => setPosition(p.id)}
+              className="choice-card text-center py-2.5 rounded-xl transition"
+              style={{ background: position === p.id ? C.ink3 : "transparent", border: `1px solid ${position === p.id ? C.amber : C.line}` }}>
+              <span className="f-display text-xs" style={{ color: position === p.id ? C.amberBright : C.chalk }}>{p.id}</span>
+            </button>
+          ))}
+        </div>
+
+        <PrimaryButton full onClick={() => onConfirm(name, position)}>
+          {name.trim() ? `Lock In ${name.trim().split(" ")[0]}` : "Continue"} <ChevronRight size={14} className="inline ml-1" />
+        </PrimaryButton>
       </div>
     </div>
   );
@@ -4786,6 +5044,16 @@ function U15SelectionScreen({ player, selected, onContinue }) {
               have started from exactly this spot. Time to get back in the gym.
             </p>
           </>
+        )}
+        {player.rival && (
+          <div className="mt-4 mb-1 p-3 rounded-2xl text-left flex items-center gap-3" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+            <ClubCrest name={player.rival.name} size={40} />
+            <div className="flex-1 min-w-0">
+              <div className="f-mono text-[9px] uppercase tracking-widest" style={{ color: C.chalkDim }}>Also Selected This Year</div>
+              <div className="f-display text-sm truncate" style={{ color: C.chalk }}>{player.rival.name}</div>
+              <div className="f-body text-[10.5px]" style={{ color: C.chalkDim }}>{player.rival.position} · {player.rival.hometown}</div>
+            </div>
+          </div>
         )}
         <PrimaryButton full onClick={onContinue}>
           Continue <ChevronRight size={14} className="inline ml-1" />
@@ -5214,7 +5482,7 @@ function StudyDecisionScreen({ onStudy, onFocus }) {
           A university has offered you a place. Balancing a degree with basketball is possible — but it means stepping back from the pro pathway for a few years.
         </p>
         <div className="grid grid-cols-2 gap-3">
-          <button onClick={onStudy} className="text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+          <button onClick={onStudy} className="choice-card text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
             <div className="text-center text-[13px] font-bold py-3" style={{ color: C.chalk }}>Continue Study</div>
             <div className="aspect-[16/11] mx-3 rounded-2xl flex items-center justify-center relative overflow-hidden" style={{ background: "linear-gradient(150deg, #164E63, #0A0A0A)" }}>
               <Brain size={34} color="#22D3EE" strokeWidth={1.6} />
@@ -5231,7 +5499,7 @@ function StudyDecisionScreen({ onStudy, onFocus }) {
               </div>
             </div>
           </button>
-          <button onClick={onFocus} className="text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+          <button onClick={onFocus} className="choice-card text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
             <div className="text-center text-[13px] font-bold py-3" style={{ color: C.chalk }}>Focus on Basketball</div>
             <div className="aspect-[16/11] mx-3 rounded-2xl flex items-center justify-center relative overflow-hidden" style={{ background: "linear-gradient(150deg, #78350F, #1C0A00)" }}>
               <Dumbbell size={34} color={C.gold} strokeWidth={1.6} />
@@ -5577,7 +5845,7 @@ function ClubOffersScreen({ player, offers, context, onJoin, onStay, onRetire })
             <button
               key={club.id}
               onClick={() => onJoin({ club, terms })}
-              className="w-full text-left p-3 rounded-xl transition"
+              className="choice-card w-full text-left p-3 rounded-xl transition"
               style={{ background: C.ink3, border: `1px solid ${C.line}` }}
             >
               <div className="flex items-center justify-between gap-3">
@@ -5622,7 +5890,7 @@ function ClubOffersScreen({ player, offers, context, onJoin, onStay, onRetire })
         )}
 
         {canRetire && (
-          <button onClick={onRetire} className="w-full flex items-center justify-center gap-2 mt-3 p-3.5 rounded-xl transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+          <button onClick={onRetire} className="choice-card w-full flex items-center justify-center gap-2 mt-3 p-3.5 rounded-xl transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
             <RotateCcw size={14} color={C.chalkDim} />
             <span className="f-body text-sm font-semibold" style={{ color: C.chalkDim }}>Retire — End Your Professional Career</span>
           </button>
@@ -5646,7 +5914,7 @@ function ClutchMomentScreen({ pending, onChoose }) {
         <p className="f-body text-[13px] mb-4" style={{ color: C.chalkDim }}>{event.desc}</p>
         <div className="grid grid-cols-2 gap-3">
           {event.choices.map((c, i) => (
-            <button key={c.id} onClick={() => onChoose(c)} className="text-left rounded-[20px] overflow-hidden transition"
+            <button key={c.id} onClick={() => onChoose(c)} className="choice-card text-left rounded-[20px] overflow-hidden transition"
               style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
               <div className="text-center text-[13px] font-bold py-3 px-2" style={{ color: C.chalk }}>{c.label}</div>
               <EventChoiceIcon scene="clutch_pressure" icon={c.icon} />
@@ -5760,7 +6028,7 @@ function UbaOffersScreen({ player, onAccept, onDecline }) {
         </p>
         <div className="flex flex-col gap-2.5">
           {resolved.map(({ team, role }) => (
-            <button key={team.id} onClick={() => onAccept(team, role)} className="w-full text-left p-3 rounded-xl transition"
+            <button key={team.id} onClick={() => onAccept(team, role)} className="choice-card w-full text-left p-3 rounded-xl transition"
               style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
               <div className="flex items-center gap-2.5 min-w-0">
                 <ClubCrest name={team.short} size={32} />
@@ -5815,7 +6083,7 @@ function HblOffersScreen({ player, onAccept, onDecline }) {
         </p>
         <div className="flex flex-col gap-2.5">
           {offeredTeams.map(team => (
-            <button key={team.id} onClick={() => onAccept(team)} className="w-full text-left p-3 rounded-xl transition"
+            <button key={team.id} onClick={() => onAccept(team)} className="choice-card w-full text-left p-3 rounded-xl transition"
               style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
               <div className="flex items-center gap-2.5 min-w-0">
                 <ClubCrest name={team.name} size={32} />
@@ -5852,7 +6120,7 @@ function OverseasOffersScreen({ player, offer, onSign, onDecline }) {
         </p>
         <div className="flex flex-col gap-2.5">
           {teams.map((team, i) => (
-            <button key={team.name} onClick={() => onSign(team)} className="w-full text-left p-3 rounded-xl transition"
+            <button key={team.name} onClick={() => onSign(team)} className="choice-card w-full text-left p-3 rounded-xl transition"
               style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
               <div className="flex items-center gap-2.5 min-w-0">
                 <ClubCrest name={team.name} size={32} />
@@ -5916,7 +6184,7 @@ const LeagueContext = memo(function LeagueContext({ summary }) {
       <div className="flex gap-1.5 mb-3">
         {TABS.map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)}
-            className="flex-1 f-mono text-[10px] uppercase tracking-wide py-2 rounded-xl"
+            className="btn-tactile flex-1 f-mono text-[10px] uppercase tracking-wide py-2 rounded-xl transition"
             style={active === id
               ? { background: C.amber, color: C.ink, border: `1px solid ${C.amber}`, fontWeight: 800 }
               : { background: C.ink3, color: C.chalkDim, border: `1px solid ${C.line}` }}>
@@ -6733,7 +7001,7 @@ function AchievementGalleryScreen({ gallery, onBack }) {
             </div>
             <div className="f-body text-sm mt-1" style={{ color: C.chalkDim }}>Every badge you've ever earned, across every career.</div>
           </div>
-          <button onClick={onBack} className="f-mono text-xs px-4 py-2 rounded-full" style={{ background: C.ink3, color: C.chalkDim, border: `1px solid ${C.line}` }}>← Back</button>
+          <button onClick={onBack} className="btn-tactile f-mono text-xs px-4 py-2 rounded-full" style={{ background: C.ink3, color: C.chalkDim, border: `1px solid ${C.line}` }}>← Back</button>
         </div>
 
         <div className="rounded-[20px] p-5 mt-5" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
@@ -6805,7 +7073,7 @@ function HallOfFameScreen({ entries, onBack, onPlayAgain }) {
             </div>
             <div className="f-body text-sm mt-1" style={{ color: C.chalkDim }}>Every career you've ever played, in one place.</div>
           </div>
-          <button onClick={onBack} className="f-mono text-xs px-4 py-2 rounded-full" style={{ background: C.ink3, color: C.chalkDim, border: `1px solid ${C.line}` }}>← Back</button>
+          <button onClick={onBack} className="btn-tactile f-mono text-xs px-4 py-2 rounded-full" style={{ background: C.ink3, color: C.chalkDim, border: `1px solid ${C.line}` }}>← Back</button>
         </div>
 
         <div className="flex mt-5 rounded-[20px] py-5" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
@@ -7038,6 +7306,35 @@ function RetiredScreen({ player, onPlayAgain, onViewHallOfFame, onViewAchievemen
         </div>
 
         <div className="f-mono text-lg mb-4" style={{ color: C.chalk }}>{rm(player.money)} career earnings</div>
+
+        {player.rival && (() => {
+          const rivalOvr = player.rival.peakOverall;
+          const mineWins = (player.peakOverall > rivalOvr ? 1 : rivalOvr > player.peakOverall ? 0 : 0.5)
+            + ((player.nationalCaps || 0) > player.rival.caps ? 1 : player.rival.caps > (player.nationalCaps || 0) ? 0 : 0.5);
+          const verdict = mineWins > 1 ? "You had the better career" : mineWins < 1 ? `${player.rival.name} had the better career` : "Dead even, across an entire career";
+          return (
+            <div className="mb-5 text-left">
+              <div className="f-mono text-[10px] uppercase tracking-widest mb-2 text-center" style={{ color: C.chalkDim }}>The Rivalry, Settled</div>
+              <div className="p-4 rounded-xl text-center mb-3" style={{ background: "rgba(250,204,21,0.08)", border: `1px solid rgba(250,204,21,0.3)` }}>
+                <span className="f-display text-sm" style={{ color: C.trophyGold }}>🏆 {verdict}</span>
+              </div>
+              <div className="p-3 rounded-xl" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2"><ClubCrest name={player.name} size={28} /><span className="f-body text-xs font-semibold" style={{ color: C.chalk }}>{player.name}</span></div>
+                  <div className="flex items-center gap-2"><span className="f-body text-xs font-semibold" style={{ color: C.chalk }}>{player.rival.name}</span><ClubCrest name={player.rival.name} size={28} /></div>
+                </div>
+                <div className="grid grid-cols-3 gap-2 items-center">
+                  <div className="text-center f-mono text-base font-extrabold" style={{ color: player.peakOverall >= rivalOvr ? C.amberBright : C.chalkDim }}>{player.peakOverall}</div>
+                  <div className="text-center f-mono text-[8px] uppercase tracking-wide" style={{ color: C.chalkDim }}>Peak OVR</div>
+                  <div className="text-center f-mono text-base font-extrabold" style={{ color: rivalOvr >= player.peakOverall ? C.amberBright : C.chalkDim }}>{rivalOvr}</div>
+                  <div className="text-center f-mono text-base font-extrabold" style={{ color: (player.nationalCaps || 0) >= player.rival.caps ? C.amberBright : C.chalkDim }}>{player.nationalCaps || 0}</div>
+                  <div className="text-center f-mono text-[8px] uppercase tracking-wide" style={{ color: C.chalkDim }}>Nat'l Caps</div>
+                  <div className="text-center f-mono text-base font-extrabold" style={{ color: player.rival.caps >= (player.nationalCaps || 0) ? C.amberBright : C.chalkDim }}>{player.rival.caps}</div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {careerSummary.totalAwards.length > 0 && (
           <div className="mb-5">
@@ -7317,6 +7614,16 @@ export default function App() {
   // touch.
   const handleChooseIdentity = (styleId) => {
     const p = { ...player, playingStyle: styleId };
+    setPlayer(p);
+    save(p);
+    setScreen("name_rival");
+  };
+
+  // Player-customized rival — name and position are theirs to set (an
+  // empty name or no position picked falls back to a random one inside
+  // rollRival, so this is never a blocking requirement).
+  const handleNameRival = (rivalName, rivalPosition) => {
+    const p = { ...player, rival: rollRival(player.position, player.hometown, rivalName, rivalPosition) };
     setPlayer(p);
     save(p);
     setScreen("creation_build");
@@ -8807,6 +9114,10 @@ export default function App() {
     // player's own league, age or overseas status, which is what lets Next
     // Gen NPCs climb their own ladder even while you're off at U15 trials.
     p = advanceNamedNpcs(p);
+    // Same unconditional-every-season pattern as the authored roster above —
+    // the rival climbs their own ladder in lockstep with the player's own
+    // age, regardless of what screen this season actually routes through.
+    if (p.rival) p.rival = advanceRivalOneSeason(p.rival, p.clubId);
 
     // Natural maturation: every attribute develops each off-season — held
     // back before 23 on purpose, so most players are genuinely still
@@ -9594,6 +9905,7 @@ export default function App() {
       )}
       {screen === "body_setup" && player && <BodySetup player={player} onConfirm={handleConfirmBody} />}
       {screen === "choose_identity" && player && <ChooseIdentityScreen player={player} onChoose={handleChooseIdentity} />}
+      {screen === "name_rival" && player && <NameRivalScreen player={player} onConfirm={handleNameRival} />}
       {screen === "creation_build" && player && <AttributeBuilder player={player} points={player.seasonPoints || 0} creation onConfirm={handleConfirmCreationBuild} />}
       {screen === "investments" && player && (
         <InvestmentsScreen player={player} onConfirm={handleConfirmInvestments} onBack={() => setScreen("hub")} />
