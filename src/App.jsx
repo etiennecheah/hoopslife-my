@@ -243,6 +243,16 @@ const SEMI_PRO_CLUBS = [
 function getClub(id) {
   return PRO_CLUBS.find(c => c.id === id) || SEMI_PRO_CLUBS.find(c => c.id === id) || null;
 }
+/* U20/U23 D-League composition: pro clubs field a B-team here (the player
+   can already be assigned to one — see generateClubOffers/computeClubTerms)
+   alongside all semi-pro sides, matching the design comment on LEAGUE
+   above. Three sites previously built D-league team identity from
+   SEMI_PRO_CLUBS alone: NPC club-name generation (x2) and the standings
+   table itself — meaning a player actually signed to a pro club's B-team
+   could open their own league standings and not find their own team in
+   it. Shared here so all three stay consistent. MBL keeps using PRO_CLUBS
+   only elsewhere, unaffected — only the six first teams play in it. */
+const DLEAGUE_CLUBS = [...PRO_CLUBS, ...SEMI_PRO_CLUBS];
 function isSemiProClub(club) { return !!club && club.tier === "semipro"; }
 
 /* ============================================================
@@ -1280,6 +1290,29 @@ const EVENT_POOL = [
       { label: "Stick to the game plan", icon: "clipboard", relationships: { coach: 6, team: 4 },
         result: "You trust the system. Your team wins, quietly." },
     ]},
+  /* Team Chemistry pays off / costs you — the relationship itself was
+     previously read only for release/offer risk, with no direct payoff a
+     player could see or chase. These two give it one in each direction,
+     reusing the same event infrastructure (gating, choice deltas, result
+     text) as everything else in this pool rather than a parallel system. */
+  { id: "mentor_moment", stages: ["pro"], notAbroad: true, requiresClub: true, minTeamRelationship: 70,
+    title: "A Veteran Pulls You Aside", scene: "debate",
+    desc: "Your team's longest-tenured player has noticed the work you put in. He offers extra film sessions — no cameras, no coaches, just the two of you.",
+    choices: [
+      { label: "Take him up on it", icon: "whistle", stats: { iq: 4 }, relationships: { team: 8 },
+        result: "Hours of film later, the game slows down for you in ways it hadn't before." },
+      { label: "Stick to your own routine", icon: "dumbbell", relationships: { team: -2 },
+        result: "You trust your own process. He doesn't ask twice." },
+    ]},
+  { id: "trade_rumors", stages: ["pro"], notAbroad: true, requiresClub: true, maxTeamRelationship: 30,
+    title: "Trade Rumors", scene: "confrontation",
+    desc: "Word's gotten back to you: the front office has taken calls about moving you. You can force the issue, or try to fix it from the inside.",
+    choices: [
+      { label: "Request the trade", icon: "doorExit", flag: "requestTrade",
+        result: "You make it known you want out. Your agent starts making calls — a transfer window opens this season." },
+      { label: "Fight for your spot", icon: "raisedHand", relationships: { team: 10 }, fatigue: 6,
+        result: "You put your head down and work. Slowly, the room starts to believe in you again." },
+    ]},
   { id: "family_event", stages: ["youth", "amateur", "pro"], title: "Family Occasion", scene: "family_home",
     desc: "Your family has a big gathering the same week as training camp.",
     choices: [
@@ -2008,7 +2041,7 @@ function npcNameFromSeed(seed) {
   return `${a} ${b}`;
 }
 function npcClubFromSeed(seed, leagueId) {
-  const pool = leagueId === "mbl" ? PRO_CLUBS : SEMI_PRO_CLUBS;
+  const pool = leagueId === "mbl" ? PRO_CLUBS : DLEAGUE_CLUBS;
   return pool[(seed >>> 15) % pool.length].name;
 }
 /* Resolve a stored NPC record into a full one for display/simulation. */
@@ -2034,7 +2067,7 @@ function _strHash(str) {
   return h;
 }
 function namedNpcClub(name, leagueId) {
-  const pool = leagueId === "mbl" ? PRO_CLUBS : SEMI_PRO_CLUBS;
+  const pool = leagueId === "mbl" ? PRO_CLUBS : DLEAGUE_CLUBS;
   return pool[_strHash(name) % pool.length].name;
 }
 const NPC_ARCHETYPE_HEIGHT = { PG: 183, SG: 190, SF: 196, PF: 202, C: 208 };
@@ -2179,7 +2212,7 @@ function ageNpcPool(p, leagueId) {
    side, a bench player doesn't. Deterministic per season so revisiting the
    screen shows the same table. */
 function buildStandings(p, leagueId, myLine, seasonSeed, wonTitle, totalGames) {
-  const clubs = leagueId === "mbl" ? PRO_CLUBS : SEMI_PRO_CLUBS;
+  const clubs = leagueId === "mbl" ? PRO_CLUBS : DLEAGUE_CLUBS;
   /* Must match the SAME season length the player's own games-played count
      uses (fullGames, rolled 30-40 for MBL / 20-25 for D-League) — a hardcoded
      24/20 here meant the standings table showed every club at a fixed game
@@ -2844,7 +2877,14 @@ const TIER_NOTES = {
 
 function simulateSeason(player) {
   const overall = computeOverall(player.stats, player.position);
-  const score = overall * 0.55 + player.morale * 0.25 + (100 - player.fatigue) * 0.2;
+  // Coach trust was previously read only for release/offer risk — it never
+  // touched the season itself. A coach who trusts you gives you the run to
+  // actually show it; one who doesn't leaves you fighting for minutes no
+  // matter how well you played. Kept deliberately small (±3 at the extremes,
+  // default 50 = 0) so it nudges a borderline tier rather than overriding
+  // the ability/morale/fatigue formula that already drives this.
+  const coachFactor = ((player.relationships && player.relationships.coach) - 50 || 0) * 0.06;
+  const score = overall * 0.55 + player.morale * 0.25 + (100 - player.fatigue) * 0.2 + coachFactor;
   let tier = 0;
   if (score >= 80) tier = 5;
   else if (score >= 68) tier = 4;
@@ -3110,6 +3150,15 @@ function rollClubEvent(p) {
     return { type: "bankrupt" };
   }
 
+  // A requested trade (from the Trade Rumors event, low Team Chemistry)
+  // guarantees a transfer window opens THIS season — same path an organic
+  // one takes below, just skipping the roll. One-shot: consumed here so it
+  // doesn't linger into future seasons if this branch is somehow skipped.
+  if (p.pendingForcedTransferRequest) {
+    p.pendingForcedTransferRequest = false;
+    return { type: "offers" };
+  }
+
   // Release risk: poor form, bad relationships, or low morale.
   let releaseChance = 0.05;
   if (rating < club.prestige - 25) releaseChance += 0.15; // badly outclassed at the club
@@ -3117,6 +3166,9 @@ function rollClubEvent(p) {
   if (p.relationships.team < 25) releaseChance += 0.08;
   if (p.morale < 25) releaseChance += 0.06;
   if (p.age >= 33) releaseChance += 0.05;
+  // Strong family ties read as stability off the court — clubs are a
+  // little slower to cut a player whose life outside basketball is settled.
+  if (p.relationships.family >= 80) releaseChance -= 0.04;
   releaseChance = clamp(releaseChance, 0, 0.6);
   if (Math.random() < releaseChance) return { type: "released" };
 
@@ -3181,7 +3233,7 @@ function newPlayer({ name, position, hometown, height, jersey }) {
     relationships: { coach: 50, team: 50, family: 60 },
     stage: "youth",
     teamName: `${shortHome(hometown)} Youth Selection`,
-    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false,
+    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null,
     nationalTeam: false, nationalCaps: 0,
     achievements: [],
     peakOverall: overall,
@@ -3205,7 +3257,7 @@ function normalizePlayer(p) {
     mblContributor: false, wonderkid: false, hadMblSeason: false, semiProClub: null,
     contractSalary: 0, contractYearsLeft: 0,
     mssmPendingReveal: false, age18MssmResolved: false, lastSeasonLeagueAwards: [], studying: false, studyDecisionResolved: false, studyGraduated: false,
-    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false,
+    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null,
     nationalTeam: false, nationalCaps: 0, morale: 60, fatigue: 20,
     popularity: 5, money: 0, highlyTalented: false,
     slowDecliner: false, slowStartNextSeason: false,
@@ -3744,8 +3796,23 @@ function Hub({ player, onPlaySeason, onRetireConsider, onManageInvestments, bann
                 <Meter label="Morale" value={player.morale} icon={HeartPulse} color={C.chalk} />
                 <Meter label="Fatigue" value={player.fatigue} icon={Activity} color={C.chalkDim} />
                 <Meter label="Popularity" value={player.popularity} icon={Radio} color={C.chalk} />
+                <Meter label="Family" value={player.relationships.family} icon={Home} color={C.chalk} />
               </div>
             </div>
+
+            {/* Coach Trust / Team Chemistry only mean anything once there's
+                an actual locker room — a domestic pro club. They reset to
+                50/50 on every new signing, so showing them before that would
+                just be a flat, meaningless bar. */}
+            {player.stage === "pro" && !player.abroad && player.clubId && (
+              <div className="rounded-xl p-4" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+                <div className="f-display text-xs uppercase tracking-wide mb-3" style={{ color: C.chalkDim }}>Locker Room</div>
+                <div className="space-y-2">
+                  <Meter label="Coach Trust" value={player.relationships.coach} icon={Star} color={C.chalk} />
+                  <Meter label="Team Chemistry" value={player.relationships.team} icon={Users} color={C.chalk} />
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -3928,7 +3995,7 @@ function InvestmentsScreen({ player, onConfirm, onBack }) {
     trainer: { icon: "🏋️", sub: "Extra individual sessions year-round.",
       eff: ["+1 attribute point every season"] },
     science: { icon: "🩺", sub: "Load management, recovery and treatment.",
-      eff: ["Injury risk halved", "Slower decline after 33", "+1 playable season"] },
+      eff: ["Injury risk halved", "Guided rehab — full speed, zero risk", "Slower decline after 33", "+1 playable season"] },
     family: { icon: "🏠", sub: "Send money home and fly them out to see you.",
       eff: ["No settling-in dip when you move abroad", "A bad season stops spiralling"] },
     agent: { icon: "📈", sub: "Real representation. Gets you seen, gets you in the room.",
@@ -4429,6 +4496,150 @@ function EventScreen({ event, onChoose }) {
             );
           })}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------
+   INJURY RECOVERY SCREEN
+   Shown after a serious in-season injury, before the season recap —
+   same "compute normally, defer the screen" pattern as a Clutch Moment.
+   Reuses EventScreen's exact choice-grid chrome; pills are hand-authored
+   here rather than via deriveEffectPills() since the outcomes are
+   conditional/probabilistic rather than fixed stat deltas.
+--------------------------------------------------------- */
+function InjuryRecoveryScreen({ pending, onChoose }) {
+  const hasScience = pending.hasScience;
+  return (
+    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
+      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+        <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>Injury · {pending.missed} Games Missed</div>
+        <div className="f-display text-xl font-extrabold mb-1.5" style={{ color: C.chalk }}>Recovery Plan</div>
+        <p className="f-body text-[13px] mb-4" style={{ color: C.chalkDim }}>
+          The physio lays out how to handle the rest of the recovery. One gets you back to full speed sooner. One protects you properly.
+        </p>
+        <div className={`grid ${hasScience ? "grid-cols-1" : "grid-cols-2"} gap-3`}>
+          <button onClick={() => onChoose("rush")} className="text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+            <div className="text-center text-[13px] font-bold py-3" style={{ color: C.chalk }}>Rush Back</div>
+            <EventChoiceIcon risk="risky" icon="flame" />
+            <div className="p-3 flex flex-col gap-2">
+              <div className="flex items-center justify-between px-3 py-2 rounded-full text-[12px] font-semibold" style={{ background: "rgba(16,185,129,0.14)", color: "#10B981" }}>
+                <span className="flex items-center gap-1.5"><TrendingUp size={13} /> Back to full speed</span>
+                <span className="f-mono text-[11px] font-extrabold px-2 py-0.5 rounded-full" style={{ background: "rgba(16,185,129,0.22)" }}>Now</span>
+              </div>
+              <div className="flex items-center justify-between px-3 py-2 rounded-full text-[12px] font-semibold" style={{ background: "rgba(239,68,68,0.14)", color: "#EF4444" }}>
+                <span className="flex items-center gap-1.5"><TrendingDown size={13} /> Permanent damage risk</span>
+                <span className="f-mono text-[11px] font-extrabold px-2 py-0.5 rounded-full" style={{ background: "rgba(239,68,68,0.22)" }}>35%</span>
+              </div>
+            </div>
+          </button>
+          <button onClick={() => onChoose("full")} className="text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+            <div className="text-center text-[13px] font-bold py-3" style={{ color: C.chalk }}>Full Rehab</div>
+            <EventChoiceIcon risk="safe" icon="stretch" />
+            <div className="p-3 flex flex-col gap-2">
+              <div className="flex items-center justify-between px-3 py-2 rounded-full text-[12px] font-semibold" style={{ background: "rgba(239,68,68,0.14)", color: "#EF4444" }}>
+                <span className="flex items-center gap-1.5"><TrendingDown size={13} /> Slow start next season</span>
+                <span className="f-mono text-[11px] font-extrabold px-2 py-0.5 rounded-full" style={{ background: "rgba(239,68,68,0.22)" }}>Kept</span>
+              </div>
+              <div className="flex items-center justify-between px-3 py-2 rounded-full text-[12px] font-semibold" style={{ background: "rgba(16,185,129,0.14)", color: "#10B981" }}>
+                <span className="flex items-center gap-1.5"><TrendingUp size={13} /> Fully sound, no damage</span>
+                <span className="f-mono text-[11px] font-extrabold px-2 py-0.5 rounded-full" style={{ background: "rgba(16,185,129,0.22)" }}>100%</span>
+              </div>
+            </div>
+          </button>
+          {hasScience && (
+            <button onClick={() => onChoose("guided")} className="text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.amber}` }}>
+              <div className="text-center text-[13px] font-bold py-3" style={{ color: C.chalk }}>Guided Rehab <span className="f-mono text-[10px]" style={{ color: C.amberBright }}>· Sports Science</span></div>
+              <EventChoiceIcon risk="safe" icon="scalpel" />
+              <div className="p-3 flex flex-col gap-2">
+                <div className="flex items-center justify-between px-3 py-2 rounded-full text-[12px] font-semibold" style={{ background: "rgba(16,185,129,0.14)", color: "#10B981" }}>
+                  <span className="flex items-center gap-1.5"><TrendingUp size={13} /> Back to full speed</span>
+                  <span className="f-mono text-[11px] font-extrabold px-2 py-0.5 rounded-full" style={{ background: "rgba(16,185,129,0.22)" }}>Now</span>
+                </div>
+                <div className="flex items-center justify-between px-3 py-2 rounded-full text-[12px] font-semibold" style={{ background: "rgba(16,185,129,0.14)", color: "#10B981" }}>
+                  <span className="flex items-center gap-1.5"><TrendingUp size={13} /> Fully sound, no damage</span>
+                  <span className="f-mono text-[11px] font-extrabold px-2 py-0.5 rounded-full" style={{ background: "rgba(16,185,129,0.22)" }}>100%</span>
+                </div>
+              </div>
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------
+   OFF-SEASON PLAN SCREEN
+   One meaningful choice in front of attribute spending, shown every
+   season. Same choice-grid chrome as EventScreen/InjuryRecoveryScreen.
+--------------------------------------------------------- */
+function OffseasonPlanScreen({ player, onChoose }) {
+  // Commercial deals don't fit a minor or a scholarship athlete — the same
+  // rule handleConfirmTraining already applies to financial events.
+  const canCommercial = player.age >= 18 && !player.hblSeasonPending && !player.uba;
+  const PLANS = [
+    { id: "summer", label: "Summer League", icon: "trophyCash", risk: "risky",
+      pills: [
+        { label: "Popularity", value: "+6", positive: true },
+        { label: "Scout visibility", value: "Up", positive: true },
+        { label: "Fatigue", value: "+10", positive: false },
+      ] },
+    { id: "camp", label: "Overseas Camp", icon: "dumbbell", risk: null,
+      pills: [
+        { label: "Bonus development points", value: "+2", positive: true },
+        { label: "Coach Trust", value: "+5", positive: true },
+        { label: "Cost", value: rm(4000), positive: false },
+      ] },
+    { id: "rest", label: "Rest & Recover", icon: "bed", risk: "safe",
+      pills: [
+        { label: "Fatigue", value: "\u221225", positive: true },
+        { label: "Injury risk next season", value: "\u221230%", positive: true },
+        { label: "Development points", value: "\u22122", positive: false },
+      ] },
+  ];
+  if (canCommercial) {
+    PLANS.push({ id: "tour", label: "Commercial Tour", icon: "megaphone", risk: "risky",
+      pills: [
+        { label: "Money", value: `+${rm(8000)}`, positive: true },
+        { label: "Popularity", value: "+10", positive: true },
+        { label: "Team Chemistry", value: "\u22124", positive: false },
+      ] });
+  }
+  return (
+    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
+      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+        <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>Season {player.seasonNum} · Off-season</div>
+        <div className="f-display text-xl font-extrabold mb-1.5" style={{ color: C.chalk }}>Off-season Plan</div>
+        <p className="f-body text-[13px] mb-4" style={{ color: C.chalkDim }}>How do you spend the months before training camp?</p>
+        <div className="grid grid-cols-2 gap-3">
+          {PLANS.map(plan => (
+            <button key={plan.id} onClick={() => onChoose(plan.id)} className="text-left rounded-[20px] overflow-hidden transition"
+              style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+              <div className="text-center text-[13px] font-bold py-3" style={{ color: C.chalk }}>{plan.label}</div>
+              <EventChoiceIcon risk={plan.risk} icon={plan.icon} />
+              <div className="p-3 flex flex-col gap-2">
+                {plan.pills.map((pl, j) => (
+                  <div key={j} className="flex items-center justify-between px-3 py-2 rounded-full text-[12px] font-semibold"
+                    style={{ background: pl.positive ? "rgba(16,185,129,0.14)" : "rgba(239,68,68,0.14)", color: pl.positive ? "#10B981" : "#EF4444" }}>
+                    <span className="flex items-center gap-1.5">
+                      {pl.positive ? <TrendingUp size={13} /> : <TrendingDown size={13} />}
+                      {pl.label}
+                    </span>
+                    <span className="f-mono text-[11px] font-extrabold px-2 py-0.5 rounded-full"
+                      style={{ background: pl.positive ? "rgba(16,185,129,0.22)" : "rgba(239,68,68,0.22)" }}>
+                      {pl.value}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </button>
+          ))}
+        </div>
+        <p className="f-body text-[10px] mt-3" style={{ color: C.chalkDim }}>
+          *Scout visibility only matters once you already qualify for overseas interest.
+        </p>
       </div>
     </div>
   );
@@ -5827,9 +6038,14 @@ const ResultScreen = memo(function ResultScreen({ summary, onContinue }) {
               <div className="mb-2 p-2 rounded-xl" style={{ background: "rgba(229,72,77,0.1)", border: `1px solid ${C.red}` }}>
                 <span className="f-body text-[11px]" style={{ color: C.red }}>
                   {summary.injury.serious
-                    ? `Serious injury — you missed ${summary.injury.missed} games and will start next season slowly.`
+                    ? `Serious injury — you missed ${summary.injury.missed} games this season.`
                     : `Injury setback — you missed ${summary.injury.missed} games this season.`}
                 </span>
+                {summary.injuryRecoveryNote && (
+                  <div className="f-body text-[11px] mt-1.5 pt-1.5" style={{ color: C.chalkDim, borderTop: `1px solid rgba(220,38,38,0.3)` }}>
+                    {summary.injuryRecoveryNote}
+                  </div>
+                )}
               </div>
             )}
             <div className="grid grid-cols-4 gap-y-3 p-3 rounded-xl" style={{ background: C.ink3 }}>
@@ -7946,10 +8162,52 @@ export default function App() {
 
   const handlePlaySeason = () => {
     setBanner(null);
-    // Points are rolled once per season and stashed on the player, so the
-    // builder screen shows a stable number across re-renders.
-    const pts = computeSeasonPoints(player, player.lastPerfBonus || 0);
-    const p = { ...player, seasonPoints: pts };
+    setScreen("offseason_plan");
+  };
+
+  /* Off-season plan — the one meaningful choice in front of attribute
+     spending. Every effect reuses an existing field or an existing
+     mechanism rather than inventing a new one: popularity/fatigue/money/
+     relationships are the same fields every event choice already touches;
+     the injury-chance discount reuses Rest & Recover's own flag pattern
+     from the Recovery Plan system; the overseas guarantee reuses the exact
+     flag "Play to impress" sets, since a probability nudge on that specific
+     roll is documented as having ~no effect once already eligible (88%
+     baseline compounds to ~100% either way — only a guarantee is felt).
+     Season points are computed here (not in handlePlaySeason) so a plan's
+     point adjustment applies before the training screen ever renders. */
+  const handleOffseasonPlan = (planId) => {
+    let p = { ...player, relationships: { ...player.relationships } };
+    const basePts = computeSeasonPoints(p, p.lastPerfBonus || 0);
+    let ptsAdjust = 0;
+    let note = "";
+
+    if (planId === "summer") {
+      p.popularity = clamp(p.popularity + 6);
+      p.fatigue = clamp(p.fatigue + 10);
+      p.pendingGuaranteedOverseasOffer = true;
+      note = "Summer League gets you in front of a bigger crowd. ";
+    } else if (planId === "camp") {
+      const cost = 4000;
+      p.money = Math.max(0, p.money - cost);
+      p.relationships.coach = clamp(p.relationships.coach + 5);
+      ptsAdjust = 2;
+      note = "An intensive camp abroad, working with international coaches. ";
+    } else if (planId === "rest") {
+      p.fatigue = clamp(p.fatigue - 25);
+      p.restedOffseason = true;
+      ptsAdjust = -2;
+      note = "A genuine off-season — properly rested, for once. ";
+    } else if (planId === "tour") {
+      p.money += 8000;
+      p.popularity = clamp(p.popularity + 10);
+      p.relationships.team = clamp(p.relationships.team - 4);
+      note = "A commercial tour — good money, though not everyone in the locker room loves the spotlight. ";
+    }
+
+    p.seasonPoints = Math.max(1, basePts + ptsAdjust);
+    p.offseasonPlan = planId;
+    setPending(prev => ({ ...prev, offseasonNote: note }));
     setPlayer(p);
     save(p);
     setScreen("training");
@@ -8080,9 +8338,10 @@ export default function App() {
     if (totalGain === 0) p.morale = clamp(p.morale + 5);
     p.seasonPoints = 0;
     p.lastPerfBonus = 0;
+    const offseasonNote = pending.offseasonNote || "";
     const text = totalGain > 0
-      ? `Development this season: ${parts.join(", ")}.`
-      : "You bank the off-season for recovery rather than development.";
+      ? `${offseasonNote}Development this season: ${parts.join(", ")}.`
+      : `${offseasonNote}You bank the off-season for recovery rather than development.`;
     setPending({ trainingText: text });
     setPlayer(p);
 
@@ -8097,6 +8356,9 @@ export default function App() {
       if (e.minAge && p.age < e.minAge) return false;
       if (e.minOverall && computeOverall(p.stats, p.position) < e.minOverall) return false;
       if (e.notAbroad && p.abroad) return false;
+      if (e.requiresClub && !p.clubId) return false;
+      if (e.minTeamRelationship != null && p.relationships.team < e.minTeamRelationship) return false;
+      if (e.maxTeamRelationship != null && p.relationships.team > e.maxTeamRelationship) return false;
       if (usedEvents.current.includes(e.id)) return false;
       return true;
     });
@@ -8141,6 +8403,10 @@ export default function App() {
     if (choice.popularity) p.popularity = clamp(p.popularity + choice.popularity);
     if (choice.money) p.money = Math.max(0, p.money + choice.money);
     if (choice.flag === "nationalTeam") p.nationalTeam = true;
+    // Trade Rumors -> "Request the trade": guarantees a transfer window
+    // opens this season (consumed in rollClubEvent, which runs later this
+    // same click, further down in handleContinueAfterResult).
+    if (choice.flag === "requestTrade") p.pendingForcedTransferRequest = true;
     if (choice.slowStart) p.slowStartNextSeason = true;
     if (choice.achievement) p.achievements = Array.from(new Set([...p.achievements, choice.achievement]));
     // "Play to impress" (overseas_scout event) guarantees this season's
@@ -8202,6 +8468,14 @@ export default function App() {
       // Sports science: load management and proper treatment roughly halve
       // how often a season gets derailed.
       if (hasInvestment(p, "science")) injuryChance *= 0.5;
+      // A full rehab (Recovery Plan choice, last time out) properly healed
+      // rather than just running the clock — one season of reduced risk,
+      // then consumed. Rest & Recover (off-season plan) earns the same
+      // discount for the same reason — a body that actually got to rest.
+      // Tracked as separate flags (different origins) but same discount,
+      // and each clears independently so they don't mask one another.
+      if (p.recentlyRehabbed) { injuryChance *= 0.7; p.recentlyRehabbed = false; }
+      if (p.restedOffseason) { injuryChance *= 0.7; p.restedOffseason = false; }
       if (Math.random() < injuryChance) {
         const serious = Math.random() < 0.45; // ~45% of injuries are season-wrecking
         if (serious) {
@@ -8210,6 +8484,11 @@ export default function App() {
           p.slowStartNextSeason = true; // lingers into next year
           p.morale = clamp(p.morale - 15);
           p.fatigue = clamp(p.fatigue + 10);
+          // A serious injury now comes with a real recovery decision instead
+          // of just a text flag — resolved on an interstitial screen shown
+          // after this season's recap, same pattern as a Clutch Moment
+          // (compute the season normally, defer only the screen transition).
+          p.pendingInjuryDecision = { missed: injury.missed, hasScience: hasInvestment(p, "science") };
         } else {
           gamesPlayed = Math.round(fullGames * randFloat(0.6, 0.85));
           injury = { serious: false, missed: fullGames - gamesPlayed };
@@ -8362,7 +8641,7 @@ export default function App() {
       gamesPlayed, wonChampionship, injury,
     });
     setPlayer(p);
-    setScreen("result");
+    setScreen(p.pendingInjuryDecision ? "injury_recovery" : "result");
   };
 
   /* The off-season resolution is ~490 lines and runs synchronously: ageing,
@@ -8942,6 +9221,47 @@ export default function App() {
     setScreen(pending.resumeScreen);
   };
 
+  // Resolves the Recovery Plan choice queued by a serious in-season injury.
+  // The season itself (games missed, morale/fatigue hit) is already fully
+  // computed and sitting in `summary` — this only decides what carries
+  // forward: whether the slow start next season is cleared, and whether
+  // rushing back costs a permanent stat.
+  const handleInjuryRecoveryChoice = (choiceId) => {
+    let p = { ...player, stats: { ...player.stats } };
+    p.pendingInjuryDecision = null;
+    let note;
+    if (choiceId === "guided") {
+      // Sports Science's actual payoff for this moment: the speed of
+      // rushing back with none of its risk.
+      p.slowStartNextSeason = false;
+      note = "The medical staff clear you ahead of schedule — properly this time. Full speed, no shortcuts.";
+    } else if (choiceId === "rush") {
+      p.slowStartNextSeason = false;
+      if (Math.random() < 0.35) {
+        const hurtStat = pick(["athleticism", "defense", "rebounding"]);
+        const loss = randInt(2, 4);
+        p.stats[hurtStat] = clamp(p.stats[hurtStat] - loss, 1, 99);
+        note = `It doesn't hold. The ${STAT_META[hurtStat].label.toLowerCase()} never fully comes back — down ${loss} for good.`;
+      } else {
+        note = "You push the timeline and it holds. Back to full speed, no lasting damage.";
+      }
+    } else {
+      // Full Rehab: slowStartNextSeason stays true (unchanged, as before
+      // this system existed) — a properly-healed body is a little less
+      // likely to break down again next time out.
+      p.recentlyRehabbed = true;
+      note = "You take the full timeline. It costs you the start of next season, but there's nothing to worry about long-term.";
+    }
+    p.achievements = checkAchievements(p);
+    setPlayer(p);
+    save(p);
+    // Shown on the result screen itself, right next to the existing injury
+    // line — a banner would only surface on the NEXT Hub visit, well after
+    // the recap that's actually about this injury.
+    setSummary(s => ({ ...s, injuryRecoveryNote: note }));
+    setScreen("result");
+  };
+
   const handleAcceptOverseasOffer = (team) => {
     // Any domestic club offers queued this season are void once you sign
     // abroad — leaving them queued would pop a stale Malaysian transfer
@@ -9140,8 +9460,12 @@ export default function App() {
       {screen === "investments" && player && (
         <InvestmentsScreen player={player} onConfirm={handleConfirmInvestments} onBack={() => setScreen("hub")} />
       )}
+      {screen === "offseason_plan" && player && <OffseasonPlanScreen player={player} onChoose={handleOffseasonPlan} />}
       {screen === "training" && player && <AttributeBuilder player={player} points={player.seasonPoints || 0} onConfirm={handleConfirmTraining} />}
       {screen === "event" && currentEvent && <EventScreen event={currentEvent} onChoose={handleChooseEvent} />}
+      {screen === "injury_recovery" && player && player.pendingInjuryDecision && (
+        <InjuryRecoveryScreen pending={player.pendingInjuryDecision} onChoose={handleInjuryRecoveryChoice} />
+      )}
       {screen === "result" && summary && <ResultScreen summary={summary} onContinue={handleContinueAfterResult} />}
       {screen === "retired" && player && <RetiredScreen player={player} onPlayAgain={handlePlayAgain} onViewHallOfFame={() => setScreen("hall_of_fame")} onViewAchievements={() => setScreen("achievement_gallery")} />}
       {screen === "hall_of_fame" && (
