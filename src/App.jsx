@@ -849,12 +849,16 @@ const U18_RESULT_META = {
    performance. Import slots are limited, so clearing the bar is never a
    guarantee. */
 const HBL_RATING_THRESHOLD = 48;      // ability floor to be considered at all
-const HBL_BASE_CHANCE      = 0.02;    // bare-minimum prospect, nothing else
-const HBL_AWARD_BONUS      = 0.10;    // per individual award (max 2 counted)
-const HBL_MARQUEE_BONUS    = 0.12;    // extra for Player of the Tournament / Final MVP
-const HBL_TEAM_RUN_BONUS   = 0.10;    // champions (half for runners-up) = more games on show
-const HBL_ABILITY_SCALE    = 0.010;   // per point of overall above the floor
-const HBL_MAX_CHANCE       = 0.75;    // even a superb tournament is never certain
+const HBL_BASE_CHANCE      = 0.06;    // bare-minimum prospect, nothing else
+const HBL_AWARD_BONUS      = 0.14;    // per individual award (max 2 counted)
+const HBL_MARQUEE_BONUS    = 0.16;    // extra for Player of the Tournament / Final MVP
+const HBL_TEAM_RUN_BONUS   = 0.14;    // champions (half for runners-up) = more games on show
+const HBL_ABILITY_SCALE    = 0.014;   // per point of overall above the floor
+const HBL_MAX_CHANCE       = 0.88;    // even a superb tournament is never fully certain
+// Raised across the board — simulated against the old constants first: the
+// floor prospect case triples (2%→6%), and every tier in between lands
+// roughly 1.4-1.8x higher, while the cap stays under 100% so even a
+// dominant tournament still carries a sliver of doubt.
 
 /* Probability that at least one Taiwanese programme offers an import spot. */
 function hblOfferChance(overall, awards, teamResultId) {
