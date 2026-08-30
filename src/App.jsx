@@ -69,6 +69,9 @@ const IconStreetKing = svgIcon(<><path d="M4 18h16l-1.5-8-3.5 3-3-6-3 6-3.5-3z"/
 const IconRivalBeaten = svgIcon(<><circle cx="7" cy="14" r="3"/><circle cx="17" cy="16" r="3" opacity="0.4"/><path d="M7 8v3M5 9l2-2 2 2"/></>);
 const IconRivalGotAway = svgIcon(<><rect x="6" y="3" width="9" height="18" rx="1"/><circle cx="12.5" cy="12" r="0.6" fill="currentColor" stroke="none"/><path d="M17 4l3 2v13l-3 2" opacity="0.5"/></>);
 const IconSettledScore = svgIcon(<><path d="M12 3v15"/><path d="M5 7h14"/><path d="M5 7l-2.5 5.5a3 3 0 0 0 5 0z"/><path d="M19 7l2.5 5.5a3 3 0 0 1-5 0z" opacity="0.4"/><path d="M8 21h8"/></>);
+// A clock stopped at zero with a made shot arcing through it — the one
+// moment in a career that gets its own full-screen treatment.
+const IconIceInVeins = svgIcon(<><circle cx="12" cy="13" r="7"/><path d="M12 13V9M12 13l3 2"/><path d="M9 3h6M10 3v2M14 3v2"/></>);
 
 
 
@@ -558,6 +561,7 @@ const ACHIEVEMENT_META = {
   rival_beaten: { label: "Rival Beaten", icon: IconRivalBeaten },
   the_one_that_got_away: { label: "The One That Got Away", icon: IconRivalGotAway },
   settled_score: { label: "Settled Score", icon: IconSettledScore },
+  ice_in_veins: { label: "Ice In Your Veins", icon: IconIceInVeins },
   mbl_debut: { label: "MBL Debut", icon: IconDebut },
   mbl_starter: { label: "MBL Starter", icon: IconStarter },
   wonderkid: { label: "Wonderkid", icon: IconWonderkid },
@@ -2563,6 +2567,38 @@ function buildLeagueBoard(p, leagueId, myLine) {
   return { boards, ranks, fieldSize: all.length };
 }
 
+/* "Around the League" ticker for the Hub. Deliberately reads
+   summary.leagueBoard rather than calling buildLeagueBoard again —
+   generateLeagueSeasonStats bakes in a fresh random multiplier
+   (randFloat) on every call, so a second call for the same season would
+   quietly show DIFFERENT PPG/RPG/APG numbers than what the player just
+   saw on the recap's Leaders tab. Reading the same cached object the
+   recap already rendered is what guarantees the two always agree. Same
+   three stats, same labels (Points/Rebounds/Assists), same .toFixed(1)
+   formatting as that tab, on purpose. summary persists on the Hub until
+   the next season overwrites it (see setSummary call sites — only
+   handlePlayAgain ever nulls it), so it's still the right season's data
+   the whole time the Hub is showing it. */
+function buildHubTickerLines(player, summary) {
+  const lines = [];
+  const board = summary && summary.leagueBoard;
+  if (board) {
+    const CATS = [["ppg", "putting up", "PPG"], ["rpg", "pulling down", "RPG"], ["apg", "dishing", "APG"]];
+    CATS.forEach(([key, verb, unit]) => {
+      const rows = board.boards[key] || [];
+      const leader = rows.find(r => !r.me);
+      if (leader) lines.push(`${leader.name} is ${verb} ${leader.value.toFixed(1)} ${unit} this season.`);
+    });
+  }
+  if (player.rival) {
+    const diff = Math.abs((player.peakOverall || 0) - player.rival.peakOverall);
+    lines.push(diff === 0
+      ? `You and ${player.rival.name} are dead even on peak overall.`
+      : `You and ${player.rival.name} are separated by ${diff} point${diff === 1 ? "" : "s"} on peak overall.`);
+  }
+  return lines;
+}
+
 
 function competitionMult(rating, tierAnchor) {
   return clamp(0.5 + (rating - tierAnchor) / 30, 0.18, 1.9);
@@ -3565,7 +3601,7 @@ function newPlayer({ name, position, hometown, height, jersey }) {
     relationships: { coach: 50, team: 50, family: 60 },
     stage: "youth",
     teamName: `${shortHome(hometown)} Youth Selection`,
-    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null, rival: null, tradeRequestCooldown: 0, seasonsAtClub: 0, mblTitles: 0,
+    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null, rival: null, tradeRequestCooldown: 0, seasonsAtClub: 0, mblTitles: 0, hadBuzzerBeaterMoment: false,
     nationalTeam: false, nationalCaps: 0,
     achievements: [],
     peakOverall: overall,
@@ -3589,7 +3625,7 @@ function normalizePlayer(p) {
     mblContributor: false, wonderkid: false, hadMblSeason: false, semiProClub: null,
     contractSalary: 0, contractYearsLeft: 0,
     mssmPendingReveal: false, age18MssmResolved: false, lastSeasonLeagueAwards: [], studying: false, studyDecisionResolved: false, studyGraduated: false,
-    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null, rival: null, tradeRequestCooldown: 0, seasonsAtClub: 0, mblTitles: 0,
+    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null, rival: null, tradeRequestCooldown: 0, seasonsAtClub: 0, mblTitles: 0, hadBuzzerBeaterMoment: false,
     nationalTeam: false, nationalCaps: 0, morale: 60, fatigue: 20,
     popularity: 5, money: 0, highlyTalented: false,
     slowDecliner: false, slowStartNextSeason: false,
@@ -4109,7 +4145,34 @@ function PlayerCard({ p, overall }) {
 /* ---------------------------------------------------------
    HUB SCREEN
 --------------------------------------------------------- */
-function Hub({ player, onPlaySeason, onRetireConsider, onManageInvestments, onRequestTrade, banner }) {
+/* Rotating "Around the League" strip — see buildHubTickerLines for why it
+   reads summary.leagueBoard instead of recomputing. Renders nothing if
+   there's nothing to show yet (no pro season played, no rival), rather
+   than showing an empty or placeholder pill. */
+function HubTicker({ player, summary }) {
+  const lines = useMemo(() => buildHubTickerLines(player, summary), [player.rival, player.peakOverall, summary]);
+  const [idx, setIdx] = useState(0);
+  useEffect(() => {
+    setIdx(0); // lines can change size (new season, rival just assigned) — never start out of bounds
+    if (lines.length <= 1) return;
+    const iv = setInterval(() => setIdx(i => (i + 1) % lines.length), 3200);
+    return () => clearInterval(iv);
+  }, [lines]);
+  if (!lines.length) return null;
+  return (
+    <div className="flex items-center gap-2.5 mt-3 px-3.5 py-2.5 rounded-2xl overflow-hidden"
+      style={{ background: "linear-gradient(90deg, rgba(249,115,22,0.10), transparent)", border: "1px solid rgba(249,115,22,0.28)" }}>
+      <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: C.amberBright, animation: "hubTickerPulse 1.6s infinite" }} />
+      <style>{`@keyframes hubTickerPulse{0%,100%{opacity:1}50%{opacity:0.35}} @keyframes hubTickerFade{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}`}</style>
+      <span className="f-mono text-[8px] uppercase tracking-widest flex-shrink-0" style={{ color: C.amberBright }}>League</span>
+      <span key={idx} className="f-body text-[11.5px] flex-1 truncate" style={{ color: C.chalk, animation: "hubTickerFade 0.4s ease" }}>
+        {lines[idx]}
+      </span>
+    </div>
+  );
+}
+
+function Hub({ player, onPlaySeason, onRetireConsider, onManageInvestments, onRequestTrade, banner, summary }) {
   const overall = computeOverall(player.stats, player.position);
   const [tab, setTab] = useState("attrs");
   // Same conditional-tab pattern as the season recap's League Context tabs
@@ -4134,6 +4197,7 @@ function Hub({ player, onPlaySeason, onRetireConsider, onManageInvestments, onRe
         )}
 
         <PlayerCard p={player} overall={overall} />
+        <HubTicker player={player} summary={summary} />
 
         {/* One card visible at a time instead of everything stacked — the
             Hub had grown to 4-5 full cards before reaching the Continue
@@ -6283,6 +6347,171 @@ function ClutchMomentScreen({ pending, onChoose }) {
             </button>
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------
+   THE BUZZER-BEATER — a Signature Moment
+   Deliberately not a choice-card screen. Same underlying shape as any
+   other event (a roll produces a tier, a tier produces consequences) but
+   the format is different on purpose: full-bleed, four timed phases,
+   one tap instead of a labeled choice grid. Reserved for the rare,
+   one-shot-per-career trigger in handleContinueAfterResult — see the
+   comment there for why it's checked last and kept low-probability.
+   The clutch-zone width scales with IQ + Athleticism (see PERFECT_BASE/
+   GOOD_MARGIN below), so a player actually built for this moment gets a
+   genuinely easier tap, not just better luck — validated across four
+   representative stat tiers before writing this (weak ~21% perfect
+   chance, elite ~38%) so nobody is ever functionally locked out.
+--------------------------------------------------------- */
+function BuzzerBeaterScreen({ player, onComplete }) {
+  const [phase, setPhase] = useState(0); // 0=setup, 1=tension, 2=action, 3=result
+  const [linesShown, setLinesShown] = useState(0);
+  const [clockVal, setClockVal] = useState(3.0);
+  const [markerPos, setMarkerPos] = useState(0);
+  const [tier, setTier] = useState(null);
+  const [flash, setFlash] = useState(false);
+  const markerDirRef = useRef(1);
+  const tappedRef = useRef(false);
+
+  const rivalName = player.rival ? player.rival.name : null;
+  const lines = rivalName
+    ? ["The gym's on its feet.", `${rivalName}'s bench is already celebrating.`, "The ball is in your hands."]
+    : ["The gym's on its feet.", "The clock says everything.", "The ball is in your hands."];
+
+  const clutchAvg = (player.stats.iq + player.stats.athleticism) / 2;
+  const perfectHalfWidth = clamp(8 + clutchAvg * 0.12, 8, 20);
+  const goodHalfWidth = perfectHalfWidth + 14;
+
+  // Phase 0: setup — reveal lines one at a time, then advance.
+  useEffect(() => {
+    if (phase !== 0) return;
+    setLinesShown(0);
+    const timers = lines.map((_, i) => setTimeout(() => setLinesShown(i + 1), 300 + i * 750));
+    const advance = setTimeout(() => setPhase(1), 300 + lines.length * 750 + 700);
+    return () => { timers.forEach(clearTimeout); clearTimeout(advance); };
+  }, [phase]);
+
+  // Phase 1: tension — countdown clock, then advance.
+  useEffect(() => {
+    if (phase !== 1) return;
+    let t = 3.0;
+    setClockVal(t);
+    const iv = setInterval(() => {
+      t -= 0.7;
+      if (t <= 0) { clearInterval(iv); setPhase(2); return; }
+      setClockVal(t);
+    }, 420);
+    return () => clearInterval(iv);
+  }, [phase]);
+
+  // Phase 2: action — the marker sweeps until tapped.
+  useEffect(() => {
+    if (phase !== 2) return;
+    tappedRef.current = false;
+    markerDirRef.current = 1;
+    setMarkerPos(0);
+    const iv = setInterval(() => {
+      setMarkerPos(pos => {
+        let next = pos + markerDirRef.current * 3.2;
+        if (next >= 100) { next = 100; markerDirRef.current = -1; }
+        if (next <= 0) { next = 0; markerDirRef.current = 1; }
+        return next;
+      });
+    }, 16);
+    return () => clearInterval(iv);
+  }, [phase]);
+
+  const handleTap = () => {
+    if (phase !== 2 || tappedRef.current) return;
+    tappedRef.current = true;
+    const dist = Math.abs(markerPos - 50);
+    const resultTier = dist <= perfectHalfWidth ? "perfect" : dist <= goodHalfWidth ? "good" : "miss";
+    setTier(resultTier);
+    setFlash(true);
+    setTimeout(() => setFlash(false), 350);
+    setTimeout(() => setPhase(3), 150);
+  };
+
+  const COPY = {
+    perfect: { tag: "🎯 PERFECT RELEASE", color: C.trophyGold, h: "The shot is true.",
+      s: rivalName ? `The whole gym goes silent, then explodes. ${rivalName}'s bench doesn't know where to look.` : "The whole gym goes silent, then explodes." },
+    good: { tag: "✓ GOOD LOOK", color: "#10B981", h: "It rattles home.",
+      s: "Not clean, but it counts the same in the box score. The building still comes apart." },
+    miss: { tag: "✗ OFF THE MARK", color: "#EF4444", h: "Rushed. It rims out.",
+      s: "The horn sounds a half-second after the ball leaves your hand. Some nights it just doesn't fall." },
+  };
+  const result = tier ? COPY[tier] : null;
+
+  return (
+    <div className="min-h-full w-full flex items-center justify-center px-4 py-8" style={{ background: "#000" }}>
+      <div className="w-full max-w-md rounded-[24px] overflow-hidden relative" style={{
+        aspectRatio: "9/16", maxHeight: 640,
+        background: "radial-gradient(ellipse at 50% 30%, #1a0f05 0%, #000 70%)", border: "1px solid #2a1a0a",
+      }}>
+        {flash && (
+          <div className="absolute inset-0 pointer-events-none" style={{ background: "#fff", opacity: 0.85, animation: "bbFlash 0.35s ease-out forwards", zIndex: 5 }} />
+        )}
+        <style>{`@keyframes bbFlash{0%{opacity:0.85}100%{opacity:0}}`}</style>
+
+        {phase === 0 && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center px-8 text-center">
+            <div className="f-mono text-[10px] uppercase tracking-[0.2em] mb-3.5" style={{ color: C.amberBright }}>
+              {rivalName ? "Rivalry Game · Final Possession" : "Final Possession"}
+            </div>
+            {lines.map((l, i) => (
+              <p key={i}
+                className={i === lines.length - 1 ? "f-display text-2xl font-extrabold mt-2" : "text-lg mb-1"}
+                style={{
+                  color: i === lines.length - 1 ? C.amber : "#f5f5f5",
+                  opacity: i < linesShown ? 1 : 0,
+                  transform: i < linesShown ? "translateY(0)" : "translateY(8px)",
+                  transition: "all 0.6s ease",
+                }}>
+                {l}
+              </p>
+            ))}
+          </div>
+        )}
+
+        {phase === 1 && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center px-8 text-center">
+            <div className="f-mono text-[10px] uppercase tracking-[0.2em] mb-3.5" style={{ color: C.amberBright }}>Inbound. Clock Running.</div>
+            <div className="f-display font-extrabold" style={{ fontSize: 56, color: "#fff", textShadow: "0 0 30px rgba(249,115,22,0.5)", animation: "bbPulse 0.5s infinite" }}>
+              {clockVal.toFixed(1)}
+            </div>
+            <style>{`@keyframes bbPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.06);color:${C.amberBright}}}`}</style>
+            <p className="text-lg mt-4" style={{ color: "#f5f5f5" }}>Everything gets quieter.</p>
+          </div>
+        )}
+
+        {phase === 2 && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center px-8 text-center">
+            <div className="f-mono text-[10px] uppercase tracking-[0.2em] mb-3.5" style={{ color: C.amberBright }}>This Is It</div>
+            <div className="f-mono text-[13px] font-bold uppercase tracking-wide mb-5" style={{ color: C.chalkDim }}>Tap when it feels right</div>
+            <div className="w-full max-w-[280px] h-3.5 rounded-full relative overflow-hidden mb-6" style={{ background: "#1a1a1a", border: "1px solid #2a2a2a" }}>
+              <div className="absolute inset-y-0" style={{ left: `${50 - perfectHalfWidth}%`, width: `${perfectHalfWidth * 2}%`, background: "rgba(16,185,129,0.35)", borderLeft: "2px solid #10B981", borderRight: "2px solid #10B981" }} />
+              <div className="absolute" style={{ top: -3, bottom: -3, width: 4, left: `${markerPos}%`, background: "#fff", borderRadius: 2, boxShadow: "0 0 12px rgba(255,255,255,0.8)" }} />
+            </div>
+            <button onClick={handleTap} className="w-[120px] h-[120px] rounded-full flex items-center justify-center f-display text-[13px] font-extrabold uppercase tracking-wide"
+              style={{ background: "radial-gradient(circle, rgba(249,115,22,0.25), transparent 70%)", border: `2px solid ${C.amber}`, color: C.amberBright }}>
+              SHOOT
+            </button>
+          </div>
+        )}
+
+        {phase === 3 && result && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center px-8 text-center">
+            <div className="f-mono text-[15px] font-extrabold uppercase tracking-[0.1em] mb-2.5" style={{ color: result.color }}>{result.tag}</div>
+            <div className="f-display text-2xl font-extrabold mb-2" style={{ color: "#fff" }}>{result.h}</div>
+            <p className="text-[13px] max-w-[280px]" style={{ color: C.chalkDim }}>{result.s}</p>
+            <button onClick={() => onComplete(tier)} className="btn-tactile f-display text-xs font-bold px-7 py-3 rounded-full mt-6 transition" style={{ background: C.amber, color: "#1A0A00" }}>
+              Continue
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -9030,6 +9259,42 @@ export default function App() {
     setScreen("hub");
   };
 
+  // Resolves the Buzzer-Beater Signature Moment. Same underlying shape as
+  // every other outcome in the game — a tier maps to concrete stat/history
+  // changes — only the screen that led here looked different. Called
+  // directly from BuzzerBeaterScreen's tap handler once the internal
+  // animation resolves a tier from where the tap landed.
+  const handleBuzzerBeaterComplete = (tier) => {
+    let p = { ...player, relationships: { ...player.relationships } };
+    p.hadBuzzerBeaterMoment = true;
+    const rivalName = p.rival ? p.rival.name : null;
+    let note, tierLabel;
+    if (tier === "perfect") {
+      p.popularity = clamp(p.popularity + 15);
+      p.morale = clamp(p.morale + 12);
+      p.relationships.team = clamp(p.relationships.team + 8);
+      p.achievements = Array.from(new Set([...p.achievements, "ice_in_veins"]));
+      note = rivalName
+        ? `The shot is true. The whole gym goes silent, then explodes — ${rivalName}'s bench doesn't know where to look.`
+        : "The shot is true. The whole gym goes silent, then explodes.";
+      tierLabel = "Signature Moment — Ice In Your Veins";
+    } else if (tier === "good") {
+      p.popularity = clamp(p.popularity + 8);
+      p.morale = clamp(p.morale + 6);
+      note = "It rattles home. Not clean, but it counts the same in the box score.";
+      tierLabel = "Signature Moment — Clutch";
+    } else {
+      p.morale = clamp(p.morale - 4);
+      note = "Rushed. It rims out. Some nights it just doesn't fall.";
+      tierLabel = "Signature Moment — So Close";
+    }
+    p.history = [...p.history, { age: p.age, tierLabel, note }];
+    setPlayer(p);
+    save(p);
+    setBanner(note);
+    setScreen("hub");
+  };
+
   const handleStayClub = () => {
     let p = { ...player };
     const club = getClub(p.clubId);
@@ -10141,6 +10406,21 @@ export default function App() {
       return;
     }
 
+    // Signature Moment: the Buzzer-Beater. Deliberately checked LAST, after
+    // every other pending screen this season — it should never preempt an
+    // injury decision, a national call-up, or a club offer, since those are
+    // all more urgent than a cinematic beat. One-shot per career (the
+    // "hadBuzzerBeaterMoment" gate) and low-probability even when eligible,
+    // so it stays rare enough to actually feel like a signature moment
+    // rather than another regular event.
+    if (!p.hadBuzzerBeaterMoment && p.stage === "pro" && p.league && !p.abroad && p.age >= 18 && Math.random() < 0.05) {
+      setPlayer(p);
+      save(p);
+      setBanner(bannerMsg);
+      setScreen("buzzer_beater");
+      return;
+    }
+
     setBanner(bannerMsg);
     setScreen("hub");
   }, [player, pending]);
@@ -10414,6 +10694,9 @@ export default function App() {
       {screen === "clutch_moment" && player && player.pendingClutchMoment && (
         <ClutchMomentScreen pending={player.pendingClutchMoment} onChoose={handleClutchChoice} />
       )}
+      {screen === "buzzer_beater" && player && (
+        <BuzzerBeaterScreen player={player} onComplete={handleBuzzerBeaterComplete} />
+      )}
       {screen === "overseas_offers" && player && player.pendingOverseasOffer && (
         <OverseasOffersScreen player={player} offer={player.pendingOverseasOffer} onSign={handleAcceptOverseasOffer} onDecline={handleDeclineOverseasOffer} />
       )}
@@ -10442,6 +10725,7 @@ export default function App() {
           onRetireConsider={handleRetireConsider}
           onManageInvestments={handleManageInvestments}
           onRequestTrade={handleRequestTrade}
+          summary={summary}
         />
       )}
       {screen === "body_setup" && player && <BodySetup player={player} onConfirm={handleConfirmBody} />}
