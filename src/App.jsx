@@ -3016,6 +3016,47 @@ function wealthTier(money) {
 }
 
 /* ============================================================
+   LIFESTYLE SPENDING — a genuinely different use for money than Career
+   Investments (an ongoing % of salary spent on performance). These are
+   one-time purchases, priced to land on the real WEALTH_TIERS thresholds
+   (modest 200k / stable 500k / comfortable 900k) so each tier's "floor"
+   guarantee means something concrete. Buying a home spends real money —
+   player.money drops by the full cost, same as any other purchase — but
+   effectiveWealthTier below means that spend can never leave the player
+   worse off at retirement than the floor their home already locked in,
+   turning "just save everything" from the obviously-correct strategy
+   into an actual bet.
+============================================================ */
+const HOME_TIERS = [
+  { id: "apartment", label: "Modest Apartment", cost: 80000, floorTierId: "modest", familyBoost: 0,
+    desc: "A real place, nothing more. Guarantees you never retire with \"Nothing Left.\"" },
+  { id: "family_home", label: "Family Home", cost: 250000, floorTierId: "stable", familyBoost: 15,
+    desc: "The kind of place \"Comfortable\" already talks about. A real, one-time boost to Family — this is the roof over them, after all." },
+  { id: "dream_house", label: "Dream House", cost: 600000, floorTierId: "comfortable", familyBoost: 8,
+    desc: "The kind of place that ends up in a magazine spread. A statement, not a necessity." },
+];
+// Only a purchase strictly ABOVE the currently-owned tier is offered —
+// buying the same or a lower tier again would just be spending money for
+// nothing, since the floor it'd guarantee is already locked in.
+function nextHomeTiers(ownedId) {
+  const ownedIdx = ownedId ? HOME_TIERS.findIndex(t => t.id === ownedId) : -1;
+  return HOME_TIERS.filter((t, i) => i > ownedIdx);
+}
+// The tier actually shown at retirement — never worse than what a home
+// purchase already guaranteed, even if the bank balance alone would
+// suggest a lower tier (e.g. spent on a later, bigger home since).
+function effectiveWealthTier(player) {
+  const base = wealthTier(player.money);
+  const home = player.homeTier && HOME_TIERS.find(t => t.id === player.homeTier);
+  if (!home) return base;
+  const floor = WEALTH_TIERS.find(t => t.id === home.floorTierId);
+  if (!floor) return base;
+  const baseIdx = WEALTH_TIERS.findIndex(t => t.id === base.id);
+  const floorIdx = WEALTH_TIERS.findIndex(t => t.id === floor.id);
+  return baseIdx <= floorIdx ? base : floor; // lower index = better tier
+}
+
+/* ============================================================
    ATTRIBUTE POINT SYSTEM (replaces the old Training screen)
 
    Each season the player earns a pool of points and spends them
@@ -3601,7 +3642,7 @@ function newPlayer({ name, position, hometown, height, jersey }) {
     relationships: { coach: 50, team: 50, family: 60 },
     stage: "youth",
     teamName: `${shortHome(hometown)} Youth Selection`,
-    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null, rival: null, tradeRequestCooldown: 0, seasonsAtClub: 0, mblTitles: 0, hadBuzzerBeaterMoment: false,
+    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null, rival: null, tradeRequestCooldown: 0, seasonsAtClub: 0, mblTitles: 0, hadBuzzerBeaterMoment: false, totalEarnings: 0, homeTier: null,
     nationalTeam: false, nationalCaps: 0,
     achievements: [],
     peakOverall: overall,
@@ -3625,7 +3666,7 @@ function normalizePlayer(p) {
     mblContributor: false, wonderkid: false, hadMblSeason: false, semiProClub: null,
     contractSalary: 0, contractYearsLeft: 0,
     mssmPendingReveal: false, age18MssmResolved: false, lastSeasonLeagueAwards: [], studying: false, studyDecisionResolved: false, studyGraduated: false,
-    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null, rival: null, tradeRequestCooldown: 0, seasonsAtClub: 0, mblTitles: 0, hadBuzzerBeaterMoment: false,
+    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null, rival: null, tradeRequestCooldown: 0, seasonsAtClub: 0, mblTitles: 0, hadBuzzerBeaterMoment: false, totalEarnings: 0, homeTier: null,
     nationalTeam: false, nationalCaps: 0, morale: 60, fatigue: 20,
     popularity: 5, money: 0, highlyTalented: false,
     slowDecliner: false, slowStartNextSeason: false,
@@ -3640,6 +3681,13 @@ function normalizePlayer(p) {
   const out = { ...d, ...p };
   // Backfill the calendar year for saves made before the timeline existed.
   if (typeof out.year !== "number") out.year = 2011 + (out.age || 15);
+  // Backfill total earnings for saves made before that field existed — a
+  // flat 0 would look broken next to an already-substantial bank balance
+  // (more "earned" than "have" makes no sense), so the floor is whatever
+  // they're currently sitting on. Undercounts anything already spent
+  // before this field existed, but that's a one-time gap for old saves
+  // only, not an ongoing inaccuracy.
+  if (typeof out.totalEarnings !== "number") out.totalEarnings = Math.max(0, out.money || 0);
   // Backfill career stage from age for saves predating the "stage" field, or
   // where it somehow desyncs from age (e.g. an old save stuck mid-transition).
   if (out.stage !== "youth" && out.stage !== "pro") {
@@ -4172,7 +4220,7 @@ function HubTicker({ player, summary }) {
   );
 }
 
-function Hub({ player, onPlaySeason, onRetireConsider, onManageInvestments, onRequestTrade, banner, summary }) {
+function Hub({ player, onPlaySeason, onRetireConsider, onManageInvestments, onRequestTrade, onOpenLifestyle, banner, summary }) {
   const overall = computeOverall(player.stats, player.position);
   const [tab, setTab] = useState("attrs");
   // Same conditional-tab pattern as the season recap's League Context tabs
@@ -4358,6 +4406,28 @@ function Hub({ player, onPlaySeason, onRetireConsider, onManageInvestments, onRe
                   </div>
                 </div>
                 {!(player.tradeRequestCooldown > 0) && <ChevronRight size={15} color={C.chalkDim} />}
+              </button>
+            )}
+
+            {/* Lifestyle — a genuinely separate use for money than
+                Investments (ongoing % of salary spent on performance).
+                Shown once there's real income at all, not gated to having
+                a club, since the point is spending saved money, not
+                anything tied to a current contract. */}
+            {player.age >= 18 && (
+              <button onClick={onOpenLifestyle}
+                className="choice-card w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition"
+                style={{ background: C.ink2, border: `1px solid ${player.homeTier ? "rgba(16,185,129,0.4)" : C.line}` }}>
+                <span className="text-[17px]">🏡</span>
+                <div className="text-left flex-1 min-w-0">
+                  <div className="f-display text-[13px]" style={{ color: C.chalk }}>Lifestyle</div>
+                  <div className="f-body text-[10px] mt-0.5" style={{ color: player.homeTier ? "#10B981" : C.chalkDim }}>
+                    {player.homeTier
+                      ? `${HOME_TIERS.find(t => t.id === player.homeTier).label} owned`
+                      : `${rm(player.money)} saved · no home yet`}
+                  </div>
+                </div>
+                <ChevronRight size={15} color={C.chalkDim} />
               </button>
             )}
 
@@ -6321,6 +6391,78 @@ function TradeRequestScreen({ player, club, onCommit }) {
 }
 
 /* ---------------------------------------------------------
+   LIFESTYLE SPENDING SCREEN
+   Bank balance and total career earnings are shown as two separate
+   numbers on purpose (see totalEarnings tracking in handleContinueAfterResult
+   etc.) — spending on a home correctly reduces the bank balance, but
+   shouldn't make it look like the player earned less over their career.
+--------------------------------------------------------- */
+function LifestyleSpendingScreen({ player, onBuy, onBack }) {
+  const offered = nextHomeTiers(player.homeTier);
+  const owned = player.homeTier && HOME_TIERS.find(t => t.id === player.homeTier);
+  return (
+    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
+      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+        <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>Lifestyle</div>
+        <div className="f-display text-xl font-extrabold mb-4" style={{ color: C.chalk }}>Where the money goes</div>
+
+        <div className="grid grid-cols-2 gap-3 mb-5">
+          <div className="rounded-2xl p-3.5" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+            <div className="f-mono text-[9px] uppercase tracking-widest mb-1" style={{ color: C.chalkDim }}>Bank Balance</div>
+            <div className="f-mono text-base font-extrabold" style={{ color: C.gold }}>{rm(player.money)}</div>
+            <div className="f-body text-[9.5px] mt-0.5" style={{ color: C.chalkDim }}>Available to spend</div>
+          </div>
+          <div className="rounded-2xl p-3.5" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+            <div className="f-mono text-[9px] uppercase tracking-widest mb-1" style={{ color: C.chalkDim }}>Career Earnings</div>
+            <div className="f-mono text-base font-extrabold" style={{ color: C.chalk }}>{rm(player.totalEarnings || 0)}</div>
+            <div className="f-body text-[9.5px] mt-0.5" style={{ color: C.chalkDim }}>Total made, spending aside</div>
+          </div>
+        </div>
+
+        {owned && (
+          <div className="rounded-2xl p-3.5 mb-4 flex items-center gap-3" style={{ background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.3)" }}>
+            <span className="text-[18px]">🏡</span>
+            <div>
+              <div className="f-display text-[12.5px]" style={{ color: C.chalk }}>You own the {owned.label}</div>
+              <div className="f-body text-[10.5px]" style={{ color: "#10B981" }}>Retirement floor locked in: {WEALTH_TIERS.find(t => t.id === owned.floorTierId).label}</div>
+            </div>
+          </div>
+        )}
+
+        <div className="flex flex-col gap-3">
+          {offered.map(tier => {
+            const affordable = player.money >= tier.cost;
+            return (
+              <div key={tier.id} className="rounded-2xl p-4" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="f-display text-[13.5px]" style={{ color: C.chalk }}>{tier.label}</span>
+                  <span className="f-mono text-[13px] font-extrabold" style={{ color: C.gold }}>{rm(tier.cost)}</span>
+                </div>
+                <p className="f-body text-[11px] mb-2.5" style={{ color: C.chalkDim }}>{tier.desc}</p>
+                <div className="flex items-center gap-1.5 mb-3">
+                  <span className="text-[11px]">🛡️</span>
+                  <span className="f-mono text-[10px] font-bold" style={{ color: "#10B981" }}>Floor: {WEALTH_TIERS.find(t => t.id === tier.floorTierId).label}</span>
+                </div>
+                <button onClick={() => affordable && onBuy(tier.id)} disabled={!affordable}
+                  className={affordable ? "btn-tactile w-full f-body text-xs font-bold py-2.5 rounded-full transition" : "w-full f-body text-xs font-bold py-2.5 rounded-full"}
+                  style={{ background: affordable ? C.amber : C.ink2, color: affordable ? "#1A0A00" : C.chalkDim, cursor: affordable ? "pointer" : "not-allowed" }}>
+                  {affordable ? "Buy" : `Need ${rm(tier.cost - player.money)} more`}
+                </button>
+              </div>
+            );
+          })}
+          {!offered.length && (
+            <p className="f-body text-[12px] text-center py-4" style={{ color: C.chalkDim }}>You already own the best there is.</p>
+          )}
+        </div>
+
+        <button onClick={onBack} className="btn-tactile f-mono text-[10px] uppercase tracking-widest mt-5 transition" style={{ color: C.chalkDim }}>← Back to Hub</button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------
    CLUTCH MOMENT SCREEN
 --------------------------------------------------------- */
 function ClutchMomentScreen({ pending, onChoose }) {
@@ -7890,7 +8032,36 @@ function RetiredScreen({ player, onPlayAgain, onViewHallOfFame, onViewAchievemen
           </div>
         </div>
 
-        <div className="f-mono text-lg mb-4" style={{ color: C.chalk }}>{rm(player.money)} career earnings</div>
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div>
+            <div className="f-mono text-lg font-bold" style={{ color: C.chalk }}>{rm(player.totalEarnings || player.money)}</div>
+            <div className="f-mono text-[9px] uppercase" style={{ color: C.chalkDim }}>Career Earnings</div>
+          </div>
+          <div>
+            <div className="f-mono text-lg font-bold" style={{ color: C.gold }}>{rm(player.money)}</div>
+            <div className="f-mono text-[9px] uppercase" style={{ color: C.chalkDim }}>Left in the Bank</div>
+          </div>
+        </div>
+
+        {/* effectiveWealthTier, not the raw wealthTier(player.money) — a
+            home purchase spent real money and dropped the bank balance,
+            but it also locked in a floor that a spend-it-all ending
+            shouldn't be able to fall below. */}
+        {(() => {
+          const tier = effectiveWealthTier(player);
+          const home = player.homeTier && HOME_TIERS.find(t => t.id === player.homeTier);
+          return (
+            <div className="rounded-2xl p-3.5 mb-4 text-left" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+              <div className="flex items-center justify-between">
+                <span className="f-mono text-[10px] uppercase tracking-widest" style={{ color: C.chalkDim }}>Retirement Outlook</span>
+                <span className="f-display text-[13px]" style={{ color: C.trophyGold }}>{tier.label}</span>
+              </div>
+              <p className="f-body text-[10.5px] mt-1.5" style={{ color: C.chalkDim }}>
+                {home ? `${tier.note} — floor locked in by owning the ${home.label.toLowerCase()}.` : tier.note}
+              </p>
+            </div>
+          );
+        })()}
 
         {player.rival && (() => {
           const rivalOvr = player.rival.peakOverall;
@@ -9201,6 +9372,7 @@ export default function App() {
   };
 
   const handleRequestTrade = () => setScreen("trade_request");
+  const handleOpenLifestyle = () => setScreen("lifestyle_spending");
 
   // Resolves a trade request into one of four outcomes. GRANT_WELL and
   // GRANT_POORLY both reuse the exact "transfer"/"released" club-offer
@@ -9292,6 +9464,29 @@ export default function App() {
     setPlayer(p);
     save(p);
     setBanner(note);
+    setScreen("hub");
+  };
+
+  // Buys a home tier. Guarded against both being called with an
+  // unaffordable or already-superseded tier — the UI already disables
+  // those buttons, but this shouldn't trust that as the only line of
+  // defense, the same lesson learned from the trade-request "role" ask
+  // crash earlier this session.
+  const handleBuyHome = (tierId) => {
+    const tier = HOME_TIERS.find(t => t.id === tierId);
+    if (!tier) return;
+    const ownedIdx = player.homeTier ? HOME_TIERS.findIndex(t => t.id === player.homeTier) : -1;
+    const targetIdx = HOME_TIERS.findIndex(t => t.id === tierId);
+    if (targetIdx <= ownedIdx || player.money < tier.cost) return;
+    let p = { ...player, relationships: { ...player.relationships } };
+    p.money -= tier.cost; // spending, not earning — totalEarnings is untouched
+    p.homeTier = tierId;
+    if (tier.familyBoost) p.relationships.family = clamp(p.relationships.family + tier.familyBoost);
+    const note = `Bought the ${tier.label.toLowerCase()} for ${rm(tier.cost)}. ${tier.desc}`;
+    p.history = [...p.history, { age: p.age, tierLabel: "Lifestyle — " + tier.label, note }];
+    setPlayer(p);
+    save(p);
+    setBanner(`You're now the owner of a ${tier.label.toLowerCase()}.`);
     setScreen("hub");
   };
 
@@ -9391,6 +9586,7 @@ export default function App() {
       note = "A genuine off-season — properly rested, for once. ";
     } else if (planId === "tour") {
       p.money += 8000;
+      p.totalEarnings = (p.totalEarnings || 0) + 8000;
       p.popularity = clamp(p.popularity + 10);
       p.relationships.team = clamp(p.relationships.team - 4);
       note = "A commercial tour — good money, though not everyone in the locker room loves the spotlight. ";
@@ -9593,6 +9789,9 @@ export default function App() {
     if (choice.morale) p.morale = clamp(p.morale + choice.morale);
     if (choice.popularity) p.popularity = clamp(p.popularity + choice.popularity);
     if (choice.money) p.money = Math.max(0, p.money + choice.money);
+    // Only the positive case counts as earnings — a cost isn't negative
+    // income, it's just spending, and shouldn't make gross earnings dip.
+    if (choice.money > 0) p.totalEarnings = (p.totalEarnings || 0) + choice.money;
     if (choice.flag === "nationalTeam") p.nationalTeam = true;
     // Trade Rumors -> "Request the trade": guarantees a transfer window
     // opens this season (consumed in rollClubEvent, which runs later this
@@ -9611,6 +9810,11 @@ export default function App() {
     p.morale = clamp(p.morale + sim.moraleDelta);
     p.popularity = clamp(p.popularity + sim.popularityDelta);
     p.money += sim.moneyDelta;
+    // sim.moneyDelta (salary + bonus) is always >= 0 — pure income, safe to
+    // add directly. Total earnings tracks gross career income and is never
+    // reduced by spending, so it can answer "how much have I made" as a
+    // separate question from "how much do I have left."
+    p.totalEarnings = (p.totalEarnings || 0) + sim.moneyDelta;
     /* Career investments are charged monthly against the contract salary.
        This is what turns money from a scoreboard into a resource — and what
        makes the retirement wealth tier a genuine trade-off. */
@@ -10717,6 +10921,9 @@ export default function App() {
       {screen === "trade_request" && player && player.clubId && (
         <TradeRequestScreen player={player} club={getClub(player.clubId)} onCommit={handleCommitTradeRequest} />
       )}
+      {screen === "lifestyle_spending" && player && (
+        <LifestyleSpendingScreen player={player} onBuy={handleBuyHome} onBack={() => setScreen("hub")} />
+      )}
       {screen === "hub" && player && (
         <Hub
           player={player}
@@ -10725,6 +10932,7 @@ export default function App() {
           onRetireConsider={handleRetireConsider}
           onManageInvestments={handleManageInvestments}
           onRequestTrade={handleRequestTrade}
+          onOpenLifestyle={handleOpenLifestyle}
           summary={summary}
         />
       )}
