@@ -3037,11 +3037,14 @@ const HOME_TIERS = [
 ];
 // Only a purchase strictly ABOVE the currently-owned tier is offered —
 // buying the same or a lower tier again would just be spending money for
-// nothing, since the floor it'd guarantee is already locked in.
-function nextHomeTiers(ownedId) {
-  const ownedIdx = ownedId ? HOME_TIERS.findIndex(t => t.id === ownedId) : -1;
-  return HOME_TIERS.filter((t, i) => i > ownedIdx);
+// nothing, since the floor it'd guarantee is already locked in. Shared by
+// Home, Vehicles, and Gear below — all three follow the same buy-up-not-
+// sideways shape, just with different tier lists.
+function nextTiers(tierList, ownedId) {
+  const ownedIdx = ownedId ? tierList.findIndex(t => t.id === ownedId) : -1;
+  return tierList.filter((t, i) => i > ownedIdx);
 }
+function nextHomeTiers(ownedId) { return nextTiers(HOME_TIERS, ownedId); }
 // The tier actually shown at retirement — never worse than what a home
 // purchase already guaranteed, even if the bank balance alone would
 // suggest a lower tier (e.g. spent on a later, bigger home since).
@@ -3054,6 +3057,47 @@ function effectiveWealthTier(player) {
   const baseIdx = WEALTH_TIERS.findIndex(t => t.id === base.id);
   const floorIdx = WEALTH_TIERS.findIndex(t => t.id === floor.id);
   return baseIdx <= floorIdx ? base : floor; // lower index = better tier
+}
+
+/* Two more one-time tiered categories, same shape as Home — buy-up, never
+   sideways. The Signature Shoe is deliberately gated on Popularity, not
+   just money (reusing the exact 80-point threshold the real "Fan
+   Favorite" achievement already uses) — a maxed-out bank balance with low
+   fame genuinely can't buy it, the same way Nike wouldn't offer a shoe
+   deal to a rich nobody. */
+const VEHICLE_TIERS = [
+  { id: "sedan", label: "Reliable Sedan", cost: 40000, popBoost: 3,
+    desc: "Gets you there. Nobody's impressed, but nobody's asking questions either." },
+  { id: "sports_car", label: "Sports Car", cost: 150000, popBoost: 8,
+    desc: "Heads turn in the club parking lot now." },
+  { id: "exotic", label: "The Exotic", cost: 400000, popBoost: 15,
+    desc: "A Porsche, a BMW, whatever the fantasy is. Every post about it gets screenshotted." },
+];
+const GEAR_TIERS = [
+  { id: "rookie_pack", label: "Rookie Pack", cost: 15000, popBoost: 2,
+    desc: "Full Nike gear, nothing custom yet." },
+  { id: "pro_collection", label: "Pro Collection", cost: 60000, popBoost: 6,
+    desc: "Player-exclusive colorways, the kind fans actually try to cop." },
+  { id: "signature_shoe", label: "Your Own Signature Shoe", cost: 300000, popBoost: 20, popGate: 80,
+    desc: "Nike doesn't put your name on a shoe for just anyone." },
+];
+
+/* Jewelry & Watches — the one genuinely repeatable purchase, and the
+   actual fix for "nothing to buy after 26": any fixed list of one-time
+   tiers, however long, eventually gets checked off entirely. This one
+   never does. Cost escalates ~32% per piece (simulated across 20 pieces
+   before writing this: RM25k for the first, ~RM400k by the 11th, into
+   the millions by the mid-teens) and the Popularity payoff shrinks every
+   3 pieces — a flat repeatable price would just recreate the exact
+   "spend all your income mindlessly" problem this whole feature exists
+   to solve, so the escalation is what keeps every purchase a real
+   decision instead of a button to mash once nothing else is worth
+   buying. */
+function jewelryNextCost(pieces) {
+  return Math.round(25000 * Math.pow(1.32, pieces) / 1000) * 1000;
+}
+function jewelryPopGain(pieces) {
+  return Math.max(2, 5 - Math.floor(pieces / 3));
 }
 
 /* ============================================================
@@ -3568,18 +3612,35 @@ function rollClubEvent(p) {
     return { type: "offers" };
   }
 
-  // Release risk: poor form, bad relationships, or low morale.
+  // Release risk: poor form, bad relationships, or low morale. Each
+  // contributing factor is tracked alongside its bump so that IF a release
+  // fires, the player can be told the actual reason — rather than every
+  // release reading as the same generic "released from your contract"
+  // regardless of whether it was really about form, the locker room, or
+  // just age catching up.
+  const releaseFactors = [];
   let releaseChance = 0.05;
-  if (rating < club.prestige - 25) releaseChance += 0.15; // badly outclassed at the club
-  if (p.relationships.coach < 25) releaseChance += 0.12;
-  if (p.relationships.team < 25) releaseChance += 0.08;
-  if (p.morale < 25) releaseChance += 0.06;
-  if (p.age >= 33) releaseChance += 0.05;
+  if (rating < club.prestige - 25) { releaseChance += 0.15; releaseFactors.push({ id: "outclassed", bump: 0.15 }); }
+  if (p.relationships.coach < 25) { releaseChance += 0.12; releaseFactors.push({ id: "coach", bump: 0.12 }); }
+  if (p.relationships.team < 25) { releaseChance += 0.08; releaseFactors.push({ id: "team", bump: 0.08 }); }
+  if (p.morale < 25) { releaseChance += 0.06; releaseFactors.push({ id: "morale", bump: 0.06 }); }
+  if (p.age >= 33) { releaseChance += 0.05; releaseFactors.push({ id: "age", bump: 0.05 }); }
   // Strong family ties read as stability off the court — clubs are a
   // little slower to cut a player whose life outside basketball is settled.
   if (p.relationships.family >= 80) releaseChance -= 0.04;
   releaseChance = clamp(releaseChance, 0, 0.6);
-  if (Math.random() < releaseChance) return { type: "released" };
+  if (Math.random() < releaseChance) {
+    // The single biggest contributor becomes the headline reason — a
+    // release rarely has just one cause, but leading with the largest
+    // factor reads cleaner than listing every contributing stat. Falls
+    // back to "numbers" when nothing specific tipped it (the flat 0.05
+    // base chance alone, or bad luck against small bumps) — a real,
+    // honest "no single reason" outcome rather than inventing one.
+    const primary = releaseFactors.length
+      ? releaseFactors.reduce((a, b) => (b.bump > a.bump ? b : a)).id
+      : "numbers";
+    return { type: "released", reason: primary };
+  }
 
   /* Transfer-window opportunity. This used to fire ~8 of 15 seasons for a
      good player: outgrowing your club pushed the chance to 0.48 and a strong
@@ -3596,6 +3657,18 @@ function rollClubEvent(p) {
 
   return { type: "stay" };
 }
+// Narrative text for each release reason rollClubEvent can identify — kept
+// as club-agnostic templates (filled in with the actual club name where
+// the release gets resolved) so the phrasing works the same regardless of
+// which club it happens to be.
+const RELEASE_REASON_META = {
+  outclassed: (club) => `Your level never quite matched what ${club} needed — you were fighting an uphill battle from the start.`,
+  coach: (club) => `The coaching staff at ${club} had lost patience with you.`,
+  team: (club) => `You never found your footing in the ${club} locker room.`,
+  morale: (club) => `Your head clearly wasn't in it this season, and ${club} noticed.`,
+  age: (club) => `${club} decided to go with younger legs.`,
+  numbers: (club) => `Sometimes a roster spot just runs out — no single reason, the numbers just didn't work out at ${club} this year.`,
+};
 
 function newPlayer({ name, position, hometown, height, jersey }) {
   const w = posWeights(position);
@@ -3642,7 +3715,7 @@ function newPlayer({ name, position, hometown, height, jersey }) {
     relationships: { coach: 50, team: 50, family: 60 },
     stage: "youth",
     teamName: `${shortHome(hometown)} Youth Selection`,
-    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null, rival: null, tradeRequestCooldown: 0, seasonsAtClub: 0, mblTitles: 0, hadBuzzerBeaterMoment: false, totalEarnings: 0, homeTier: null,
+    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null, rival: null, tradeRequestCooldown: 0, seasonsAtClub: 0, mblTitles: 0, hadBuzzerBeaterMoment: false, totalEarnings: 0, homeTier: null, vehicleTier: null, gearTier: null, jewelryPieces: 0,
     nationalTeam: false, nationalCaps: 0,
     achievements: [],
     peakOverall: overall,
@@ -3666,7 +3739,7 @@ function normalizePlayer(p) {
     mblContributor: false, wonderkid: false, hadMblSeason: false, semiProClub: null,
     contractSalary: 0, contractYearsLeft: 0,
     mssmPendingReveal: false, age18MssmResolved: false, lastSeasonLeagueAwards: [], studying: false, studyDecisionResolved: false, studyGraduated: false,
-    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null, rival: null, tradeRequestCooldown: 0, seasonsAtClub: 0, mblTitles: 0, hadBuzzerBeaterMoment: false, totalEarnings: 0, homeTier: null,
+    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null, rival: null, tradeRequestCooldown: 0, seasonsAtClub: 0, mblTitles: 0, hadBuzzerBeaterMoment: false, totalEarnings: 0, homeTier: null, vehicleTier: null, gearTier: null, jewelryPieces: 0,
     nationalTeam: false, nationalCaps: 0, morale: 60, fatigue: 20,
     popularity: 5, money: 0, highlyTalented: false,
     slowDecliner: false, slowStartNextSeason: false,
@@ -6080,7 +6153,9 @@ function ClubOffersScreen({ player, offers, context, onJoin, onStay, onRetire, o
     transfer: { icon: Plane, color: C.teal, kicker: "Transfer Window", title: "Offers Are Coming In",
       sub: `You're at ${context.oldClubName}. Stay put, or take a new challenge elsewhere?` },
     released: { icon: Newspaper, color: C.red, kicker: "Released", title: "Time to Find a New Home",
-      sub: `${context.oldClubName} let you go. These clubs are willing to take you on.` },
+      sub: context.releaseReason
+        ? RELEASE_REASON_META[context.releaseReason](context.oldClubName)
+        : `${context.oldClubName} let you go. These clubs are willing to take you on.` },
     bankrupt: { icon: Newspaper, color: C.red, kicker: "Club Folded", title: "Time to Find a New Home",
       sub: `${context.oldClubName} folded. You're a free agent — pick your next move.` },
     /* An established pro without a club. Previously every clubless path fell
@@ -6397,9 +6472,66 @@ function TradeRequestScreen({ player, club, onCommit }) {
    etc.) — spending on a home correctly reduces the bank balance, but
    shouldn't make it look like the player earned less over their career.
 --------------------------------------------------------- */
-function LifestyleSpendingScreen({ player, onBuy, onBack }) {
-  const offered = nextHomeTiers(player.homeTier);
-  const owned = player.homeTier && HOME_TIERS.find(t => t.id === player.homeTier);
+function LifestyleSpendingScreen({ player, onBuyHome, onBuyVehicle, onBuyGear, onBuyJewelry, onBack }) {
+  const [cat, setCat] = useState("home");
+  const CATS = [
+    ["home", "Home", "🏡"],
+    ["vehicles", "Vehicles", "🚗"],
+    ["gear", "Gear", "👟"],
+    ["jewelry", "Jewelry", "💎"],
+  ];
+
+  const homeOffered = nextTiers(HOME_TIERS, player.homeTier);
+  const homeOwned = player.homeTier && HOME_TIERS.find(t => t.id === player.homeTier);
+  const vehicleOffered = nextTiers(VEHICLE_TIERS, player.vehicleTier);
+  const vehicleOwned = player.vehicleTier && VEHICLE_TIERS.find(t => t.id === player.vehicleTier);
+  const gearOffered = nextTiers(GEAR_TIERS, player.gearTier);
+  const gearOwned = player.gearTier && GEAR_TIERS.find(t => t.id === player.gearTier);
+  const jewelryPieces = player.jewelryPieces || 0;
+  const jewelryCost = jewelryNextCost(jewelryPieces);
+  const jewelryGain = jewelryPopGain(jewelryPieces);
+  const jewelryAffordable = player.money >= jewelryCost;
+
+  // Shared card renderer for the three one-time tiered categories — Home,
+  // Vehicles, and Gear all use the exact same buy-up-not-sideways shape,
+  // just with different data and an optional floor/popularity badge.
+  const renderTierCard = (tier, onBuy) => {
+    const affordable = player.money >= tier.cost;
+    const gated = tier.popGate && player.popularity < tier.popGate;
+    const buyable = affordable && !gated;
+    return (
+      <div key={tier.id} className="rounded-2xl p-4" style={{ background: C.ink3, border: `1px solid ${C.line}`, opacity: gated ? 0.7 : 1 }}>
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="f-display text-[13.5px]" style={{ color: C.chalk }}>{tier.label}</span>
+          <span className="f-mono text-[13px] font-extrabold" style={{ color: C.gold }}>{rm(tier.cost)}</span>
+        </div>
+        <p className="f-body text-[11px] mb-2.5" style={{ color: C.chalkDim }}>{tier.desc}</p>
+        <div className="flex flex-wrap items-center gap-1.5 mb-3">
+          {tier.floorTierId && (
+            <span className="f-mono text-[10px] font-bold flex items-center gap-1" style={{ color: "#10B981" }}>
+              🛡️ Floor: {WEALTH_TIERS.find(t => t.id === tier.floorTierId).label}
+            </span>
+          )}
+          {tier.popBoost > 0 && (
+            <span className="f-mono text-[10px] font-bold flex items-center gap-1" style={{ color: C.amberBright }}>
+              📻 Popularity +{tier.popBoost}
+            </span>
+          )}
+          {tier.popGate && (
+            <span className="f-mono text-[10px] font-bold flex items-center gap-1" style={{ color: "#3B82F6" }}>
+              🔒 Requires {tier.popGate}+ Popularity
+            </span>
+          )}
+        </div>
+        <button onClick={() => buyable && onBuy(tier.id)} disabled={!buyable}
+          className={buyable ? "btn-tactile w-full f-body text-xs font-bold py-2.5 rounded-full transition" : "w-full f-body text-xs font-bold py-2.5 rounded-full"}
+          style={{ background: buyable ? C.amber : C.ink2, color: buyable ? "#1A0A00" : C.chalkDim, cursor: buyable ? "pointer" : "not-allowed" }}>
+          {gated ? "Not Yet Earned" : affordable ? "Buy" : `Need ${rm(tier.cost - player.money)} more`}
+        </button>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
       <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
@@ -6419,42 +6551,92 @@ function LifestyleSpendingScreen({ player, onBuy, onBack }) {
           </div>
         </div>
 
-        {owned && (
-          <div className="rounded-2xl p-3.5 mb-4 flex items-center gap-3" style={{ background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.3)" }}>
-            <span className="text-[18px]">🏡</span>
-            <div>
-              <div className="f-display text-[12.5px]" style={{ color: C.chalk }}>You own the {owned.label}</div>
-              <div className="f-body text-[10.5px]" style={{ color: "#10B981" }}>Retirement floor locked in: {WEALTH_TIERS.find(t => t.id === owned.floorTierId).label}</div>
-            </div>
+        {/* Category sub-navigation — five categories is too much for one
+            scroll, same lesson as the Hub's own tabs earlier this session. */}
+        <div className="flex gap-1.5 mb-4 overflow-x-auto">
+          {CATS.map(([id, label, icon]) => (
+            <button key={id} onClick={() => setCat(id)}
+              className="btn-tactile flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl transition"
+              style={cat === id
+                ? { background: "rgba(249,115,22,0.10)", border: `1px solid ${C.amber}` }
+                : { background: C.ink3, border: `1px solid ${C.line}` }}>
+              <span className="text-[13px]">{icon}</span>
+              <span className="f-mono text-[10px] font-bold" style={{ color: cat === id ? C.amberBright : C.chalkDim }}>{label}</span>
+            </button>
+          ))}
+        </div>
+
+        {cat === "home" && (
+          <div className="flex flex-col gap-3">
+            {homeOwned && (
+              <div className="rounded-2xl p-3.5 flex items-center gap-3" style={{ background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.3)" }}>
+                <span className="text-[18px]">🏡</span>
+                <div>
+                  <div className="f-display text-[12.5px]" style={{ color: C.chalk }}>You own the {homeOwned.label}</div>
+                  <div className="f-body text-[10.5px]" style={{ color: "#10B981" }}>Retirement floor locked in: {WEALTH_TIERS.find(t => t.id === homeOwned.floorTierId).label}</div>
+                </div>
+              </div>
+            )}
+            {homeOffered.map(tier => renderTierCard(tier, onBuyHome))}
+            {!homeOffered.length && <p className="f-body text-[12px] text-center py-4" style={{ color: C.chalkDim }}>You already own the best there is.</p>}
           </div>
         )}
 
-        <div className="flex flex-col gap-3">
-          {offered.map(tier => {
-            const affordable = player.money >= tier.cost;
-            return (
-              <div key={tier.id} className="rounded-2xl p-4" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="f-display text-[13.5px]" style={{ color: C.chalk }}>{tier.label}</span>
-                  <span className="f-mono text-[13px] font-extrabold" style={{ color: C.gold }}>{rm(tier.cost)}</span>
-                </div>
-                <p className="f-body text-[11px] mb-2.5" style={{ color: C.chalkDim }}>{tier.desc}</p>
-                <div className="flex items-center gap-1.5 mb-3">
-                  <span className="text-[11px]">🛡️</span>
-                  <span className="f-mono text-[10px] font-bold" style={{ color: "#10B981" }}>Floor: {WEALTH_TIERS.find(t => t.id === tier.floorTierId).label}</span>
-                </div>
-                <button onClick={() => affordable && onBuy(tier.id)} disabled={!affordable}
-                  className={affordable ? "btn-tactile w-full f-body text-xs font-bold py-2.5 rounded-full transition" : "w-full f-body text-xs font-bold py-2.5 rounded-full"}
-                  style={{ background: affordable ? C.amber : C.ink2, color: affordable ? "#1A0A00" : C.chalkDim, cursor: affordable ? "pointer" : "not-allowed" }}>
-                  {affordable ? "Buy" : `Need ${rm(tier.cost - player.money)} more`}
-                </button>
+        {cat === "vehicles" && (
+          <div className="flex flex-col gap-3">
+            {vehicleOwned && (
+              <div className="rounded-2xl p-3.5 flex items-center gap-3" style={{ background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.3)" }}>
+                <span className="text-[18px]">🚗</span>
+                <div className="f-display text-[12.5px]" style={{ color: C.chalk }}>You own the {vehicleOwned.label}</div>
               </div>
-            );
-          })}
-          {!offered.length && (
-            <p className="f-body text-[12px] text-center py-4" style={{ color: C.chalkDim }}>You already own the best there is.</p>
-          )}
-        </div>
+            )}
+            {vehicleOffered.map(tier => renderTierCard(tier, onBuyVehicle))}
+            {!vehicleOffered.length && <p className="f-body text-[12px] text-center py-4" style={{ color: C.chalkDim }}>You already own the best there is.</p>}
+          </div>
+        )}
+
+        {cat === "gear" && (
+          <div className="flex flex-col gap-3">
+            {gearOwned && (
+              <div className="rounded-2xl p-3.5 flex items-center gap-3" style={{ background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.3)" }}>
+                <span className="text-[18px]">👟</span>
+                <div className="f-display text-[12.5px]" style={{ color: C.chalk }}>You own the {gearOwned.label}</div>
+              </div>
+            )}
+            {gearOffered.map(tier => renderTierCard(tier, onBuyGear))}
+            {!gearOffered.length && <p className="f-body text-[12px] text-center py-4" style={{ color: C.chalkDim }}>You already own the best there is.</p>}
+          </div>
+        )}
+
+        {cat === "jewelry" && (
+          <div className="rounded-2xl p-4" style={{ background: "linear-gradient(135deg, rgba(249,115,22,0.07), transparent)", border: "1px solid rgba(249,115,22,0.3)" }}>
+            <div className="flex items-center gap-2.5 mb-2">
+              <span className="text-[20px]">💎</span>
+              <span className="f-display text-[14px]" style={{ color: C.chalk }}>Add to the Collection</span>
+              <span className="f-mono text-[8.5px] uppercase font-bold ml-auto px-2 py-1 rounded-full" style={{ background: "rgba(249,115,22,0.15)", color: C.amberBright }}>∞ Repeatable</span>
+            </div>
+            <p className="f-body text-[12px] mb-3" style={{ color: C.chalkDim }}>A new watch, a new chain — costs more as the collection grows, but there's always a bigger flex available.</p>
+            <div className="grid grid-cols-3 gap-2 mb-3">
+              <div className="text-center rounded-xl p-2" style={{ background: C.ink3 }}>
+                <div className="f-mono text-sm font-extrabold" style={{ color: C.chalk }}>{jewelryPieces}</div>
+                <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Pieces Owned</div>
+              </div>
+              <div className="text-center rounded-xl p-2" style={{ background: C.ink3 }}>
+                <div className="f-mono text-sm font-extrabold" style={{ color: C.gold }}>{rm(jewelryCost)}</div>
+                <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Next Piece</div>
+              </div>
+              <div className="text-center rounded-xl p-2" style={{ background: C.ink3 }}>
+                <div className="f-mono text-sm font-extrabold" style={{ color: C.amberBright }}>+{jewelryGain}</div>
+                <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Popularity</div>
+              </div>
+            </div>
+            <button onClick={() => jewelryAffordable && onBuyJewelry()} disabled={!jewelryAffordable}
+              className={jewelryAffordable ? "btn-tactile w-full f-body text-xs font-bold py-2.5 rounded-full transition" : "w-full f-body text-xs font-bold py-2.5 rounded-full"}
+              style={{ background: jewelryAffordable ? C.amber : C.ink3, color: jewelryAffordable ? "#1A0A00" : C.chalkDim, cursor: jewelryAffordable ? "pointer" : "not-allowed" }}>
+              {jewelryAffordable ? "Buy the Next Piece" : `Need ${rm(jewelryCost - player.money)} more`}
+            </button>
+          </div>
+        )}
 
         <button onClick={onBack} className="btn-tactile f-mono text-[10px] uppercase tracking-widest mt-5 transition" style={{ color: C.chalkDim }}>← Back to Hub</button>
       </div>
@@ -9490,6 +9672,67 @@ export default function App() {
     setScreen("hub");
   };
 
+  const handleBuyVehicle = (tierId) => {
+    const tier = VEHICLE_TIERS.find(t => t.id === tierId);
+    if (!tier) return;
+    const ownedIdx = player.vehicleTier ? VEHICLE_TIERS.findIndex(t => t.id === player.vehicleTier) : -1;
+    const targetIdx = VEHICLE_TIERS.findIndex(t => t.id === tierId);
+    if (targetIdx <= ownedIdx || player.money < tier.cost) return;
+    let p = { ...player };
+    p.money -= tier.cost;
+    p.vehicleTier = tierId;
+    p.popularity = clamp(p.popularity + tier.popBoost);
+    const note = `Bought the ${tier.label.toLowerCase()} for ${rm(tier.cost)}. ${tier.desc}`;
+    p.history = [...p.history, { age: p.age, tierLabel: "Lifestyle — " + tier.label, note }];
+    setPlayer(p);
+    save(p);
+    setBanner(`You're now the owner of a ${tier.label.toLowerCase()}.`);
+    setScreen("hub");
+  };
+
+  const handleBuyGear = (tierId) => {
+    const tier = GEAR_TIERS.find(t => t.id === tierId);
+    if (!tier) return;
+    const ownedIdx = player.gearTier ? GEAR_TIERS.findIndex(t => t.id === player.gearTier) : -1;
+    const targetIdx = GEAR_TIERS.findIndex(t => t.id === tierId);
+    // Same defensive pattern as the trade-request "role" ask crash earlier
+    // this session — the UI already hides a popularity-gated tier the
+    // player hasn't earned, but this handler shouldn't trust that as the
+    // only line of defense against being called with it anyway.
+    if (targetIdx <= ownedIdx || player.money < tier.cost) return;
+    if (tier.popGate && player.popularity < tier.popGate) return;
+    let p = { ...player };
+    p.money -= tier.cost;
+    p.gearTier = tierId;
+    p.popularity = clamp(p.popularity + tier.popBoost);
+    const note = `Bought the ${tier.label.toLowerCase()} for ${rm(tier.cost)}. ${tier.desc}`;
+    p.history = [...p.history, { age: p.age, tierLabel: "Lifestyle — " + tier.label, note }];
+    setPlayer(p);
+    save(p);
+    setBanner(`You're now the owner of the ${tier.label.toLowerCase()}.`);
+    setScreen("hub");
+  };
+
+  // The repeatable purchase — no tier to compare against, just the next
+  // escalating cost. Guarded against being called while unaffordable, same
+  // as everything else here, even though the UI already disables that case.
+  const handleBuyJewelry = () => {
+    const pieces = player.jewelryPieces || 0;
+    const cost = jewelryNextCost(pieces);
+    if (player.money < cost) return;
+    let p = { ...player };
+    p.money -= cost;
+    p.jewelryPieces = pieces + 1;
+    const gain = jewelryPopGain(pieces);
+    p.popularity = clamp(p.popularity + gain);
+    const note = `Added another piece to the collection for ${rm(cost)} — ${p.jewelryPieces} piece${p.jewelryPieces === 1 ? "" : "s"} now.`;
+    p.history = [...p.history, { age: p.age, tierLabel: "Lifestyle — Jewelry", note }];
+    setPlayer(p);
+    save(p);
+    setBanner(`Another piece for the collection.`);
+    setScreen("hub");
+  };
+
   const handleStayClub = () => {
     let p = { ...player };
     const club = getClub(p.clubId);
@@ -10419,7 +10662,7 @@ export default function App() {
           age: p.age, tierLabel: ev.type === "bankrupt" ? "Club Folded" : "Released",
           note: ev.type === "bankrupt"
             ? `${oldClub.name} ran into money trouble and folded — you're a free agent.`
-            : `${oldClub.name} released you from your contract.`,
+            : RELEASE_REASON_META[ev.reason || "numbers"](oldClub.name),
         }];
         p.morale = clamp(p.morale - (ev.type === "bankrupt" ? 8 : 14));
         // QUEUE rather than return. These club branches used to jump straight
@@ -10428,7 +10671,7 @@ export default function App() {
         // only ~27% of seasons and could finish a career at OVR 86 with zero
         // caps and zero overseas offers. Queued offers are shown after the
         // bigger career events resolve.
-        p.pendingClubOffers = { offers, context: { mode: ev.type, oldClubName: oldClub.name } };
+        p.pendingClubOffers = { offers, context: { mode: ev.type, oldClubName: oldClub.name, releaseReason: ev.reason || null } };
       } else if (p.contractYearsLeft <= 0) {
         // Contract expired: must re-sign or move (free agency).
         const offers = generateClubOffers(p, { count: 3, excludeId: p.clubId });
@@ -10922,7 +11165,14 @@ export default function App() {
         <TradeRequestScreen player={player} club={getClub(player.clubId)} onCommit={handleCommitTradeRequest} />
       )}
       {screen === "lifestyle_spending" && player && (
-        <LifestyleSpendingScreen player={player} onBuy={handleBuyHome} onBack={() => setScreen("hub")} />
+        <LifestyleSpendingScreen
+          player={player}
+          onBuyHome={handleBuyHome}
+          onBuyVehicle={handleBuyVehicle}
+          onBuyGear={handleBuyGear}
+          onBuyJewelry={handleBuyJewelry}
+          onBack={() => setScreen("hub")}
+        />
       )}
       {screen === "hub" && player && (
         <Hub
