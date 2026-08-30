@@ -139,6 +139,14 @@ const FontStyle = memo(() => (
       outline: none;
       box-shadow: 0 0 0 2px rgba(249,115,22,0.45);
     }
+
+    /* Screen entry animation — pure CSS, runs on mount with no JS
+       involved (see ScreenFade's comment for why this replaced an
+       earlier requestAnimationFrame-driven version). */
+    @keyframes screenFadeIn{
+      from{ opacity:0; transform:translateY(10px); }
+      to{ opacity:1; transform:translateY(0); }
+    }
   `}</style>
 ));
 
@@ -1811,6 +1819,57 @@ function pick3(arr) {
 const rm = (n) => `RM ${Math.round(n).toLocaleString()}`;
 const round1 = (n) => Math.round(n * 10) / 10;
 const randFloat = (min, max) => min + Math.random() * (max - min);
+
+/* ============================================================
+   UI SOUND — synthesized via Web Audio API, no audio files needed (no
+   asset loading, no bundle size cost). Same two frequencies/durations
+   validated in the concept mockup, kept identical here for parity with
+   what was approved. Scoped to "tap" and "confirm" only for this first
+   pass — those two cover the vast majority of interactive elements
+   through a single delegated click listener (see the useEffect in App).
+   "Success" (achievement unlocks) and "deny" (blocked actions) are
+   deliberately deferred: success would need touching the ~11 scattered
+   checkAchievements call sites to detect what's actually new, and deny
+   can't hook a simple click listener at all since disabled buttons don't
+   fire click events in the first place — both are real, but bigger,
+   separate pieces of work once this base layer is confirmed solid.
+============================================================ */
+let _audioCtx = null;
+function _getAudioCtx() {
+  if (!_audioCtx) {
+    const Ctor = window.AudioContext || window.webkitAudioContext;
+    if (!Ctor) return null; // no Web Audio support — sound silently no-ops, nothing else breaks
+    _audioCtx = new Ctor();
+  }
+  return _audioCtx;
+}
+function _playTone(freq, duration, type, gainPeak) {
+  const ac = _getAudioCtx();
+  if (!ac) return;
+  try {
+    const osc = ac.createOscillator();
+    const gain = ac.createGain();
+    osc.type = type || "sine";
+    osc.frequency.setValueAtTime(freq, ac.currentTime);
+    gain.gain.setValueAtTime(0.0001, ac.currentTime);
+    gain.gain.exponentialRampToValueAtTime(gainPeak || 0.15, ac.currentTime + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + duration);
+    osc.connect(gain).connect(ac.destination);
+    osc.start();
+    osc.stop(ac.currentTime + duration);
+  } catch (e) { /* never let a sound glitch break the actual interaction */ }
+}
+const UI_SOUNDS = {
+  tap: () => _playTone(720, 0.08, "sine", 0.1),
+  confirm: () => { _playTone(440, 0.1, "triangle", 0.14); setTimeout(() => _playTone(660, 0.12, "triangle", 0.12), 60); },
+};
+const SOUND_MUTE_KEY = "hoops_life_muted";
+function isSoundMuted() {
+  try { return window.localStorage.getItem(SOUND_MUTE_KEY) === "1"; } catch (e) { return false; }
+}
+function setSoundMuted(muted) {
+  try { window.localStorage.setItem(SOUND_MUTE_KEY, muted ? "1" : "0"); } catch (e) { /* ignore */ }
+}
 
 function weightedPick(options) {
   const total = options.reduce((s, o) => s + o.weight, 0);
@@ -8428,6 +8487,29 @@ function RetiredScreen({ player, onPlayAgain, onViewHallOfFame, onViewAchievemen
 }
 
 /* ---------------------------------------------------------
+   SCREEN FADE
+   Wraps the entire screen-conditional chain in ONE place — keyed by
+   `screen`, so React fully remounts it on every transition. Pure CSS
+   @keyframes rather than a useState/useEffect/requestAnimationFrame
+   flip: the first version used the JS approach and it worked, but it
+   adds a second React render cycle to every single screen mount in the
+   game — across a full career's worth of transitions that's real,
+   measurable overhead for zero benefit over letting the browser's own
+   rendering engine just run the animation on mount. No JS timing to get
+   right, nothing to flush, nothing that can fall out of sync with
+   React's render cycle. Timing matches the concept mockup exactly
+   (280ms) since that's what was already validated as quick enough to
+   survive dozens of clicks a season without feeling like a wait.
+--------------------------------------------------------- */
+function ScreenFade({ children }) {
+  return (
+    <div className="w-full min-h-screen" style={{ animation: "screenFadeIn 0.28s ease" }}>
+      {children}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------
    MAIN APP
 --------------------------------------------------------- */
 export default function App() {
@@ -8448,6 +8530,26 @@ export default function App() {
   const [nationalEvent, setNationalEvent] = useState(null);
   const [nationalTryout, setNationalTryout] = useState(null);
   const usedEvents = useRef([]);
+  const [muted, setMuted] = useState(isSoundMuted);
+  const toggleMuted = () => setMuted(m => { const next = !m; setSoundMuted(next); return next; });
+
+  // A single delegated listener rather than touching every individual
+  // onClick handler in the file — .choice-card and .btn-tactile are
+  // already the shared classes every interactive element in the game
+  // uses for its press feedback (added earlier this session), so hooking
+  // sound onto them here reaches essentially every button in the game at
+  // once, with zero changes to the ~40 screen components that use them.
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (muted) return;
+      const target = e.target.closest(".choice-card, .btn-tactile");
+      if (!target || target.disabled) return;
+      const sound = target.classList.contains("choice-card") ? UI_SOUNDS.tap : UI_SOUNDS.confirm;
+      sound();
+    };
+    document.addEventListener("click", handleClick);
+    return () => document.removeEventListener("click", handleClick);
+  }, [muted]);
 
   // Storage: uses window.storage when available (Claude.ai artifact runtime),
   // and falls back to plain browser localStorage everywhere else — this is
@@ -11060,6 +11162,16 @@ export default function App() {
   return (
     <div className="w-full min-h-screen" style={{ background: C.ink }}>
       <FontStyle />
+      {/* Always rendered regardless of which screen is showing, same idea
+          as any game's persistent settings chrome — fixed position so it
+          never scrolls away, and never blocks anything underneath it. */}
+      <button onClick={toggleMuted}
+        className="fixed top-3 right-3 z-50 w-9 h-9 rounded-full flex items-center justify-center transition"
+        style={{ background: "rgba(20,20,20,0.85)", border: `1px solid ${C.line}`, backdropFilter: "blur(4px)" }}
+        aria-label={muted ? "Unmute sound" : "Mute sound"}>
+        <span className="text-[15px]">{muted ? "🔇" : "🔊"}</span>
+      </button>
+      <ScreenFade key={screen}>
       {screen === "start" && <StartScreen onStart={handleStart} savedGame={savedGame} onContinue={handleContinue} onViewHallOfFame={() => setScreen("hall_of_fame")} onViewAchievements={() => setScreen("achievement_gallery")} />}
       {screen === "u15_result" && player && (
         <U15SelectionScreen
@@ -11214,6 +11326,7 @@ export default function App() {
           onBack={() => setScreen("start")}
         />
       )}
+      </ScreenFade>
     </div>
   );
 }
