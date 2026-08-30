@@ -8502,6 +8502,18 @@ function RetiredScreen({ player, onPlayAgain, onViewHallOfFame, onViewAchievemen
    survive dozens of clicks a season without feeling like a wait.
 --------------------------------------------------------- */
 function ScreenFade({ children }) {
+  // Real bug found while reviewing this: nothing in the whole file ever
+  // resets scroll position. There's no router here, just conditional
+  // rendering on `screen` — so without this, scrolling down on a long
+  // screen (Hub, a career timeline, an achievement list) and then hitting
+  // Continue would land the NEXT screen still scrolled to wherever the
+  // previous one left off, which now looks especially broken next to a
+  // smooth fade-in specifically drawing attention to the transition.
+  // ScreenFade already remounts on every screen change (key={screen}), so
+  // it's the natural place to fix this — no separate effect needed.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
   return (
     <div className="w-full min-h-screen" style={{ animation: "screenFadeIn 0.28s ease" }}>
       {children}
