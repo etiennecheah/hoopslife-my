@@ -3543,6 +3543,46 @@ function nextRoleTier(role) {
   if (role === "Rotation") return "Starter";
   return null;
 }
+
+/* ============================================================
+   MIDSEASON CHECKPOINT — a real decision point inserted between the
+   season's random event and the Result screen, rather than everything
+   resolving silently in one pass. Deliberately does NOT generate real
+   mid-season stats: an earlier version of this concept tried a full
+   split of the season simulation into two independently-rollable halves,
+   and investigating it turned up how tightly the injury-risk roll is
+   coupled to gamesPlayed/leagueStats generation — untangling that safely
+   would be its own separate project, not a natural extension of this one.
+   What's here instead is a cheap categorical read (midseasonFormRead)
+   compared against the role's own expectation, plus relocating the
+   already-independent Rival Game trigger (the Buzzer-Beater) to fire
+   HERE instead of after the season's fully resolved — "a rivalry game
+   happens mid-season" is the more natural placement for something that
+   was already unconditional on the season's own outcome. Simulated
+   across four player profiles before writing this: a player genuinely
+   outplaying their role triggers Coach Talk ~51% of the time; a player
+   already at the top role, or merely meeting expectations, essentially
+   never does. Injury Scare / Trade Buzz / Locker Room were sketched in
+   the concept mockup but deliberately left out of this pass — same
+   reasoning, different specific coupling to untangle for each.
+============================================================ */
+function midseasonFormRead(p) {
+  const overall = computeOverall(p.stats, p.position);
+  const expectation = { Bench: 52, Rotation: 60, Starter: 68 }[p.starterStatus] || 55;
+  const score = (overall - expectation) + randInt(-6, 6);
+  if (score >= 8) return "above";
+  if (score <= -8) return "cold";
+  return "expected";
+}
+function rollMidseasonCheckpoint(p) {
+  const rivalEligible = !p.hadBuzzerBeaterMoment && p.stage === "pro" && p.league && !p.abroad && p.age >= 18;
+  if (rivalEligible && Math.random() < 0.05) return { type: "rival_game" };
+  if (p.stage === "pro" && p.clubId && p.starterStatus && nextRoleTier(p.starterStatus)) {
+    if (midseasonFormRead(p) === "above") return { type: "coach_talk" };
+  }
+  return { type: "none" };
+}
+
 // Used to tell an upgrade from a downgrade when role shifts on its own
 // between seasons (not via signing/negotiation), so the player gets the
 // right framing rather than always reading as bad news.
@@ -6529,6 +6569,67 @@ function TradeRequestScreen({ player, club, onCommit }) {
 }
 
 /* ---------------------------------------------------------
+   MIDSEASON CHECKPOINT SCREEN
+   Reached between the season's random Event and the Result screen when
+   rollMidseasonCheckpoint picks "coach_talk" (Rival Game routes straight
+   to the existing BuzzerBeaterScreen instead — nothing new needed there).
+--------------------------------------------------------- */
+function MidseasonCheckpointScreen({ player, onChoose }) {
+  return (
+    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
+      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+        <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>Midseason · {player.teamName}</div>
+        <div className="f-display text-xl font-extrabold mb-4" style={{ color: C.chalk }}>"Coach, can we talk about my role?"</div>
+
+        <div className="grid grid-cols-3 gap-2 mb-5">
+          <div className="rounded-xl p-2.5 text-center" style={{ background: "rgba(16,185,129,0.10)", border: "1px solid rgba(16,185,129,0.3)" }}>
+            <div className="f-display text-[12px] font-extrabold" style={{ color: "#10B981" }}>Above Role</div>
+            <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Form Read</div>
+          </div>
+          <div className="rounded-xl p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+            <div className="f-display text-[12px] font-extrabold" style={{ color: C.chalk }}>{player.starterStatus}</div>
+            <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Current Role</div>
+          </div>
+          <div className="rounded-xl p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+            <div className="f-display text-[12px] font-extrabold" style={{ color: C.chalk }}>{computeOverall(player.stats, player.position)}</div>
+            <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Overall</div>
+          </div>
+        </div>
+        <p className="f-body text-[13px] mb-4" style={{ color: C.chalkDim }}>
+          You're outplaying your role. The coach has ten minutes before shootaround.
+        </p>
+
+        <div className="grid grid-cols-2 gap-3">
+          <button onClick={() => onChoose("press")} className="choice-card text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+            <div className="text-center text-[13px] font-bold pt-3" style={{ color: C.chalk }}>Make Your Case</div>
+            <div className="text-center f-body text-[10px] pb-2" style={{ color: C.chalkDim }}>Push for more minutes</div>
+            <EventChoiceIcon icon="handshake" />
+            <div className="p-3 flex flex-col gap-2">
+              <div className="flex items-center justify-between px-3 py-2 rounded-full text-[10.5px] font-semibold" style={{ background: "rgba(16,185,129,0.14)", color: "#10B981" }}>
+                <span>Earns more minutes</span><span className="f-mono font-extrabold">62%</span>
+              </div>
+              <div className="flex items-center justify-between px-3 py-2 rounded-full text-[10.5px] font-semibold" style={{ background: "rgba(239,68,68,0.14)", color: "#EF4444" }}>
+                <span>Reads as impatient</span><span className="f-mono font-extrabold">38%</span>
+              </div>
+            </div>
+          </button>
+          <button onClick={() => onChoose("patient")} className="choice-card text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+            <div className="text-center text-[13px] font-bold pt-3" style={{ color: C.chalk }}>Stay Patient</div>
+            <div className="text-center f-body text-[10px] pb-2" style={{ color: C.chalkDim }}>Trust the process</div>
+            <EventChoiceIcon icon="star" />
+            <div className="p-3 flex flex-col gap-2">
+              <div className="flex items-center justify-center px-3 py-2 rounded-full text-[10.5px] font-semibold" style={{ background: C.ink2, color: C.teal }}>
+                +Coach Trust, role unchanged
+              </div>
+            </div>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------
    LIFESTYLE SPENDING SCREEN
    Bank balance and total career earnings are shown as two separate
    numbers on purpose (see totalEarnings tracking in handleContinueAfterResult
@@ -8543,6 +8644,9 @@ export default function App() {
   // Which offer is currently being negotiated — transient UI state, same
   // tier as clubOffers/clubOfferContext, never persisted onto the player.
   const [negotiatingOffer, setNegotiatingOffer] = useState(null);
+  // Which checkpoint event is currently active — transient UI state, same
+  // tier as negotiatingOffer, resolved before the season's Result screen.
+  const [midseasonEvent, setMidseasonEvent] = useState(null);
   const [nationalEvent, setNationalEvent] = useState(null);
   const [nationalTryout, setNationalTryout] = useState(null);
   const usedEvents = useRef([]);
@@ -9764,7 +9868,52 @@ export default function App() {
     setPlayer(p);
     save(p);
     setBanner(note);
-    setScreen("hub");
+    // Now reached from the midseason checkpoint (before the season's
+    // Result screen has shown), not from end-of-season as before — the
+    // full season summary was already built by handleChooseEvent and is
+    // still waiting in `summary`, so this resolves into it rather than
+    // returning to the Hub the way it used to when this fired last.
+    setScreen("result");
+  };
+
+  // Resolves the Coach Talk checkpoint. A won ask upgrades the role
+  // immediately, but this season's box score (leagueStats/leagueBoard in
+  // `summary`) was already fully computed by handleChooseEvent before the
+  // checkpoint even ran — the role change takes effect starting next
+  // season's role check, same mechanism every other role change in the
+  // game already goes through. "You start the second half with more
+  // minutes" is the moment itself, not a retroactive rewrite of a season
+  // that's already been simulated.
+  const handleCoachTalkChoice = (choiceId) => {
+    let p = { ...player, relationships: { ...player.relationships } };
+    let note;
+    if (choiceId === "patient") {
+      p.relationships.coach = clamp(p.relationships.coach + 4);
+      note = '"Stay ready." The coach appreciates the patience.';
+    } else {
+      const won = Math.random() < 0.62;
+      if (won) {
+        const newRole = nextRoleTier(p.starterStatus);
+        if (newRole) {
+          p.starterStatus = newRole;
+          if (p.clubId && p.league) {
+            const club = getClub(p.clubId);
+            p.contractSalary = contractMonthlySalary({ leagueId: p.league, role: newRole, club, semiPro: !!p.semiProClub });
+          }
+        }
+        p.relationships.coach = clamp(p.relationships.coach + 2);
+        note = '"Alright — show me." Your role moves up starting next season.';
+      } else {
+        p.relationships.coach = clamp(p.relationships.coach - 5);
+        note = '"Everyone thinks they deserve more." The ask itself cost something.';
+      }
+    }
+    p.history = [...p.history, { age: p.age, tierLabel: "Midseason Checkpoint", note }];
+    setMidseasonEvent(null);
+    setPlayer(p);
+    save(p);
+    setBanner(note);
+    setScreen("result");
   };
 
   // Buys a home tier. Guarded against both being called with an
@@ -10409,7 +10558,23 @@ export default function App() {
       playingStyle: p.playingStyle, shotProfile, styleNote,
     });
     setPlayer(p);
-    setScreen(p.pendingInjuryDecision ? "injury_recovery" : "result");
+    if (p.pendingInjuryDecision) {
+      // A serious injury takes priority over the checkpoint entirely — a
+      // coach conversation about more minutes doesn't make sense in the
+      // same breath as just getting hurt, so the checkpoint pool isn't
+      // even checked in that case.
+      setScreen("injury_recovery");
+      return;
+    }
+    const checkpoint = rollMidseasonCheckpoint(p);
+    if (checkpoint.type === "rival_game") {
+      setScreen("buzzer_beater");
+    } else if (checkpoint.type === "coach_talk") {
+      setMidseasonEvent(checkpoint);
+      setScreen("midseason_checkpoint");
+    } else {
+      setScreen("result");
+    }
   };
 
   /* The off-season resolution is ~490 lines and runs synchronously: ageing,
@@ -10971,20 +11136,13 @@ export default function App() {
       return;
     }
 
-    // Signature Moment: the Buzzer-Beater. Deliberately checked LAST, after
-    // every other pending screen this season — it should never preempt an
-    // injury decision, a national call-up, or a club offer, since those are
-    // all more urgent than a cinematic beat. One-shot per career (the
-    // "hadBuzzerBeaterMoment" gate) and low-probability even when eligible,
-    // so it stays rare enough to actually feel like a signature moment
-    // rather than another regular event.
-    if (!p.hadBuzzerBeaterMoment && p.stage === "pro" && p.league && !p.abroad && p.age >= 18 && Math.random() < 0.05) {
-      setPlayer(p);
-      save(p);
-      setBanner(bannerMsg);
-      setScreen("buzzer_beater");
-      return;
-    }
+    // Signature Moment: the Buzzer-Beater used to be checked here, last,
+    // after every other pending screen this season. It's now rolled at
+    // the midseason checkpoint instead (see rollMidseasonCheckpoint) —
+    // "a rivalry game happens mid-season" reads more naturally than
+    // "checked after the whole season already resolved," and the
+    // eligibility/probability are otherwise unchanged, just relocated,
+    // not duplicated.
 
     setBanner(bannerMsg);
     setScreen("hub");
@@ -11271,6 +11429,9 @@ export default function App() {
       )}
       {screen === "buzzer_beater" && player && (
         <BuzzerBeaterScreen player={player} onComplete={handleBuzzerBeaterComplete} />
+      )}
+      {screen === "midseason_checkpoint" && player && midseasonEvent && midseasonEvent.type === "coach_talk" && (
+        <MidseasonCheckpointScreen player={player} onChoose={handleCoachTalkChoice} />
       )}
       {screen === "overseas_offers" && player && player.pendingOverseasOffer && (
         <OverseasOffersScreen player={player} offer={player.pendingOverseasOffer} onSign={handleAcceptOverseasOffer} onDecline={handleDeclineOverseasOffer} />
