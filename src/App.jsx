@@ -2817,6 +2817,27 @@ function combineHalfSeasonStats(s1, gp1, s2, gp2) {
 // of season stats — a faithful extraction of what used to be inline after
 // the single games/injury roll, changed only to take its inputs as
 // parameters instead of closing over handleChooseEvent's local variables.
+// Generates a single "season-high" game — the game doesn't track
+// individual box scores, only per-game averages, so this produces a
+// plausible standout performance from those averages rather than a real
+// logged game. A career night should read as a clear spike above the
+// season line, not a small deviation, so points/rebounds/assists each get
+// their own multiplier range (points spikes hardest — that's usually
+// the headline of a standout game) with a floor above the rounded
+// average so it never reads as "best game" while matching the season
+// average exactly on a low-variance roll.
+function generateSeasonBestGame(leagueStats) {
+  if (!leagueStats) return null;
+  const spike = (avg, loMult, hiMult) => {
+    const v = Math.round((avg || 0) * randFloat(loMult, hiMult));
+    return Math.max(v, Math.ceil(avg || 0) + 2);
+  };
+  return {
+    pts: spike(leagueStats.ppg, 1.6, 2.4),
+    reb: spike(leagueStats.rpg, 1.3, 1.9),
+    ast: spike(leagueStats.apg, 1.3, 2.0),
+  };
+}
 // Called once whether the season ended early (a serious first-half
 // injury cuts it short) or ran both halves normally — never twice, so
 // championship/awards are never rolled per-half, only once against
@@ -3735,6 +3756,15 @@ const LOCKER_ROOM_META = {
 function rollMidseasonCheckpoint(p) {
   const rivalEligible = !p.hadBuzzerBeaterMoment && p.stage === "pro" && p.league && !p.abroad && p.age >= 18;
   if (rivalEligible && Math.random() < 0.05) return { type: "rival_game" };
+  // Injury Scare — a near-miss, distinct from the real injury roll that
+  // already happens separately in simulateGamesSegment. Gated on the same
+  // fatigue signal the real injury formula reads, so it only shows up
+  // when there's genuine elevated risk, not randomly. The choice here
+  // actually adjusts p.pendingSecondHalf.halfChance afterward — a real
+  // mechanical tradeoff, not just flavor text.
+  if (p.stage === "pro" && p.clubId && p.fatigue >= 55 && Math.random() < 0.12) {
+    return { type: "injury_scare" };
+  }
   // Same threshold the existing Trade Rumors event already uses (team < 30)
   // — consistency matters more than a new number here.
   if (p.stage === "pro" && p.clubId && p.relationships.team < 30) {
@@ -3747,7 +3777,21 @@ function rollMidseasonCheckpoint(p) {
   if (p.stage === "pro" && p.clubId && p.starterStatus && nextRoleTier(p.starterStatus)) {
     if (midseasonFormRead(p) === "above") return { type: "coach_talk" };
   }
-  return { type: "none" };
+  // Trade Buzz — lighter than Locker Room/Coach Talk on purpose. Outside
+  // interest based on real standing (Popularity), but deliberately kept
+  // as flavor with modest relationship/stat effects rather than opening
+  // an actual mid-season negotiation — that's what Trade Request (Career
+  // tab, once a season) already covers; this isn't trying to replace it.
+  if (p.stage === "pro" && p.clubId && p.popularity >= 55 && Math.random() < 0.10) {
+    return { type: "trade_buzz" };
+  }
+  // Fallback — deliberately NOT "none" that skips the checkpoint screen
+  // entirely. Every pro-club season stops at the midpoint now, not just
+  // the seasons where a specific rare condition happened to fire; this
+  // is what actually makes the half-season split visible to the player
+  // most of the time, rather than only in the minority of seasons where
+  // something specific triggers.
+  return { type: "recap" };
 }
 
 // Used to tell an upgrade from a downgrade when role shifts on its own
@@ -6859,6 +6903,157 @@ function LockerRoomScreen({ player, subScenario, onChoose }) {
 }
 
 /* ---------------------------------------------------------
+   INJURY SCARE SCREEN
+   Distinct from the real injury roll in simulateGamesSegment — this is a
+   near-miss, gated on the same fatigue signal the real formula reads. The
+   choice here genuinely adjusts pendingSecondHalf.halfChance afterward
+   (see handleInjuryScareChoice), not just flavor text.
+--------------------------------------------------------- */
+function InjuryScareScreen({ player, onChoose }) {
+  return (
+    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
+      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+        <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>Midseason · {player.teamName}</div>
+        <div className="f-display text-xl font-extrabold mb-3" style={{ color: C.chalk }}>That Didn't Feel Right</div>
+        <p className="f-body text-[13px] mb-5" style={{ color: C.chalkDim }}>
+          Something tweaked coming down off a rebound. Nothing's torn — but the body's been running hot all season, and it's telling you something.
+        </p>
+
+        <div className="grid grid-cols-2 gap-3">
+          <button onClick={() => onChoose("push")} className="choice-card text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+            <div className="text-center text-[13px] font-bold pt-3" style={{ color: C.chalk }}>Push Through</div>
+            <div className="text-center f-body text-[10px] pb-2" style={{ color: C.chalkDim }}>Keep playing, work through it</div>
+            <EventChoiceIcon icon="dumbbell" />
+            <div className="p-3 flex flex-col gap-2">
+              <div className="flex items-center justify-center px-3 py-2 rounded-full text-[10.5px] font-semibold" style={{ background: "rgba(239,68,68,0.14)", color: "#EF4444" }}>
+                ⚠️ Raises second-half injury risk
+              </div>
+            </div>
+          </button>
+          <button onClick={() => onChoose("rest")} className="choice-card text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+            <div className="text-center text-[13px] font-bold pt-3" style={{ color: C.chalk }}>Sit Out a Few Games</div>
+            <div className="text-center f-body text-[10px] pb-2" style={{ color: C.chalkDim }}>Let it settle down first</div>
+            <EventChoiceIcon icon="star" />
+            <div className="p-3 flex flex-col gap-2">
+              <div className="flex items-center justify-center px-3 py-2 rounded-full text-[10.5px] font-semibold" style={{ background: "rgba(16,185,129,0.14)", color: "#10B981" }}>
+                🛡️ Lowers second-half injury risk
+              </div>
+            </div>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------
+   TRADE BUZZ SCREEN
+   Deliberately lighter than Locker Room/Coach Talk — outside interest
+   based on real Popularity standing, but kept as flavor with modest
+   relationship/stat effects. Not a mid-season negotiation; that's what
+   the Career tab's Trade Request already covers, once a season.
+--------------------------------------------------------- */
+function TradeBuzzScreen({ player, onChoose }) {
+  return (
+    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
+      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+        <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>Midseason · {player.teamName}</div>
+        <div className="f-display text-xl font-extrabold mb-3" style={{ color: C.chalk }}>Other Clubs Are Asking</div>
+        <p className="f-body text-[13px] mb-5" style={{ color: C.chalkDim }}>
+          Nothing official — just scouts at shootaround, a GM's name in the wrong group chat. The kind of thing that gets back to you eventually.
+        </p>
+
+        <div className="grid grid-cols-2 gap-3">
+          <button onClick={() => onChoose("motivate")} className="choice-card text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+            <div className="text-center text-[13px] font-bold pt-3" style={{ color: C.chalk }}>Let It Motivate You</div>
+            <div className="text-center f-body text-[10px] pb-2" style={{ color: C.chalkDim }}>Play like everyone's watching</div>
+            <EventChoiceIcon icon="star" />
+            <div className="p-3 flex flex-col gap-2">
+              <div className="flex items-center justify-center px-3 py-2 rounded-full text-[10.5px] font-semibold" style={{ background: "rgba(16,185,129,0.14)", color: "#10B981" }}>
+                +Popularity, +Morale
+              </div>
+            </div>
+          </button>
+          <button onClick={() => onChoose("focus")} className="choice-card text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+            <div className="text-center text-[13px] font-bold pt-3" style={{ color: C.chalk }}>Stay Focused</div>
+            <div className="text-center f-body text-[10px] pb-2" style={{ color: C.chalkDim }}>Ignore the noise, trust the room</div>
+            <EventChoiceIcon icon="handshake" />
+            <div className="p-3 flex flex-col gap-2">
+              <div className="flex items-center justify-center px-3 py-2 rounded-full text-[10.5px] font-semibold" style={{ background: C.ink2, color: C.teal }}>
+                +Coach Trust, +Team Chemistry
+              </div>
+            </div>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------
+   MIDSEASON RECAP SCREEN
+   The guaranteed checkpoint fallback — shown when none of Rival Game /
+   Locker Room / Coach Talk fired this season, so every pro-club season
+   still stops at the midpoint with something real rather than silently
+   skipping straight to the second half. Shows genuine first-half stats
+   (leagueStats1/gp1 from pendingSecondHalf), not a placeholder.
+--------------------------------------------------------- */
+function MidseasonRecapScreen({ player, onContinue }) {
+  const half = player.pendingSecondHalf;
+  const stats = half && half.leagueStats1;
+  return (
+    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
+      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+        <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>Midseason · {player.teamName}</div>
+        <div className="f-display text-xl font-extrabold mb-4" style={{ color: C.chalk }}>First Half in the Books</div>
+
+        {stats && (
+          <div className="grid grid-cols-3 gap-2 mb-2.5">
+            <div className="rounded-xl p-3 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+              <div className="f-display text-[16px] font-extrabold" style={{ color: C.gold }}>{stats.ppg.toFixed(1)}</div>
+              <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>PPG</div>
+            </div>
+            <div className="rounded-xl p-3 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+              <div className="f-display text-[16px] font-extrabold" style={{ color: C.chalk }}>{stats.rpg.toFixed(1)}</div>
+              <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>RPG</div>
+            </div>
+            <div className="rounded-xl p-3 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+              <div className="f-display text-[16px] font-extrabold" style={{ color: C.chalk }}>{stats.apg.toFixed(1)}</div>
+              <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>APG</div>
+            </div>
+          </div>
+        )}
+
+        {/* Same role/relationship snapshot the Result screen shows at
+            season's end — genuinely relevant here too, since Role and
+            Coach Trust specifically are what determine whether Coach Talk
+            or Locker Room even fire at the checkpoint in the first place. */}
+        <div className="grid grid-cols-3 gap-2 mb-5">
+          <div className="rounded-xl p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+            <div className="f-display text-[13px] font-extrabold" style={{ color: C.amberBright }}>{player.starterStatus}</div>
+            <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Role</div>
+          </div>
+          <div className="rounded-xl p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+            <div className="f-display text-[13px] font-extrabold" style={{ color: C.chalk }}>{player.relationships.coach}</div>
+            <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Coach Trust</div>
+          </div>
+          <div className="rounded-xl p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+            <div className="f-display text-[13px] font-extrabold" style={{ color: C.chalk }}>{player.relationships.team}</div>
+            <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Team Chemistry</div>
+          </div>
+        </div>
+
+        <p className="f-body text-[13px] mb-5" style={{ color: C.chalkDim }}>
+          {half ? `${half.gp1} games in, playing ${half.roleAtFirstHalf}.` : "The first half is done."} Second half starts now.
+        </p>
+
+        <PrimaryButton full onClick={onContinue}>Continue <ChevronRight size={14} className="inline ml-1" /></PrimaryButton>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------
    LIFESTYLE SPENDING SCREEN
    Bank balance and total career earnings are shown as two separate
    numbers on purpose (see totalEarnings tracking in handleContinueAfterResult
@@ -7759,6 +7954,51 @@ const ResultScreen = memo(function ResultScreen({ summary, onContinue }) {
               {summary.shotProfile && <StatCell label="3PA" value={summary.shotProfile.tpa} />}
               {summary.shotProfile && <StatCell label="FTA" value={summary.shotProfile.fta} />}
             </div>
+
+            {/* Role + relationship snapshot — Current Role already existed
+                as a small header label above; Coach Trust and Team
+                Chemistry are genuinely new here, since neither had ever
+                shown up on this screen despite driving the Midseason
+                Checkpoint pool all season. */}
+            <div className="grid grid-cols-3 gap-2 mt-3">
+              <div className="rounded-xl p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+                <div className="f-display text-[13px] font-extrabold" style={{ color: C.amberBright }}>{summary.leagueStats.role}</div>
+                <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Role</div>
+              </div>
+              <div className="rounded-xl p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+                <div className="f-display text-[13px] font-extrabold" style={{ color: C.chalk }}>{summary.coachTrust}</div>
+                <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Coach Trust</div>
+              </div>
+              <div className="rounded-xl p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+                <div className="f-display text-[13px] font-extrabold" style={{ color: C.chalk }}>{summary.teamChemistry}</div>
+                <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Team Chemistry</div>
+              </div>
+            </div>
+
+            {/* Season Best Game — the game only ever tracks per-game
+                averages, never individual box scores, so this is a
+                generated standout performance rather than a logged one.
+                Framed as "Season High," not "Career High" or a specific
+                date, to stay honest about what it actually is. */}
+            {summary.bestGame && (
+              <div className="mt-3 p-3 rounded-xl" style={{ background: "rgba(249,115,22,0.06)", border: `1px solid rgba(249,115,22,0.3)` }}>
+                <div className="f-mono text-[9px] uppercase tracking-widest mb-2" style={{ color: C.amberBright }}>Season High</div>
+                <div className="flex items-center gap-5">
+                  <div>
+                    <div className="f-display text-xl font-extrabold" style={{ color: C.gold }}>{summary.bestGame.pts}</div>
+                    <div className="f-mono text-[9px] uppercase" style={{ color: C.chalkDim }}>PTS</div>
+                  </div>
+                  <div>
+                    <div className="f-display text-xl font-extrabold" style={{ color: C.chalk }}>{summary.bestGame.reb}</div>
+                    <div className="f-mono text-[9px] uppercase" style={{ color: C.chalkDim }}>REB</div>
+                  </div>
+                  <div>
+                    <div className="f-display text-xl font-extrabold" style={{ color: C.chalk }}>{summary.bestGame.ast}</div>
+                    <div className="f-mono text-[9px] uppercase" style={{ color: C.chalkDim }}>AST</div>
+                  </div>
+                </div>
+              </div>
+            )}
             {summary.styleNote && (
               <div className="mt-2 flex items-center gap-1.5">
                 {summary.playingStyle && getPlayingStyle(summary.playingStyle) && (
@@ -10218,6 +10458,64 @@ export default function App() {
     finishSecondHalfAndBuildResult(p);
   };
 
+  // Injury Scare — the one checkpoint choice with a REAL mechanical
+  // effect on the second half, not just relationship/stat deltas. Reads
+  // and mutates p.pendingSecondHalf.halfChance directly (already stored
+  // there by handleChooseEvent) before handing off to
+  // finishSecondHalfAndBuildResult, which reads that same field when it
+  // computes the second half's games/injury segment.
+  const handleInjuryScareChoice = (choiceId) => {
+    let p = { ...player };
+    let note;
+    if (choiceId === "push") {
+      p.morale = clamp(p.morale + 4); // toughness respected
+      if (p.pendingSecondHalf) {
+        p.pendingSecondHalf = { ...p.pendingSecondHalf, halfChance: Math.min(0.6, p.pendingSecondHalf.halfChance * 1.4) };
+      }
+      note = "You play through it. Nobody outside the training room even knows it happened — for now.";
+    } else {
+      p.fatigue = clamp(p.fatigue - 10);
+      if (p.pendingSecondHalf) {
+        p.pendingSecondHalf = { ...p.pendingSecondHalf, halfChance: p.pendingSecondHalf.halfChance * 0.6 };
+      }
+      note = "A few games on the bench. Frustrating, but the body actually gets to reset.";
+    }
+    p.history = [...p.history, { age: p.age, tierLabel: "Midseason Checkpoint", note }];
+    setBanner(note);
+    setMidseasonEvent(null);
+    finishSecondHalfAndBuildResult(p);
+  };
+
+  // Trade Buzz — deliberately lightweight, pure flavor with modest
+  // relationship/stat deltas. No negotiation, no offer — that's what
+  // Trade Request (Career tab) already covers.
+  const handleTradeBuzzChoice = (choiceId) => {
+    let p = { ...player, relationships: { ...player.relationships } };
+    let note;
+    if (choiceId === "motivate") {
+      p.popularity = clamp(p.popularity + 6);
+      p.morale = clamp(p.morale + 5);
+      note = "You let it fuel you. The numbers this half say the rumors aren't wrong.";
+    } else {
+      p.relationships.coach = clamp(p.relationships.coach + 5);
+      p.relationships.team = clamp(p.relationships.team + 4);
+      note = "You shut it down fast — \"I'm here.\" The room notices you didn't blink.";
+    }
+    p.history = [...p.history, { age: p.age, tierLabel: "Midseason Checkpoint", note }];
+    setBanner(note);
+    setMidseasonEvent(null);
+    finishSecondHalfAndBuildResult(p);
+  };
+
+  // The guaranteed fallback checkpoint — no choice to resolve, just an
+  // acknowledgment of a real first-half stat line before the second half
+  // computes. Reads `player` fresh rather than taking a `p` argument since
+  // there's nothing to mutate here beyond clearing the transient event.
+  const handleMidseasonRecapContinue = () => {
+    setMidseasonEvent(null);
+    finishSecondHalfAndBuildResult({ ...player });
+  };
+
   // Buys a home tier. Guarded against both being called with an
   // unaffordable or already-superseded tier — the UI already disables
   // those buttons, but this shouldn't trust that as the only line of
@@ -10836,7 +11134,11 @@ export default function App() {
         setMidseasonEvent(checkpoint);
         setScreen("midseason_checkpoint");
       } else {
-        finishSecondHalfAndBuildResult(p);
+        // "recap" — the guaranteed fallback. Every pro-club season stops
+        // here now, showing the real first-half line before continuing,
+        // rather than silently jumping straight to the second half.
+        setMidseasonEvent(checkpoint);
+        setScreen("midseason_checkpoint");
       }
       return;
     }
@@ -10906,6 +11208,8 @@ export default function App() {
       leagueYear: p.year,
       gamesPlayed, wonChampionship, injury,
       playingStyle: p.playingStyle, shotProfile, styleNote,
+      bestGame: leagueStats ? generateSeasonBestGame(leagueStats) : null,
+      coachTrust: p.relationships.coach, teamChemistry: p.relationships.team,
     });
     setPlayer(p);
     if (p.pendingInjuryDecision) {
@@ -11827,6 +12131,15 @@ export default function App() {
       )}
       {screen === "midseason_checkpoint" && player && midseasonEvent && midseasonEvent.type === "locker_room" && (
         <LockerRoomScreen player={player} subScenario={midseasonEvent.subScenario} onChoose={handleLockerRoomChoice} />
+      )}
+      {screen === "midseason_checkpoint" && player && midseasonEvent && midseasonEvent.type === "injury_scare" && (
+        <InjuryScareScreen player={player} onChoose={handleInjuryScareChoice} />
+      )}
+      {screen === "midseason_checkpoint" && player && midseasonEvent && midseasonEvent.type === "trade_buzz" && (
+        <TradeBuzzScreen player={player} onChoose={handleTradeBuzzChoice} />
+      )}
+      {screen === "midseason_checkpoint" && player && midseasonEvent && midseasonEvent.type === "recap" && (
+        <MidseasonRecapScreen player={player} onContinue={handleMidseasonRecapContinue} />
       )}
       {screen === "overseas_offers" && player && player.pendingOverseasOffer && (
         <OverseasOffersScreen player={player} offer={player.pendingOverseasOffer} onSign={handleAcceptOverseasOffer} onDecline={handleDeclineOverseasOffer} />
