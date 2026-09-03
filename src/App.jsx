@@ -2748,6 +2748,115 @@ function generateLeagueSeasonStats(stats, position, leagueId, role, height) {
   return { ppg, rpg, apg, spg, bpg, fgPct, threePct, tr, role, leagueId };
 }
 
+/* ============================================================
+   HALF-SEASON SPLIT — the season's games/injury roll happens twice
+   (once per half) instead of once, so the Midseason Checkpoint can use
+   real half-season numbers instead of the categorical form-read it
+   started with. generateLeagueSeasonStats above needed NO changes to
+   support this — it already produces per-game averages independently
+   of gamesPlayed, confirmed by reading it closely before starting this.
+   Only the games/injury roll and the final combining step are new.
+============================================================ */
+// Converts a full-season injury probability into the equivalent PER-HALF
+// probability, so rolling it twice (once per half) reproduces the same
+// overall season-wide injury risk as the original single roll. Naive
+// halving (chance/2) under-counts total risk — 1-(1-p/2)^2 < p for any
+// p>0 — so this solves 1-(1-x)^2 = chance for x instead. Simulated both
+// versions across three age/fatigue profiles before writing this: naive
+// halving under-counted appreciably (0.35 vs 0.28 injuryChance case, the
+// largest gap); this version matches within noise.
+function halfSeasonInjuryChance(fullSeasonChance) {
+  return 1 - Math.sqrt(1 - fullSeasonChance);
+}
+// Simulates one half's games + injury risk. Pure — returns the segment's
+// outcome without mutating `p`; the caller applies morale/fatigue deltas
+// and pendingInjuryDecision itself. Mirrors the original single-roll
+// logic exactly, just scoped to `games` instead of the full season.
+function simulateGamesSegment(p, games, halfChance) {
+  const out = { gamesPlayed: games, injury: null, seasonEndingInjury: false, moraleDelta: 0, fatigueDelta: 0, pendingInjuryDecision: null, slowStartTriggered: false };
+  if (Math.random() < halfChance) {
+    const serious = Math.random() < 0.45;
+    if (serious) {
+      out.gamesPlayed = Math.max(2, Math.round(games * randFloat(0.15, 0.35)));
+      out.injury = { serious: true, missed: games - out.gamesPlayed };
+      out.seasonEndingInjury = true;
+      out.slowStartTriggered = true;
+      out.moraleDelta = -15;
+      out.fatigueDelta = 10;
+      out.pendingInjuryDecision = { missed: out.injury.missed, hasScience: hasInvestment(p, "science") };
+    } else {
+      out.gamesPlayed = Math.round(games * randFloat(0.6, 0.85));
+      out.injury = { serious: false, missed: games - out.gamesPlayed };
+      out.moraleDelta = -6;
+    }
+  }
+  return out;
+}
+// Combines two halves' per-game stats into one season line — a
+// games-weighted average, not a flat 50/50 blend, since 18 games at 22
+// PPG and 14 games at 26 PPG should land closer to the half with more
+// games. role/leagueId are taken from the second half since that's the
+// player's state at season's end.
+function combineHalfSeasonStats(s1, gp1, s2, gp2) {
+  const totalGp = gp1 + gp2;
+  if (totalGp <= 0) return s2 || s1;
+  const w1 = gp1 / totalGp, w2 = gp2 / totalGp;
+  return {
+    ppg: round1(s1.ppg * w1 + s2.ppg * w2),
+    rpg: round1(s1.rpg * w1 + s2.rpg * w2),
+    apg: round1(s1.apg * w1 + s2.apg * w2),
+    spg: round1(s1.spg * w1 + s2.spg * w2),
+    bpg: round1(s1.bpg * w1 + s2.bpg * w2),
+    fgPct: Math.round(s1.fgPct * w1 + s2.fgPct * w2),
+    threePct: round1(s1.threePct * w1 + s2.threePct * w2),
+    tr: Math.round(s1.tr * w1 + s2.tr * w2),
+    role: s2.role, leagueId: s2.leagueId,
+  };
+}
+// Runs the championship/standings/awards/badges logic against a FINAL set
+// of season stats — a faithful extraction of what used to be inline after
+// the single games/injury roll, changed only to take its inputs as
+// parameters instead of closing over handleChooseEvent's local variables.
+// Called once whether the season ended early (a serious first-half
+// injury cuts it short) or ran both halves normally — never twice, so
+// championship/awards are never rolled per-half, only once against
+// whatever the season's real final line turns out to be.
+function finalizeProSeasonAfterGames(p, finalStats, finalGamesPlayed, finalInjury, fullGames, role) {
+  const leagueBoard = buildLeagueBoard(p, p.league, finalStats);
+  const awardRace = buildAwardRace(p, p.league, finalStats, leagueBoard);
+
+  const club = getClub(p.clubId);
+  let titleChance = 0.05 + (club ? (club.prestige / 100) * 0.18 : 0) + (finalStats.tr / 100) * 0.12;
+  if (finalInjury && finalInjury.serious) titleChance *= 0.4;
+  titleChance = clamp(titleChance, 0.02, 0.42);
+  const wonChampionship = Math.random() < titleChance;
+  if (wonChampionship) {
+    p.popularity = clamp(p.popularity + 10);
+    p.morale = clamp(p.morale + 10);
+    p.achievements = Array.from(new Set([...p.achievements, p.league === "mbl" ? "mbl_champion" : "dleague_champion"]));
+    if (p.league === "mbl") p.mblTitles = (p.mblTitles || 0) + 1;
+  }
+  const leagueStandings = buildStandings(p, p.league, finalStats, (p.year || 2026) * 31 + p.seasonNum, wonChampionship, fullGames);
+
+  const isFirstMblSeason = p.league === "mbl" && !p.hadMblSeason;
+  if (p.league === "mbl") p.hadMblSeason = true;
+
+  const leagueAwards = rollLeagueAwards(finalStats, { leagueId: p.league, role, isFirstMblSeason, board: leagueBoard });
+
+  if ((p.league === "u20" || p.league === "u23") && finalStats.tr >= 78) {
+    p.achievements = Array.from(new Set([...p.achievements, "dleague_star"]));
+  }
+  if (p.league === "mbl" && role === "Starter") {
+    p.achievements = Array.from(new Set([...p.achievements, "mbl_starter"]));
+  }
+  if (leagueAwards.includes("mvp")) p.achievements = Array.from(new Set([...p.achievements, p.league === "mbl" ? "mbl_mvp" : "dleague_mvp"]));
+  if (leagueAwards.includes("roty")) p.achievements = Array.from(new Set([...p.achievements, "mbl_roty"]));
+  if (leagueAwards.includes("sixth_man")) p.achievements = Array.from(new Set([...p.achievements, "mbl_sixth_man"]));
+  if (leagueAwards.length) p.popularity = clamp(p.popularity + leagueAwards.length * 3 + (leagueAwards.includes("mvp") ? 8 : 0));
+
+  return { p, leagueBoard, awardRace, leagueStandings, leagueAwards, wonChampionship };
+}
+
 /* Season-end league awards. Common to U20 / U23 / MBL, with extra MBL-only ones.
    Each is an independent roll — strong numbers raise the odds, but only a few
    players win each per season, so nothing is guaranteed. */
@@ -3097,6 +3206,8 @@ const HOME_TIERS = [
     desc: "The kind of place \"Comfortable\" already talks about. A real, one-time boost to Family — this is the roof over them, after all." },
   { id: "dream_house", label: "Dream House", cost: 600000, floorTierId: "comfortable", familyBoost: 8,
     desc: "The kind of place that ends up in a magazine spread. A statement, not a necessity." },
+  { id: "estate", label: "The Estate", cost: 2000000, floorTierId: "set_for_life", familyBoost: 5,
+    desc: "Gates, grounds, a name people use for the property itself. The kind of place that outlives the career that paid for it." },
 ];
 // Only a purchase strictly ABOVE the currently-owned tier is offered —
 // buying the same or a lower tier again would just be spending money for
@@ -3135,6 +3246,8 @@ const VEHICLE_TIERS = [
     desc: "Heads turn in the club parking lot now." },
   { id: "exotic", label: "The Exotic", cost: 400000, popBoost: 15,
     desc: "A Porsche, a BMW, whatever the fantasy is. Every post about it gets screenshotted." },
+  { id: "collection", label: "The Collection", cost: 1200000, popBoost: 25,
+    desc: "Not one car — a rotation. The kind of garage that gets its own photo spread." },
 ];
 const GEAR_TIERS = [
   { id: "rookie_pack", label: "Rookie Pack", cost: 15000, popBoost: 2,
@@ -3143,6 +3256,21 @@ const GEAR_TIERS = [
     desc: "Player-exclusive colorways, the kind fans actually try to cop." },
   { id: "signature_shoe", label: "Your Own Signature Shoe", cost: 300000, popBoost: 20, popGate: 80,
     desc: "Nike doesn't put your name on a shoe for just anyone." },
+];
+/* Family Support — one-time, tiered, distinct from the recurring Family
+   investment (that's ongoing upkeep; this is a real, immediate moment).
+   A genuine gap identified but not built earlier this session — the
+   "Three Kinds of Spending" pitch specifically called out Family as
+   something Home/Vehicles/Gear don't touch, since those are all
+   fundamentally about the player's own status. This is the first
+   category that isn't. */
+const FAMILY_TIERS = [
+  { id: "send_home", label: "Send Money Home", cost: 20000, familyBoost: 6,
+    desc: "Nothing dramatic. Just enough that they stop worrying about the electric bill." },
+  { id: "parents_house", label: "Buy Your Parents a House", cost: 200000, familyBoost: 20,
+    desc: "The kind of moment that ends up in every interview you ever give afterward." },
+  { id: "family_trust", label: "Set Up a Family Trust", cost: 800000, familyBoost: 30,
+    desc: "Not a gift for now — security for after you're gone. The whole family knows it's there." },
 ];
 
 /* Jewelry & Watches — the one genuinely repeatable purchase, and the
@@ -3574,9 +3702,48 @@ function midseasonFormRead(p) {
   if (score <= -8) return "cold";
   return "expected";
 }
+/* Three distinct Locker Room scenarios, deliberately NOT a reskin of the
+   existing one-shot Trade Rumors event (checked before designing this —
+   that one is about the front office wanting to move you; this is about
+   your teammates specifically, and can recur across a career the way
+   Coach Talk can). Which scenario fires reads signals that already exist
+   on the player rather than anything new tracked — "recent losing
+   streak" was sketched in the concept mockup for the Blame Game case but
+   isn't tracked anywhere in the game, so that one is the sensible
+   default instead of needing a dedicated signal.
+--------------------------------------------------------- */
+const LOCKER_ROOM_META = {
+  clique: {
+    kicker: "Midseason · Locker Room", title: "You're Still an Outsider",
+    desc: "A few seasons in and the core group still doesn't quite let you all the way in. Nothing hostile — just distant.",
+    choiceA: { id: "reach", label: "Reach Out", tagline: "Extra effort, on your own", winPct: 55 },
+    choiceB: { id: "wait", label: "Let It Happen Naturally", tagline: "Time, not effort" },
+  },
+  blame: {
+    kicker: "Midseason · Locker Room", title: "The Whispers Are About You",
+    desc: "Chemistry in the room has cratered, and more than one teammate has started looking your way when things go wrong.",
+    choiceA: { id: "confront", label: "Call It Out", tagline: "Address it head-on", winPct: 58 },
+    choiceB: { id: "grind", label: "Just Keep Playing", tagline: "Let results speak" },
+  },
+  star: {
+    kicker: "Midseason · Locker Room", title: "The Spotlight Isn't Sitting Right",
+    desc: "Your name's the one on highlight reels. Your teammates have noticed the shots aren't always finding the guy who's actually open.",
+    choiceA: { id: "share", label: "Pass It Up", tagline: "Deliberately share the ball more" },
+    choiceB: { id: "stay", label: "Stay the Course", tagline: "The numbers are the numbers" },
+  },
+};
 function rollMidseasonCheckpoint(p) {
   const rivalEligible = !p.hadBuzzerBeaterMoment && p.stage === "pro" && p.league && !p.abroad && p.age >= 18;
   if (rivalEligible && Math.random() < 0.05) return { type: "rival_game" };
+  // Same threshold the existing Trade Rumors event already uses (team < 30)
+  // — consistency matters more than a new number here.
+  if (p.stage === "pro" && p.clubId && p.relationships.team < 30) {
+    let subScenario;
+    if ((p.seasonsAtClub || 0) <= 2) subScenario = "clique";
+    else if (p.popularity >= 65) subScenario = "star";
+    else subScenario = "blame";
+    return { type: "locker_room", subScenario };
+  }
   if (p.stage === "pro" && p.clubId && p.starterStatus && nextRoleTier(p.starterStatus)) {
     if (midseasonFormRead(p) === "above") return { type: "coach_talk" };
   }
@@ -3818,7 +3985,7 @@ function newPlayer({ name, position, hometown, height, jersey }) {
     relationships: { coach: 50, team: 50, family: 60 },
     stage: "youth",
     teamName: `${shortHome(hometown)} Youth Selection`,
-    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null, rival: null, tradeRequestCooldown: 0, seasonsAtClub: 0, mblTitles: 0, hadBuzzerBeaterMoment: false, totalEarnings: 0, homeTier: null, vehicleTier: null, gearTier: null, jewelryPieces: 0,
+    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null, rival: null, tradeRequestCooldown: 0, seasonsAtClub: 0, mblTitles: 0, hadBuzzerBeaterMoment: false, totalEarnings: 0, homeTier: null, vehicleTier: null, gearTier: null, jewelryPieces: 0, familyTier: null,
     nationalTeam: false, nationalCaps: 0,
     achievements: [],
     peakOverall: overall,
@@ -3842,7 +4009,7 @@ function normalizePlayer(p) {
     mblContributor: false, wonderkid: false, hadMblSeason: false, semiProClub: null,
     contractSalary: 0, contractYearsLeft: 0,
     mssmPendingReveal: false, age18MssmResolved: false, lastSeasonLeagueAwards: [], studying: false, studyDecisionResolved: false, studyGraduated: false,
-    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null, rival: null, tradeRequestCooldown: 0, seasonsAtClub: 0, mblTitles: 0, hadBuzzerBeaterMoment: false, totalEarnings: 0, homeTier: null, vehicleTier: null, gearTier: null, jewelryPieces: 0,
+    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null, rival: null, tradeRequestCooldown: 0, seasonsAtClub: 0, mblTitles: 0, hadBuzzerBeaterMoment: false, totalEarnings: 0, homeTier: null, vehicleTier: null, gearTier: null, jewelryPieces: 0, familyTier: null,
     nationalTeam: false, nationalCaps: 0, morale: 60, fatigue: 20,
     popularity: 5, money: 0, highlyTalented: false,
     slowDecliner: false, slowStartNextSeason: false,
@@ -4538,74 +4705,80 @@ function Hub({ player, onPlaySeason, onRetireConsider, onManageInvestments, onRe
               )}
             </div>
 
-            {/* Career investments — only meaningful once there's a salary to spend. */}
-            {player.age >= 18 && player.contractSalary > 0 && (
-              <button onClick={onManageInvestments}
-                className="choice-card w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition"
-                style={{ background: C.ink2, border: `1px solid ${investmentPct(player) > 0 ? C.amber : C.line}` }}>
-                <span className="text-[17px]">💼</span>
-                <div className="text-left flex-1 min-w-0">
-                  <div className="f-display text-[13px]" style={{ color: C.chalk }}>Career Investments</div>
-                  <div className="f-body text-[10px] mt-0.5" style={{ color: C.chalkDim }}>
-                    {investmentPct(player) > 0
-                      ? `${Object.keys(INVESTMENTS).filter(k => player.investments && player.investments[k]).length} active · ${rm(investmentUpkeep(player))}/mo`
-                      : "Spend on your career — trainer, physio, family, agent"}
-                  </div>
-                </div>
-                <ChevronRight size={15} color={C.chalkDim} />
-              </button>
-            )}
+            {/* Finances — Investments and Lifestyle both spend from the
+                same bank balance, so they're grouped and shown compactly
+                side by side rather than as two more full-width rows.
+                Trade Request draws from Team Chemistry and Coach Trust
+                instead, not money at all, so it stays separate under its
+                own "Standing" label, full-width, visually distinct. */}
+            {(() => {
+              const showInvestments = player.age >= 18 && player.contractSalary > 0;
+              const showLifestyle = player.age >= 18;
+              const showTrade = player.clubId && !player.abroad && (player.seasonsAtClub || 0) >= 1;
+              const financeCount = (showInvestments ? 1 : 0) + (showLifestyle ? 1 : 0);
+              if (!financeCount && !showTrade) return null;
+              return (
+                <>
+                  {financeCount > 0 && (
+                    <>
+                      <div className="f-mono text-[9px] uppercase tracking-widest" style={{ color: C.chalkDim }}>Finances</div>
+                      <div className="grid gap-2.5" style={{ gridTemplateColumns: `repeat(${financeCount}, 1fr)` }}>
+                        {showInvestments && (
+                          <button onClick={onManageInvestments}
+                            className="choice-card flex flex-col items-center text-center gap-1.5 px-3 py-4 rounded-2xl transition"
+                            style={{ background: C.ink2, border: `1px solid ${investmentPct(player) > 0 ? C.amber : C.line}` }}>
+                            <span className="text-[18px]">💼</span>
+                            <span className="f-display text-[12px]" style={{ color: C.chalk }}>Investments</span>
+                            <span className="f-body text-[9.5px]" style={{ color: C.chalkDim }}>
+                              {investmentPct(player) > 0
+                                ? `${Object.keys(INVESTMENTS).filter(k => player.investments && player.investments[k]).length} active`
+                                : "Not started"}
+                            </span>
+                          </button>
+                        )}
+                        {showLifestyle && (
+                          <button onClick={onOpenLifestyle}
+                            className="choice-card flex flex-col items-center text-center gap-1.5 px-3 py-4 rounded-2xl transition"
+                            style={{ background: C.ink2, border: `1px solid ${player.homeTier ? "rgba(16,185,129,0.4)" : C.line}` }}>
+                            <span className="text-[18px]">🏡</span>
+                            <span className="f-display text-[12px]" style={{ color: C.chalk }}>Lifestyle</span>
+                            <span className="f-body text-[9.5px]" style={{ color: player.homeTier ? "#10B981" : C.chalkDim }}>
+                              {player.homeTier ? `${HOME_TIERS.find(t => t.id === player.homeTier).label}` : "No home yet"}
+                            </span>
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  )}
 
-            {/* Trade Request — the "player asks to leave" mirror of Trade
-                Rumors (which is club-initiated and only fires on low Team
-                Chemistry). Doesn't appear at all until a full season has
-                been played at the club; shown disabled with the countdown
-                during a post-denial cooldown, rather than just vanishing,
-                so it's clear WHY it's unavailable rather than looking gone. */}
-            {player.clubId && !player.abroad && (player.seasonsAtClub || 0) >= 1 && (
-              <button onClick={() => (player.tradeRequestCooldown > 0 ? null : onRequestTrade())}
-                disabled={player.tradeRequestCooldown > 0}
-                className={player.tradeRequestCooldown > 0 ? "w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition" : "choice-card w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition"}
-                style={{
-                  background: C.ink2,
-                  border: `1px solid ${player.tradeRequestCooldown > 0 ? C.line : "rgba(251,146,60,0.4)"}`,
-                  opacity: player.tradeRequestCooldown > 0 ? 0.55 : 1,
-                  cursor: player.tradeRequestCooldown > 0 ? "not-allowed" : "pointer",
-                }}>
-                <span className="text-[17px]">🚪</span>
-                <div className="text-left flex-1 min-w-0">
-                  <div className="f-display text-[13px]" style={{ color: C.chalk }}>Request a Trade</div>
-                  <div className="f-body text-[10px] mt-0.5" style={{ color: C.chalkDim }}>
-                    {player.tradeRequestCooldown > 0
-                      ? `${player.tradeRequestCooldown} season${player.tradeRequestCooldown === 1 ? "" : "s"} until you can ask again`
-                      : `You've been at ${player.teamName} ${player.seasonsAtClub} season${player.seasonsAtClub === 1 ? "" : "s"}`}
-                  </div>
-                </div>
-                {!(player.tradeRequestCooldown > 0) && <ChevronRight size={15} color={C.chalkDim} />}
-              </button>
-            )}
-
-            {/* Lifestyle — a genuinely separate use for money than
-                Investments (ongoing % of salary spent on performance).
-                Shown once there's real income at all, not gated to having
-                a club, since the point is spending saved money, not
-                anything tied to a current contract. */}
-            {player.age >= 18 && (
-              <button onClick={onOpenLifestyle}
-                className="choice-card w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition"
-                style={{ background: C.ink2, border: `1px solid ${player.homeTier ? "rgba(16,185,129,0.4)" : C.line}` }}>
-                <span className="text-[17px]">🏡</span>
-                <div className="text-left flex-1 min-w-0">
-                  <div className="f-display text-[13px]" style={{ color: C.chalk }}>Lifestyle</div>
-                  <div className="f-body text-[10px] mt-0.5" style={{ color: player.homeTier ? "#10B981" : C.chalkDim }}>
-                    {player.homeTier
-                      ? `${HOME_TIERS.find(t => t.id === player.homeTier).label} owned`
-                      : `${rm(player.money)} saved · no home yet`}
-                  </div>
-                </div>
-                <ChevronRight size={15} color={C.chalkDim} />
-              </button>
-            )}
+                  {showTrade && (
+                    <>
+                      <div className="f-mono text-[9px] uppercase tracking-widest" style={{ color: C.chalkDim }}>Standing</div>
+                      <button onClick={() => (player.tradeRequestCooldown > 0 ? null : onRequestTrade())}
+                        disabled={player.tradeRequestCooldown > 0}
+                        className={player.tradeRequestCooldown > 0 ? "w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition" : "choice-card w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition"}
+                        style={{
+                          background: C.ink2,
+                          border: `1px solid ${player.tradeRequestCooldown > 0 ? C.line : "rgba(251,146,60,0.4)"}`,
+                          opacity: player.tradeRequestCooldown > 0 ? 0.55 : 1,
+                          cursor: player.tradeRequestCooldown > 0 ? "not-allowed" : "pointer",
+                        }}>
+                        <span className="text-[17px]">🚪</span>
+                        <div className="text-left flex-1 min-w-0">
+                          <div className="f-display text-[13px]" style={{ color: C.chalk }}>Request a Trade</div>
+                          <div className="f-body text-[10px] mt-0.5" style={{ color: C.chalkDim }}>
+                            {player.tradeRequestCooldown > 0
+                              ? `${player.tradeRequestCooldown} season${player.tradeRequestCooldown === 1 ? "" : "s"} until you can ask again`
+                              : `You've been at ${player.teamName} ${player.seasonsAtClub} season${player.seasonsAtClub === 1 ? "" : "s"}`}
+                          </div>
+                        </div>
+                        {!(player.tradeRequestCooldown > 0) && <ChevronRight size={15} color={C.chalkDim} />}
+                      </button>
+                    </>
+                  )}
+                </>
+              );
+            })()}
 
             {player.history.length > 0 && (
               <div className="rounded-2xl p-4" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
@@ -6630,18 +6803,75 @@ function MidseasonCheckpointScreen({ player, onChoose }) {
 }
 
 /* ---------------------------------------------------------
+   LOCKER ROOM SCREEN
+   Renders whichever of the three LOCKER_ROOM_META scenarios
+   rollMidseasonCheckpoint picked. Kept separate from
+   MidseasonCheckpointScreen (Coach Talk) rather than merging them —
+   the two share a checkpoint SLOT but not a layout (Coach Talk's
+   three-stat header doesn't apply here), and this way neither risks
+   the other's already-tested behavior.
+--------------------------------------------------------- */
+function LockerRoomScreen({ player, subScenario, onChoose }) {
+  const meta = LOCKER_ROOM_META[subScenario] || LOCKER_ROOM_META.blame;
+  return (
+    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
+      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+        <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>{meta.kicker} · {player.teamName}</div>
+        <div className="f-display text-xl font-extrabold mb-3" style={{ color: C.chalk }}>{meta.title}</div>
+        <p className="f-body text-[13px] mb-5" style={{ color: C.chalkDim }}>{meta.desc}</p>
+
+        <div className="grid grid-cols-2 gap-3">
+          <button onClick={() => onChoose(meta.choiceA.id)} className="choice-card text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+            <div className="text-center text-[13px] font-bold pt-3" style={{ color: C.chalk }}>{meta.choiceA.label}</div>
+            <div className="text-center f-body text-[10px] pb-2" style={{ color: C.chalkDim }}>{meta.choiceA.tagline}</div>
+            <EventChoiceIcon icon="handshake" />
+            <div className="p-3 flex flex-col gap-2">
+              {meta.choiceA.winPct != null ? (
+                <>
+                  <div className="flex items-center justify-between px-3 py-2 rounded-full text-[10.5px] font-semibold" style={{ background: "rgba(16,185,129,0.14)", color: "#10B981" }}>
+                    <span>Goes well</span><span className="f-mono font-extrabold">{meta.choiceA.winPct}%</span>
+                  </div>
+                  <div className="flex items-center justify-between px-3 py-2 rounded-full text-[10.5px] font-semibold" style={{ background: "rgba(239,68,68,0.14)", color: "#EF4444" }}>
+                    <span>Backfires</span><span className="f-mono font-extrabold">{100 - meta.choiceA.winPct}%</span>
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-center justify-center px-3 py-2 rounded-full text-[10.5px] font-semibold" style={{ background: C.ink2, color: C.teal }}>
+                  A deliberate change, not a gamble
+                </div>
+              )}
+            </div>
+          </button>
+          <button onClick={() => onChoose(meta.choiceB.id)} className="choice-card text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+            <div className="text-center text-[13px] font-bold pt-3" style={{ color: C.chalk }}>{meta.choiceB.label}</div>
+            <div className="text-center f-body text-[10px] pb-2" style={{ color: C.chalkDim }}>{meta.choiceB.tagline}</div>
+            <EventChoiceIcon icon="star" />
+            <div className="p-3 flex flex-col gap-2">
+              <div className="flex items-center justify-center px-3 py-2 rounded-full text-[10.5px] font-semibold" style={{ background: C.ink2, color: C.teal }}>
+                The lower-risk option
+              </div>
+            </div>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------
    LIFESTYLE SPENDING SCREEN
    Bank balance and total career earnings are shown as two separate
    numbers on purpose (see totalEarnings tracking in handleContinueAfterResult
    etc.) — spending on a home correctly reduces the bank balance, but
    shouldn't make it look like the player earned less over their career.
 --------------------------------------------------------- */
-function LifestyleSpendingScreen({ player, onBuyHome, onBuyVehicle, onBuyGear, onBuyJewelry, onBack }) {
+function LifestyleSpendingScreen({ player, onBuyHome, onBuyVehicle, onBuyGear, onBuyFamily, onBuyJewelry, onBack }) {
   const [cat, setCat] = useState("home");
   const CATS = [
     ["home", "Home", "🏡"],
     ["vehicles", "Vehicles", "🚗"],
     ["gear", "Gear", "👟"],
+    ["family", "Family", "👨‍👩‍👧"],
     ["jewelry", "Jewelry", "💎"],
   ];
 
@@ -6651,14 +6881,17 @@ function LifestyleSpendingScreen({ player, onBuyHome, onBuyVehicle, onBuyGear, o
   const vehicleOwned = player.vehicleTier && VEHICLE_TIERS.find(t => t.id === player.vehicleTier);
   const gearOffered = nextTiers(GEAR_TIERS, player.gearTier);
   const gearOwned = player.gearTier && GEAR_TIERS.find(t => t.id === player.gearTier);
+  const familyOffered = nextTiers(FAMILY_TIERS, player.familyTier);
+  const familyOwned = player.familyTier && FAMILY_TIERS.find(t => t.id === player.familyTier);
   const jewelryPieces = player.jewelryPieces || 0;
   const jewelryCost = jewelryNextCost(jewelryPieces);
   const jewelryGain = jewelryPopGain(jewelryPieces);
   const jewelryAffordable = player.money >= jewelryCost;
 
-  // Shared card renderer for the three one-time tiered categories — Home,
-  // Vehicles, and Gear all use the exact same buy-up-not-sideways shape,
-  // just with different data and an optional floor/popularity badge.
+  // Shared card renderer for the four one-time tiered categories — Home,
+  // Vehicles, Gear, and Family all use the exact same buy-up-not-sideways
+  // shape, just with different data and an optional floor/popularity/
+  // family badge.
   const renderTierCard = (tier, onBuy) => {
     const affordable = player.money >= tier.cost;
     const gated = tier.popGate && player.popularity < tier.popGate;
@@ -6679,6 +6912,11 @@ function LifestyleSpendingScreen({ player, onBuyHome, onBuyVehicle, onBuyGear, o
           {tier.popBoost > 0 && (
             <span className="f-mono text-[10px] font-bold flex items-center gap-1" style={{ color: C.amberBright }}>
               📻 Popularity +{tier.popBoost}
+            </span>
+          )}
+          {tier.familyBoost > 0 && (
+            <span className="f-mono text-[10px] font-bold flex items-center gap-1" style={{ color: "#EC4899" }}>
+              👨‍👩‍👧 Family +{tier.familyBoost}
             </span>
           )}
           {tier.popGate && (
@@ -6769,6 +7007,19 @@ function LifestyleSpendingScreen({ player, onBuyHome, onBuyVehicle, onBuyGear, o
             )}
             {gearOffered.map(tier => renderTierCard(tier, onBuyGear))}
             {!gearOffered.length && <p className="f-body text-[12px] text-center py-4" style={{ color: C.chalkDim }}>You already own the best there is.</p>}
+          </div>
+        )}
+
+        {cat === "family" && (
+          <div className="flex flex-col gap-3">
+            {familyOwned && (
+              <div className="rounded-2xl p-3.5 flex items-center gap-3" style={{ background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.3)" }}>
+                <span className="text-[18px]">👨‍👩‍👧</span>
+                <div className="f-display text-[12.5px]" style={{ color: C.chalk }}>{familyOwned.label} — done</div>
+              </div>
+            )}
+            {familyOffered.map(tier => renderTierCard(tier, onBuyFamily))}
+            {!familyOffered.length && <p className="f-body text-[12px] text-center py-4" style={{ color: C.chalkDim }}>You've already done everything on this list.</p>}
           </div>
         )}
 
@@ -9865,15 +10116,13 @@ export default function App() {
       tierLabel = "Signature Moment — So Close";
     }
     p.history = [...p.history, { age: p.age, tierLabel, note }];
-    setPlayer(p);
-    save(p);
     setBanner(note);
-    // Now reached from the midseason checkpoint (before the season's
-    // Result screen has shown), not from end-of-season as before — the
-    // full season summary was already built by handleChooseEvent and is
-    // still waiting in `summary`, so this resolves into it rather than
-    // returning to the Hub the way it used to when this fired last.
-    setScreen("result");
+    // Now reached from the midseason checkpoint, before the second half
+    // has even been computed yet — finishSecondHalfAndBuildResult picks
+    // up from p.pendingSecondHalf (set by handleChooseEvent) and takes
+    // it the rest of the way to the Result screen.
+    setMidseasonEvent(null);
+    finishSecondHalfAndBuildResult(p);
   };
 
   // Resolves the Coach Talk checkpoint. A won ask upgrades the role
@@ -9902,18 +10151,71 @@ export default function App() {
           }
         }
         p.relationships.coach = clamp(p.relationships.coach + 2);
-        note = '"Alright — show me." Your role moves up starting next season.';
+        // Now genuinely accurate rather than aspirational: the role
+        // change applies before finishSecondHalfAndBuildResult generates
+        // the second half, so this really does start THIS season, not
+        // "next season" the way it had to be worded under the old
+        // single-roll architecture.
+        note = '"Alright — show me." You start the second half in the new role.';
       } else {
         p.relationships.coach = clamp(p.relationships.coach - 5);
         note = '"Everyone thinks they deserve more." The ask itself cost something.';
       }
     }
     p.history = [...p.history, { age: p.age, tierLabel: "Midseason Checkpoint", note }];
-    setMidseasonEvent(null);
-    setPlayer(p);
-    save(p);
     setBanner(note);
-    setScreen("result");
+    setMidseasonEvent(null);
+    finishSecondHalfAndBuildResult(p);
+  };
+
+  // Resolves whichever Locker Room sub-scenario is active. Same shape as
+  // handleCoachTalkChoice — a choice maps to concrete relationship/stat
+  // changes, then routes back into `result` since the season's summary
+  // was already built before the checkpoint ran.
+  const handleLockerRoomChoice = (choiceId) => {
+    const sub = midseasonEvent && midseasonEvent.subScenario;
+    let p = { ...player, relationships: { ...player.relationships } };
+    let note;
+    if (sub === "clique") {
+      if (choiceId === "reach") {
+        const won = Math.random() < 0.55;
+        if (won) { p.relationships.team = clamp(p.relationships.team + 8); note = "It lands. Small things — a ride to practice, remembering a birthday. The ice actually cracks."; }
+        else { p.relationships.team = clamp(p.relationships.team + 1); note = "Doesn't quite land. Effort noticed, chemistry barely moves. These things take time."; }
+      } else {
+        note = "You keep your head down. Chemistry stays where it is — for now. Sometimes that's the right call.";
+      }
+    } else if (sub === "blame") {
+      if (choiceId === "confront") {
+        const won = Math.random() < 0.58;
+        if (won) {
+          p.relationships.team = clamp(p.relationships.team + 10);
+          p.relationships.coach = clamp(p.relationships.coach + 3);
+          note = "It clears the air. Uncomfortable, necessary, and the room respects that you didn't hide from it.";
+        } else {
+          p.relationships.team = clamp(p.relationships.team - 6);
+          p.relationships.coach = clamp(p.relationships.coach - 4);
+          note = "It backfires. Now it's not just whispers.";
+        }
+      } else {
+        p.relationships.team = clamp(p.relationships.team + 4);
+        p.fatigue = clamp(p.fatigue + 8);
+        note = "You put your head down. No promises, but at least nobody can say you didn't try.";
+      }
+    } else if (sub === "star") {
+      if (choiceId === "share") {
+        p.relationships.team = clamp(p.relationships.team + 8);
+        p.popularity = clamp(p.popularity - 3);
+        note = "The room notices. Fewer highlights, more trust — a trade most stars eventually have to make.";
+      } else {
+        note = "You don't change a thing. The tension doesn't go away, but neither does the production.";
+      }
+    } else {
+      note = "The moment passes.";
+    }
+    p.history = [...p.history, { age: p.age, tierLabel: "Midseason Checkpoint", note }];
+    setBanner(note);
+    setMidseasonEvent(null);
+    finishSecondHalfAndBuildResult(p);
   };
 
   // Buys a home tier. Guarded against both being called with an
@@ -9936,7 +10238,10 @@ export default function App() {
     setPlayer(p);
     save(p);
     setBanner(`You're now the owner of a ${tier.label.toLowerCase()}.`);
-    setScreen("hub");
+    // Stays on the Lifestyle screen rather than bouncing back to the Hub —
+    // browsing several categories in one visit shouldn't mean re-navigating
+    // from the Hub after every single purchase.
+    setScreen("lifestyle_spending");
   };
 
   const handleBuyVehicle = (tierId) => {
@@ -9954,7 +10259,7 @@ export default function App() {
     setPlayer(p);
     save(p);
     setBanner(`You're now the owner of a ${tier.label.toLowerCase()}.`);
-    setScreen("hub");
+    setScreen("lifestyle_spending");
   };
 
   const handleBuyGear = (tierId) => {
@@ -9977,7 +10282,28 @@ export default function App() {
     setPlayer(p);
     save(p);
     setBanner(`You're now the owner of the ${tier.label.toLowerCase()}.`);
-    setScreen("hub");
+    setScreen("lifestyle_spending");
+  };
+
+  // Family Support — same buy-up-not-sideways shape as Home/Vehicles/Gear,
+  // but the payoff is entirely relational (Family relationship), never
+  // Popularity — this category isn't about the player's own status at all.
+  const handleBuyFamily = (tierId) => {
+    const tier = FAMILY_TIERS.find(t => t.id === tierId);
+    if (!tier) return;
+    const ownedIdx = player.familyTier ? FAMILY_TIERS.findIndex(t => t.id === player.familyTier) : -1;
+    const targetIdx = FAMILY_TIERS.findIndex(t => t.id === tierId);
+    if (targetIdx <= ownedIdx || player.money < tier.cost) return;
+    let p = { ...player, relationships: { ...player.relationships } };
+    p.money -= tier.cost;
+    p.familyTier = tierId;
+    p.relationships.family = clamp(p.relationships.family + tier.familyBoost);
+    const note = `${tier.label} — ${rm(tier.cost)}. ${tier.desc}`;
+    p.history = [...p.history, { age: p.age, tierLabel: "Lifestyle — " + tier.label, note }];
+    setPlayer(p);
+    save(p);
+    setBanner(`${tier.label}. Family won't forget this one.`);
+    setScreen("lifestyle_spending");
   };
 
   // The repeatable purchase — no tier to compare against, just the next
@@ -9997,7 +10323,7 @@ export default function App() {
     setPlayer(p);
     save(p);
     setBanner(`Another piece for the collection.`);
-    setScreen("hub");
+    setScreen("lifestyle_spending");
   };
 
   const handleStayClub = () => {
@@ -10350,7 +10676,6 @@ export default function App() {
     let awardRace = null;
     if (p.stage === "pro" && !p.abroad && p.clubId && p.league) {
       const role = p.starterStatus || "Bench";
-      leagueStats = generateLeagueSeasonStats(p.stats, p.position, p.league, role, p.height);
       leagueLabel = LEAGUE[p.league].short;
 
       /* League context: build the NPC pool on first entry, age it every
@@ -10360,94 +10685,72 @@ export default function App() {
         p = ageNpcPool(p, p.league);
         p.npcAgedYear = p.year;
       }
-      leagueBoard = buildLeagueBoard(p, p.league, leagueStats);
-      awardRace = buildAwardRace(p, p.league, leagueStats, leagueBoard);
 
-      // Games per season: MBL ~30-40, D-Leagues ~20-25.
+      // Games per season: MBL ~30-40, D-Leagues ~20-25. Split evenly (±1
+      // game) into two halves, with the Midseason Checkpoint sitting
+      // between them.
       const fullGames = p.league === "mbl" ? randInt(30, 40) : randInt(20, 25);
+      const half1Games = Math.round(fullGames / 2);
+      const half2Games = fullGames - half1Games;
 
-      // Injury risk. A serious injury costs most of the season and lingers into next.
-      // Base risk rises with age and fatigue; young, fresh players are safer.
+      // Injury risk — same formula as before, converted to the
+      // statistically-equivalent PER-HALF probability (halfSeasonInjuryChance)
+      // since the roll now happens twice instead of once; naive halving
+      // would under-count the season's real total risk.
       let injuryChance = 0.06 + Math.max(0, p.age - 30) * 0.015 + Math.max(0, p.fatigue - 60) * 0.002;
       injuryChance = clamp(injuryChance, 0.04, 0.28);
-      // Sports science: load management and proper treatment roughly halve
-      // how often a season gets derailed.
       if (hasInvestment(p, "science")) injuryChance *= 0.5;
-      // A full rehab (Recovery Plan choice, last time out) properly healed
-      // rather than just running the clock — one season of reduced risk,
-      // then consumed. Rest & Recover (off-season plan) earns the same
-      // discount for the same reason — a body that actually got to rest.
-      // Tracked as separate flags (different origins) but same discount,
-      // and each clears independently so they don't mask one another.
       if (p.recentlyRehabbed) { injuryChance *= 0.7; p.recentlyRehabbed = false; }
       if (p.restedOffseason) { injuryChance *= 0.7; p.restedOffseason = false; }
-      if (Math.random() < injuryChance) {
-        const serious = Math.random() < 0.45; // ~45% of injuries are season-wrecking
-        if (serious) {
-          gamesPlayed = Math.max(3, Math.round(fullGames * randFloat(0.15, 0.35)));
-          injury = { serious: true, missed: fullGames - gamesPlayed };
-          p.slowStartNextSeason = true; // lingers into next year
-          p.morale = clamp(p.morale - 15);
-          p.fatigue = clamp(p.fatigue + 10);
-          // A serious injury now comes with a real recovery decision instead
-          // of just a text flag — resolved on an interstitial screen shown
-          // after this season's recap, same pattern as a Clutch Moment
-          // (compute the season normally, defer only the screen transition).
-          p.pendingInjuryDecision = { missed: injury.missed, hasScience: hasInvestment(p, "science") };
-        } else {
-          gamesPlayed = Math.round(fullGames * randFloat(0.6, 0.85));
-          injury = { serious: false, missed: fullGames - gamesPlayed };
-          p.morale = clamp(p.morale - 6);
-        }
+      const halfChance = halfSeasonInjuryChance(injuryChance);
+
+      // Capture whether LAST season's injury should suppress the FIRST
+      // half's stats before touching the flag — it's cleared unconditionally
+      // either way ("recovered after one rebuilding year"), matching the
+      // original single-roll version's own behavior.
+      const hadSlowStartComingIn = !!p.slowStartNextSeason;
+      p.slowStartNextSeason = false;
+
+      const seg1 = simulateGamesSegment(p, half1Games, halfChance);
+      let leagueStats1 = generateLeagueSeasonStats(p.stats, p.position, p.league, role, p.height);
+      if (hadSlowStartComingIn && !seg1.injury) {
+        leagueStats1 = { ...leagueStats1 };
+        ["ppg", "rpg", "apg", "spg", "bpg"].forEach(k => { leagueStats1[k] = round1(leagueStats1[k] * randFloat(0.7, 0.85)); });
+        leagueStats1.tr = Math.round(leagueStats1.tr * 0.85);
+      }
+      p.morale = clamp(p.morale + seg1.moraleDelta);
+      p.fatigue = clamp(p.fatigue + seg1.fatigueDelta);
+
+      if (seg1.seasonEndingInjury) {
+        // A serious first-half injury ends the season right there — same
+        // outcome shape as the original single-roll version, just reached
+        // via the first half instead of a full-season roll. No checkpoint
+        // (an injury decision always outranks it — see
+        // rollMidseasonCheckpoint's own priority), no second half.
+        p.slowStartNextSeason = true;
+        p.pendingInjuryDecision = seg1.pendingInjuryDecision;
+        const final = finalizeProSeasonAfterGames(p, leagueStats1, seg1.gamesPlayed, seg1.injury, half1Games, role);
+        p = final.p;
+        leagueBoard = final.leagueBoard; awardRace = final.awardRace;
+        leagueStandings = final.leagueStandings; leagueAwards = final.leagueAwards;
+        wonChampionship = final.wonChampionship;
+        leagueStats = leagueStats1; gamesPlayed = seg1.gamesPlayed; injury = seg1.injury;
       } else {
-        gamesPlayed = fullGames;
+        // No season-ending injury in the first half — defer the rest to
+        // finishSecondHalfAndBuildResult, called either right after the
+        // checkpoint resolves, or immediately below if nothing fires.
+        p.pendingSecondHalf = {
+          leagueStats1, gp1: seg1.gamesPlayed, minorInjury1: seg1.injury,
+          half2Games, halfChance, fullGames, roleAtFirstHalf: role,
+        };
+        // A first-half-only preview for the checkpoint itself (e.g. a
+        // "where you stand right now" read) — built from real half-season
+        // numbers, genuinely different from the final combined board
+        // shown at Result, not just an earlier reveal of the same thing.
+        leagueBoard = buildLeagueBoard(p, p.league, leagueStats1);
+        awardRace = buildAwardRace(p, p.league, leagueStats1, leagueBoard);
+        leagueStats = leagueStats1; gamesPlayed = seg1.gamesPlayed; injury = seg1.injury;
       }
-
-      // A slow start (recovering from last year's serious injury) suppresses output.
-      if (p.slowStartNextSeason && !injury) {
-        ["ppg", "rpg", "apg", "spg", "bpg"].forEach(k => { leagueStats[k] = round1(leagueStats[k] * randFloat(0.7, 0.85)); });
-        leagueStats.tr = Math.round(leagueStats.tr * 0.85);
-        p.slowStartNextSeason = false; // recovered after one rebuilding year
-      }
-
-      // Championship: depends on club prestige, the player's season, and league.
-      const club = getClub(p.clubId);
-      let titleChance = 0.05 + (club ? (club.prestige / 100) * 0.18 : 0) + (leagueStats.tr / 100) * 0.12;
-      if (injury && injury.serious) titleChance *= 0.4; // hard to win while hurt
-      titleChance = clamp(titleChance, 0.02, 0.42);
-      wonChampionship = Math.random() < titleChance;
-      if (wonChampionship) {
-        p.popularity = clamp(p.popularity + 10);
-        p.morale = clamp(p.morale + 10);
-        p.achievements = Array.from(new Set([...p.achievements, p.league === "mbl" ? "mbl_champion" : "dleague_champion"]));
-        // MBL titles only, matching how the rival's own title count is
-        // tracked (advanceRivalOneSeason only increments r.titles on an
-        // MBL win) — keeps the "Settled Score" comparison apples-to-apples.
-        if (p.league === "mbl") p.mblTitles = (p.mblTitles || 0) + 1;
-      }
-      // Built AFTER the title roll — it needs to know whether you won, or the
-      // table can show you 4th while the recap calls you champions.
-      leagueStandings = buildStandings(p, p.league, leagueStats, (p.year || 2026) * 31 + p.seasonNum, wonChampionship, fullGames);
-
-      // Track whether this is the player's first-ever MBL season (for Rookie of the Year).
-      const isFirstMblSeason = p.league === "mbl" && !p.hadMblSeason;
-      if (p.league === "mbl") p.hadMblSeason = true;
-
-      leagueAwards = rollLeagueAwards(leagueStats, { leagueId: p.league, role, isFirstMblSeason, board: leagueBoard });
-
-      // Badges from notable seasons.
-      if ((p.league === "u20" || p.league === "u23") && leagueStats.tr >= 78) {
-        p.achievements = Array.from(new Set([...p.achievements, "dleague_star"]));
-      }
-      if (p.league === "mbl" && role === "Starter") {
-        p.achievements = Array.from(new Set([...p.achievements, "mbl_starter"]));
-      }
-      // Winning MVP or ROTY is a career milestone worth a permanent badge.
-      if (leagueAwards.includes("mvp")) p.achievements = Array.from(new Set([...p.achievements, p.league === "mbl" ? "mbl_mvp" : "dleague_mvp"]));
-      if (leagueAwards.includes("roty")) p.achievements = Array.from(new Set([...p.achievements, "mbl_roty"]));
-      if (leagueAwards.includes("sixth_man")) p.achievements = Array.from(new Set([...p.achievements, "mbl_sixth_man"]));
-      // Popularity bump for winning hardware.
-      if (leagueAwards.length) p.popularity = clamp(p.popularity + leagueAwards.length * 3 + (leagueAwards.includes("mvp") ? 8 : 0));
     }
 
     // University basketball in Taiwan: development-league level production,
@@ -10510,9 +10813,62 @@ export default function App() {
       }
     }
 
+    if (p.pendingSecondHalf) {
+      // First half done, no season-ending injury — the checkpoint rolls
+      // HERE (using the real first-half numbers just computed), not at
+      // the old end-of-function spot. Everything below this block (the
+      // history entry, achievements, summary, routing) needs the FINAL
+      // combined season, which doesn't exist yet — so none of it runs
+      // now. It's captured in pendingSeasonContext and replayed once the
+      // second half is actually computed, whether that's immediately
+      // below (nothing fires) or later from whichever checkpoint
+      // choice resolves.
+      p.pendingSeasonContext = {
+        choiceResult: choice.result, eventTier, eventAchievementLabel,
+        simTierLabel: sim.tierLabel, simNote: sim.note,
+        trainingText: pending.trainingText,
+      };
+      setPlayer(p);
+      const checkpoint = rollMidseasonCheckpoint(p);
+      if (checkpoint.type === "rival_game") {
+        setScreen("buzzer_beater");
+      } else if (checkpoint.type === "coach_talk" || checkpoint.type === "locker_room") {
+        setMidseasonEvent(checkpoint);
+        setScreen("midseason_checkpoint");
+      } else {
+        finishSecondHalfAndBuildResult(p);
+      }
+      return;
+    }
+
+    finishAndRouteSeason(p, {
+      choiceResult: choice.result, eventTier, eventAchievementLabel,
+      simTierLabel: sim.tierLabel, simNote: sim.note,
+      simMoneyDelta: sim.moneyDelta, simPopularityDelta: sim.popularityDelta,
+      trainingText: pending.trainingText,
+      leagueStats, leagueLabel, leagueAwards, leagueBoard, leagueStandings, awardRace,
+      gamesPlayed, wonChampionship, injury,
+    });
+  };
+
+  // The shared "season is truly finished, show the recap" logic — a
+  // faithful extraction of what used to run inline at the end of
+  // handleChooseEvent unconditionally. Called from two places: directly,
+  // for anything that isn't a pro-club season needing the checkpoint
+  // split (UBA, overseas, youth stages, or a pro season that ended early
+  // via a season-ending first-half injury); and from
+  // finishSecondHalfAndBuildResult, once the second half is actually
+  // computed and combined. `ctx` carries everything the history entry
+  // and summary object need that isn't already on `p` itself.
+  const finishAndRouteSeason = (p, ctx) => {
+    const { choiceResult, eventTier, eventAchievementLabel, simTierLabel, simNote,
+      simMoneyDelta, simPopularityDelta, trainingText,
+      leagueStats, leagueLabel, leagueAwards, leagueBoard, leagueStandings, awardRace,
+      gamesPlayed, wonChampionship, injury } = ctx;
+
     p.history = [...p.history, {
-      age: p.age, tierLabel: leagueLabel ? `${leagueLabel} · ${sim.tierLabel}` : sim.tierLabel,
-      note: sim.note,
+      age: p.age, tierLabel: leagueLabel ? `${leagueLabel} · ${simTierLabel}` : simTierLabel,
+      note: simNote,
       tournament: leagueLabel
         ? (p.uba
             ? `Taiwan UBA · ${p.ubaTeamName}`
@@ -10526,32 +10882,26 @@ export default function App() {
       leagueId: (leagueStats && !p.abroad && !p.uba) ? p.league : undefined,
       leagueName: leagueLabel || undefined,
       category: leagueStats ? (p.uba ? "uba" : "pro") : undefined,
-      leagueAwards: leagueAwards.length ? leagueAwards : undefined,
+      leagueAwards: (leagueAwards || []).length ? leagueAwards : undefined,
       games: gamesPlayed != null ? gamesPlayed : undefined,
       champion: wonChampionship || undefined,
       injury: injury || undefined,
     }];
     p.achievements = checkAchievements(p);
-    // Persisted so the next handler (season continue -> national tryout check)
-    // can see this season's awards even though it runs in a separate closure.
     p.lastSeasonLeagueAwards = leagueAwards;
 
-    // Display-only shot-composition flavor for the recap box score. Reads
-    // leagueStats but never writes to it — the object saved into p.history
-    // above is untouched, so nothing here can leak into the Career Timeline
-    // record or anything computed from it later.
     const shotProfile = leagueStats ? styleShotProfile(leagueStats, p.playingStyle) : null;
     const styleNote = leagueStats ? styleFlavorNote(p.playingStyle, shotProfile) : null;
 
     setSummary({
       seasonNum: p.seasonNum,
-      trainingText: pending.trainingText,
-      eventText: choice.result,
+      trainingText,
+      eventText: choiceResult,
       eventTier, eventAchievementLabel,
-      tierLabel: sim.tierLabel,
-      note: sim.note,
-      moneyDelta: sim.moneyDelta,
-      popularityDelta: sim.popularityDelta,
+      tierLabel: simTierLabel,
+      note: simNote,
+      moneyDelta: simMoneyDelta,
+      popularityDelta: simPopularityDelta,
       leagueStats, leagueLabel, leagueAwards, leagueBoard, leagueStandings, awardRace,
       leagueYear: p.year,
       gamesPlayed, wonChampionship, injury,
@@ -10559,22 +10909,64 @@ export default function App() {
     });
     setPlayer(p);
     if (p.pendingInjuryDecision) {
-      // A serious injury takes priority over the checkpoint entirely — a
-      // coach conversation about more minutes doesn't make sense in the
-      // same breath as just getting hurt, so the checkpoint pool isn't
-      // even checked in that case.
       setScreen("injury_recovery");
       return;
     }
-    const checkpoint = rollMidseasonCheckpoint(p);
-    if (checkpoint.type === "rival_game") {
-      setScreen("buzzer_beater");
-    } else if (checkpoint.type === "coach_talk") {
-      setMidseasonEvent(checkpoint);
-      setScreen("midseason_checkpoint");
-    } else {
-      setScreen("result");
+    setScreen("result");
+  };
+
+  // Computes the second half (using p.starterStatus as it stands NOW —
+  // reflecting a Coach Talk win if that's what happened at the
+  // checkpoint), combines it with the first half via
+  // combineHalfSeasonStats, then hands off to finishAndRouteSeason with
+  // the FINAL combined numbers. Called once the checkpoint resolves
+  // (from handleCoachTalkChoice / handleLockerRoomChoice /
+  // handleBuzzerBeaterComplete), or immediately from handleChooseEvent
+  // itself when no checkpoint fired at all.
+  const finishSecondHalfAndBuildResult = (p) => {
+    const ctx = p.pendingSeasonContext || {};
+    const half = p.pendingSecondHalf;
+    if (!half) {
+      // Defensive: should never happen (only called when pendingSecondHalf
+      // was just set), but if it somehow does, don't crash — just show
+      // whatever's already true rather than losing the season entirely.
+      finishAndRouteSeason(p, { ...ctx, leagueStats: null, leagueLabel: null, leagueAwards: [], leagueBoard: null, leagueStandings: null, awardRace: null, gamesPlayed: null, wonChampionship: false, injury: null });
+      return;
     }
+    const role2 = p.starterStatus || half.roleAtFirstHalf;
+    const leagueStats2 = generateLeagueSeasonStats(p.stats, p.position, p.league, role2, p.height);
+    const seg2 = simulateGamesSegment(p, half.half2Games, half.halfChance);
+    p.morale = clamp(p.morale + seg2.moraleDelta);
+    p.fatigue = clamp(p.fatigue + seg2.fatigueDelta);
+
+    const gp1 = half.gp1;
+    const gp2 = seg2.gamesPlayed;
+    const combinedStats = combineHalfSeasonStats(half.leagueStats1, gp1, leagueStats2, gp2);
+    const finalGamesPlayed = gp1 + gp2;
+    // A second-half injury reported alone (first-half's own minor injury,
+    // if any, doesn't carry forward as a SEPARATE reported injury — the
+    // recap shows one injury note for the season, matching how a single
+    // full-season roll only ever produced one).
+    const finalInjury = seg2.injury || half.minorInjury1 || null;
+
+    let pp = { ...p };
+    delete pp.pendingSecondHalf;
+    delete pp.pendingSeasonContext;
+
+    if (seg2.seasonEndingInjury) {
+      pp.slowStartNextSeason = true;
+      pp.pendingInjuryDecision = seg2.pendingInjuryDecision;
+    }
+
+    const final = finalizeProSeasonAfterGames(pp, combinedStats, finalGamesPlayed, finalInjury, half.fullGames, role2);
+    pp = final.p;
+    finishAndRouteSeason(pp, {
+      ...ctx,
+      leagueStats: combinedStats, leagueLabel: LEAGUE[pp.league] ? LEAGUE[pp.league].short : null,
+      leagueAwards: final.leagueAwards, leagueBoard: final.leagueBoard,
+      leagueStandings: final.leagueStandings, awardRace: final.awardRace,
+      gamesPlayed: finalGamesPlayed, wonChampionship: final.wonChampionship, injury: finalInjury,
+    });
   };
 
   /* The off-season resolution is ~490 lines and runs synchronously: ageing,
@@ -11433,6 +11825,9 @@ export default function App() {
       {screen === "midseason_checkpoint" && player && midseasonEvent && midseasonEvent.type === "coach_talk" && (
         <MidseasonCheckpointScreen player={player} onChoose={handleCoachTalkChoice} />
       )}
+      {screen === "midseason_checkpoint" && player && midseasonEvent && midseasonEvent.type === "locker_room" && (
+        <LockerRoomScreen player={player} subScenario={midseasonEvent.subScenario} onChoose={handleLockerRoomChoice} />
+      )}
       {screen === "overseas_offers" && player && player.pendingOverseasOffer && (
         <OverseasOffersScreen player={player} offer={player.pendingOverseasOffer} onSign={handleAcceptOverseasOffer} onDecline={handleDeclineOverseasOffer} />
       )}
@@ -11459,6 +11854,7 @@ export default function App() {
           onBuyHome={handleBuyHome}
           onBuyVehicle={handleBuyVehicle}
           onBuyGear={handleBuyGear}
+          onBuyFamily={handleBuyFamily}
           onBuyJewelry={handleBuyJewelry}
           onBack={() => setScreen("hub")}
         />
