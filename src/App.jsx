@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback, memo } from "react";
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback, memo } from "react";
 import {
   Trophy, Dumbbell, HeartPulse, TrendingUp, TrendingDown, Users, DollarSign,
   Newspaper, Star, Award, Activity, ChevronRight, Zap, Shield,
@@ -107,8 +107,11 @@ const FontStyle = memo(() => (
       font-family:'Inter', sans-serif;
       font-weight:800;
       font-variant-numeric: tabular-nums;
-      background: #0A0A0A;
-      border: 1px solid #262626;
+      background: rgba(10,10,10,0.55);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,0.1);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.35);
     }
     .hairline-rule{
       height:1px;
@@ -4426,7 +4429,7 @@ const CareerLedger = memo(function CareerLedger({ history, maxHeight = 420 }) {
       {hiddenCount > 0 && (
         <button
           onClick={() => setShowAll(true)}
-          className="btn-tactile w-full f-mono text-[10px] uppercase tracking-widest py-2.5 rounded-xl transition"
+          className="btn-tactile w-full f-mono text-[10px] uppercase tracking-widest py-2.5 rounded-[10px] transition"
           style={{ background: C.ink3, color: C.chalkDim, border: `1px solid ${C.line}` }}
         >
           Show {hiddenCount} earlier season{hiddenCount > 1 ? "s" : ""}
@@ -4441,20 +4444,24 @@ const CareerLedger = memo(function CareerLedger({ history, maxHeight = 420 }) {
 --------------------------------------------------------- */
 function StartScreen({ onStart, savedGame, onContinue, onViewHallOfFame, onViewAchievements }) {
   const [name, setName] = useState("");
-  const [position, setPosition] = useState("PG");
-  const [hometown, setHometown] = useState(HOMETOWNS[0]);
+  const [position, setPosition] = useState(null);
+  const [hometown, setHometown] = useState(null);
   const [hometownSearch, setHometownSearch] = useState("");
   // Height/weight/wingspan are chosen on the Body Setup screen that follows;
   // this placeholder is overwritten there before any stats are generated.
   const height = 178;
   const [jersey, setJersey] = useState("");
   const [highlightMode, setHighlightMode] = useState(false);
+  const [activeTab, setActiveTab] = useState("name");
 
   const handleJerseyChange = (val) => {
     if (val === "") { setJersey(""); return; }
     const n = val.replace(/[^0-9]/g, "").slice(0, 2);
     setJersey(n === "" ? "" : String(clamp(Number(n), 0, 99)));
   };
+
+  const selectedPos = position ? POSITIONS.find(p => p.id === position) : null;
+  const isComplete = name.trim() && position && hometown;
 
   return (
     <div className="court-hero min-h-full w-full flex flex-col items-center px-4 py-10 sm:py-14">
@@ -4480,108 +4487,168 @@ function StartScreen({ onStart, savedGame, onContinue, onViewHallOfFame, onViewA
       </div>
 
       {savedGame && (
-        <div className="w-full max-w-md mb-6 p-4 rounded-xl flex items-center justify-between" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+        <div className="w-full max-w-md mb-6 p-4 rounded-[10px] flex items-center justify-between" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
           <div>
             <div className="f-display text-sm uppercase" style={{ color: C.chalk }}>{savedGame.name}</div>
             <div className="f-body text-xs" style={{ color: C.chalkDim }}>Age {savedGame.age} · {savedGame.teamName}</div>
           </div>
-          <button onClick={onContinue} className="btn-tactile f-display text-xs uppercase px-4 py-2 rounded-xl" style={{ background: C.teal, color: "#052620" }}>
+          <button onClick={onContinue} className="btn-tactile f-display text-xs uppercase px-4 py-2 rounded-[10px]" style={{ background: C.teal, color: "#052620" }}>
             Continue Career
           </button>
         </div>
       )}
 
-      <div className="w-full max-w-md rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-        <div className="grid grid-cols-3 gap-3 mb-5">
-          <div className="col-span-2">
-            <label className="f-mono text-[11px] uppercase tracking-widest" style={{ color: C.chalkDim }}>Player Name</label>
-            <input
-              value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder="Ayden Rahman"
-              className="f-body w-full mt-1 px-3 py-2 rounded-xl outline-none"
-              style={{ background: C.ink3, color: C.chalk, border: `1px solid ${C.line}` }}
-            />
-          </div>
-          <div>
-            <label className="f-mono text-[11px] uppercase tracking-widest" style={{ color: C.chalkDim }}>Jersey #</label>
-            <div className="relative mt-1">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 f-mono text-sm" style={{ color: C.chalkDim }}>#</span>
-              <input
-                value={jersey}
-                onChange={e => handleJerseyChange(e.target.value)}
-                placeholder="00"
-                inputMode="numeric"
-                className="f-mono w-full px-3 py-2 pl-6 rounded-xl outline-none text-center"
-                style={{ background: C.ink3, color: C.chalk, border: `1px solid ${C.line}` }}
-              />
+      <div className="w-full max-w-md rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+
+        {/* Live Scouting Report — builds up as fields fill in, instead of
+            a flat form the player only sees the result of after
+            submitting. Uses the exact same name/position/hometown/jersey
+            state the form below writes to; no separate data model. */}
+        <div className="rounded-[22px] p-5 mb-5 relative overflow-hidden" style={{ background: "linear-gradient(160deg, #1a1005, #0f0a02)", border: "1px solid rgba(249,115,22,0.35)" }}>
+          <div className="f-mono text-[9px] uppercase tracking-widest mb-2.5" style={{ color: C.amberBright, position: "relative" }}>Scouting Report · Draft Class</div>
+          <div className="flex items-center gap-3.5 mb-2.5" style={{ position: "relative" }}>
+            <div className="w-12 h-12 rounded-[10px] flex-shrink-0 flex items-center justify-center f-display text-lg font-extrabold transition"
+              style={{ background: C.ink3, border: `1px solid ${jersey ? C.amber : C.line}`, color: jersey ? C.amberBright : C.chalkDim }}>
+              {jersey ? `#${jersey}` : "#--"}
+            </div>
+            <div className="min-w-0">
+              <div className="f-display text-lg font-extrabold truncate" style={{ color: name.trim() ? C.chalk : C.chalkDim, fontStyle: name.trim() ? "normal" : "italic" }}>
+                {name.trim() || "Unnamed Prospect"}
+              </div>
+              <div className="flex gap-1.5 mt-1 flex-wrap">
+                <span className="f-mono text-[9.5px] font-bold px-2 py-0.5 rounded-full" style={{ background: selectedPos ? "rgba(249,115,22,0.15)" : C.ink3, color: selectedPos ? C.amberBright : C.chalkDim }}>
+                  {selectedPos ? selectedPos.name : "Position TBD"}
+                </span>
+                <span className="f-mono text-[9.5px] font-bold px-2 py-0.5 rounded-full" style={{ background: hometown ? "rgba(249,115,22,0.15)" : C.ink3, color: hometown ? C.amberBright : C.chalkDim }}>
+                  {hometown || "Hometown TBD"}
+                </span>
+              </div>
             </div>
           </div>
+          <p className="f-body text-[11.5px]" style={{ color: C.chalkDim, position: "relative" }}>
+            {isComplete
+              ? `${name.trim()} — a ${selectedPos.tag.toLowerCase()} out of ${hometown}, chasing the climb from here.`
+              : (name.trim() || position || hometown)
+                ? "Getting there — a few more details and the report is complete."
+                : "Fill in the details below — the report writes itself as you go."}
+          </p>
         </div>
 
-        <label className="f-mono text-[11px] uppercase tracking-widest" style={{ color: C.chalkDim }}>Position</label>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 mb-5">
-          {POSITIONS.map(p => (
-            <button
-              key={p.id}
-              onClick={() => setPosition(p.id)}
-              className="choice-card text-left px-3 py-2 rounded-xl transition"
-              style={{
-                background: position === p.id ? C.ink3 : "transparent",
-                border: `1px solid ${position === p.id ? C.amber : C.line}`,
-              }}
-            >
-              <div className="flex items-center justify-between">
-                <span className="f-display text-sm" style={{ color: C.chalk }}>{p.name}</span>
-                <span className="f-mono text-[10px]" style={{ color: C.amberBright }}>{p.id}</span>
-              </div>
-              <div className="f-body text-[11px] mt-0.5" style={{ color: C.chalkDim }}>{p.desc}</div>
+        {/* Field tabs — one section visible at a time instead of the full
+            form all at once, matching the pacing of everything else this
+            game already does in short, focused steps. */}
+        <div className="flex gap-1.5 mb-4">
+          {[["name", "1", "Name"], ["position", "2", "Position"], ["hometown", "3", "Hometown"]].map(([id, n, label]) => (
+            <button key={id} onClick={() => setActiveTab(id)}
+              className="flex-1 flex flex-col items-center gap-0.5 py-2 rounded-[10px] transition"
+              style={{ background: activeTab === id ? "rgba(249,115,22,0.08)" : C.ink3, border: `1px solid ${activeTab === id ? C.amber : C.line}` }}>
+              <span className="f-mono text-[9px] font-extrabold" style={{ color: activeTab === id ? C.amberBright : C.chalkDim }}>{n}</span>
+              <span className="f-display text-[10px] font-bold" style={{ color: C.chalk }}>{label}</span>
             </button>
           ))}
         </div>
 
-        <label className="f-mono text-[11px] uppercase tracking-widest" style={{ color: C.chalkDim }}>Hometown</label>
-        <div className="relative mt-2">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" color={C.chalkDim} />
-          <input
-            value={hometownSearch}
-            onChange={e => setHometownSearch(e.target.value)}
-            placeholder="Search state"
-            className="f-body w-full pl-9 pr-3 py-2.5 rounded-xl outline-none text-sm"
-            style={{ background: C.ink3, color: C.chalk, border: `1px solid ${C.line}` }}
-          />
-        </div>
-        <div className="grid grid-cols-2 gap-2 mt-2 mb-2 max-h-64 overflow-y-auto pr-1">
-          {HOMETOWNS.filter(h => h.toLowerCase().includes(hometownSearch.toLowerCase())).map(h => {
-            const tier = getStateTier(h);
-            const tm = TIER_META[tier];
-            const selected = hometown === h;
-            return (
-              <button
-                key={h}
-                onClick={() => setHometown(h)}
-                className="choice-card flex items-center gap-2.5 px-2.5 py-2.5 rounded-xl transition text-left"
-                style={{
-                  background: selected ? C.ink3 : "transparent",
-                  border: `1px solid ${selected ? C.amber : C.line}`,
-                }}
-              >
-                <FlagIcon name={h} size={24} />
-                <span className="f-body text-xs flex-1 truncate" style={{ color: selected ? C.chalk : C.chalkDim }}>
-                  {h}
-                </span>
-                <span
-                  className="rounded-full shrink-0"
-                  style={{ width: 6, height: 6, background: tm.color }}
-                  title={`${tm.name} — ${tm.tag}`}
+        {activeTab === "name" && (
+          <div className="grid grid-cols-3 gap-3 mb-5">
+            <div className="col-span-2">
+              <label className="f-mono text-[11px] uppercase tracking-widest" style={{ color: C.chalkDim }}>Player Name</label>
+              <input
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder="Ayden Rahman"
+                className="f-body w-full mt-1 px-3 py-2 rounded-[10px] outline-none"
+                style={{ background: C.ink3, color: C.chalk, border: `1px solid ${C.line}` }}
+              />
+            </div>
+            <div>
+              <label className="f-mono text-[11px] uppercase tracking-widest" style={{ color: C.chalkDim }}>Jersey #</label>
+              <div className="relative mt-1">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 f-mono text-sm" style={{ color: C.chalkDim }}>#</span>
+                <input
+                  value={jersey}
+                  onChange={e => handleJerseyChange(e.target.value)}
+                  placeholder="00"
+                  inputMode="numeric"
+                  className="f-mono w-full px-3 py-2 pl-6 rounded-[10px] outline-none text-center"
+                  style={{ background: C.ink3, color: C.chalk, border: `1px solid ${C.line}` }}
                 />
-              </button>
-            );
-          })}
-          {HOMETOWNS.filter(h => h.toLowerCase().includes(hometownSearch.toLowerCase())).length === 0 && (
-            <div className="col-span-2 py-6 text-center f-body text-xs" style={{ color: C.chalkDim }}>No states match "{hometownSearch}"</div>
-          )}
-        </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === "position" && (
+          <div className="mb-5">
+            <label className="f-mono text-[11px] uppercase tracking-widest" style={{ color: C.chalkDim }}>Position</label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+              {POSITIONS.map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => setPosition(p.id)}
+                  className="choice-card text-left px-3 py-2 rounded-[10px] transition"
+                  style={{
+                    background: position === p.id ? C.ink3 : "transparent",
+                    border: `1px solid ${position === p.id ? C.amber : C.line}`,
+                  }}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="f-display text-sm" style={{ color: C.chalk }}>{p.name}</span>
+                    <span className="f-mono text-[10px]" style={{ color: C.amberBright }}>{p.id}</span>
+                  </div>
+                  <div className="f-body text-[11px] mt-0.5" style={{ color: C.chalkDim }}>{p.desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === "hometown" && (
+          <div className="mb-5">
+            <label className="f-mono text-[11px] uppercase tracking-widest" style={{ color: C.chalkDim }}>Hometown</label>
+            <div className="relative mt-2">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" color={C.chalkDim} />
+              <input
+                value={hometownSearch}
+                onChange={e => setHometownSearch(e.target.value)}
+                placeholder="Search state"
+                className="f-body w-full pl-9 pr-3 py-2.5 rounded-[10px] outline-none text-sm"
+                style={{ background: C.ink3, color: C.chalk, border: `1px solid ${C.line}` }}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2 mt-2 mb-2 max-h-64 overflow-y-auto pr-1">
+              {HOMETOWNS.filter(h => h.toLowerCase().includes(hometownSearch.toLowerCase())).map(h => {
+                const tier = getStateTier(h);
+                const tm = TIER_META[tier];
+                const selected = hometown === h;
+                return (
+                  <button
+                    key={h}
+                    onClick={() => setHometown(h)}
+                    className="choice-card flex items-center gap-2.5 px-2.5 py-2.5 rounded-[10px] transition text-left"
+                    style={{
+                      background: selected ? C.ink3 : "transparent",
+                      border: `1px solid ${selected ? C.amber : C.line}`,
+                    }}
+                  >
+                    <FlagIcon name={h} size={24} />
+                    <span className="f-body text-xs flex-1 truncate" style={{ color: selected ? C.chalk : C.chalkDim }}>
+                      {h}
+                    </span>
+                    <span
+                      className="rounded-full shrink-0"
+                      style={{ width: 6, height: 6, background: tm.color }}
+                      title={`${tm.name} — ${tm.tag}`}
+                    />
+                  </button>
+                );
+              })}
+              {HOMETOWNS.filter(h => h.toLowerCase().includes(hometownSearch.toLowerCase())).length === 0 && (
+                <div className="col-span-2 py-6 text-center f-body text-xs" style={{ color: C.chalkDim }}>No states match "{hometownSearch}"</div>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center gap-3 mb-6 flex-wrap">
           {[1, 2, 3].map(t => (
             <span key={t} className="f-mono text-[9px] flex items-center gap-1" style={{ color: C.chalkDim }}>
@@ -4601,7 +4668,7 @@ function StartScreen({ onStart, savedGame, onContinue, onViewHallOfFame, onViewA
         <button onClick={() => setHighlightMode(v => !v)}
           className="w-full flex items-center gap-3 px-4 py-3 mb-6 rounded-2xl text-left transition"
           style={{ background: C.ink2, border: `1px solid ${highlightMode ? C.amber : C.line}` }}>
-          <div className="w-5 h-5 rounded-md flex-shrink-0 flex items-center justify-center"
+          <div className="w-5 h-5 rounded-[10px] flex-shrink-0 flex items-center justify-center"
             style={{ background: highlightMode ? C.amber : C.ink3, border: `1px solid ${highlightMode ? C.amber : C.line}` }}>
             {highlightMode && <span style={{ color: "#1A0A00", fontSize: 12, fontWeight: 900, lineHeight: 1 }}>✓</span>}
           </div>
@@ -4611,10 +4678,10 @@ function StartScreen({ onStart, savedGame, onContinue, onViewHallOfFame, onViewA
           </div>
         </button>
 
-        <PrimaryButton full disabled={!name.trim()} onClick={() => onStart({ name: name.trim(), position, hometown, height, jersey, highlightMode })}>
+        <PrimaryButton full disabled={!isComplete} onClick={() => onStart({ name: name.trim(), position, hometown, height, jersey, highlightMode })}>
           Start Career <ChevronRight size={14} className="inline ml-1" />
         </PrimaryButton>
-        {!name.trim() && <p className="f-body text-[10px] mt-2 text-center" style={{ color: C.chalkDim }}>Give your player a name first.</p>}
+        {!isComplete && <p className="f-body text-[10px] mt-2 text-center" style={{ color: C.chalkDim }}>{!name.trim() ? "Give your player a name first." : !position ? "Pick a position." : "Pick a hometown."}</p>}
       </div>
     </div>
   );
@@ -4627,9 +4694,11 @@ function PlayerCard({ p, overall }) {
   const pos = POSITIONS.find(x => x.id === p.position);
   const style = p.playingStyle ? getPlayingStyle(p.playingStyle) : null;
   return (
-    <div className="rounded-[24px] p-5 relative overflow-hidden" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+    <div className="rounded-[22px] p-5 relative overflow-hidden" style={{ background: "linear-gradient(155deg, " + C.ink2 + ", #0d0d0d 70%)", border: `1px solid ${C.line}`, boxShadow: "0 16px 40px rgba(0,0,0,0.45)" }}>
       <div className="relative flex items-start gap-3.5">
-        <OvrBadge value={overall} size={68} />
+        <div style={{ filter: "drop-shadow(0 6px 16px rgba(249,115,22,0.25))" }}>
+          <OvrBadge value={overall} size={68} />
+        </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             {!p.abroad && <FlagIcon name={p.hometown} size={18} />}
@@ -4721,21 +4790,60 @@ function PlayerCard({ p, overall }) {
 function HubTicker({ player, summary }) {
   const lines = useMemo(() => buildHubTickerLines(player, summary), [player.rival, player.peakOverall, summary]);
   const [idx, setIdx] = useState(0);
+  const [overflowPx, setOverflowPx] = useState(0);
+  const textRef = useRef(null);
+
   useEffect(() => {
     setIdx(0); // lines can change size (new season, rival just assigned) — never start out of bounds
-    if (lines.length <= 1) return;
-    const iv = setInterval(() => setIdx(i => (i + 1) % lines.length), 3200);
-    return () => clearInterval(iv);
   }, [lines]);
+
+  // Measures whether the CURRENT line actually overflows its box — only
+  // lines that genuinely don't fit get the marquee treatment; short lines
+  // stay perfectly still rather than scrolling for no reason.
+  useLayoutEffect(() => {
+    if (!textRef.current) { setOverflowPx(0); return; }
+    const el = textRef.current;
+    const px = Math.max(0, el.scrollWidth - el.clientWidth);
+    setOverflowPx(px);
+  }, [idx, lines]);
+
+  useEffect(() => {
+    if (lines.length <= 1) return;
+    // A line that needs to scroll gets meaningfully longer on screen than
+    // a line that already fits — otherwise the rotation would cut the
+    // scroll off mid-pass before the reader ever sees the end of it,
+    // which reads worse than the truncation this was meant to fix.
+    const duration = overflowPx > 0 ? 6800 : 3200;
+    const t = setTimeout(() => setIdx(i => (i + 1) % lines.length), duration);
+    return () => clearTimeout(t);
+  }, [idx, lines, overflowPx]);
+
   if (!lines.length) return null;
   return (
     <div className="flex items-center gap-2.5 mt-3 px-3.5 py-2.5 rounded-2xl overflow-hidden"
       style={{ background: "linear-gradient(90deg, rgba(249,115,22,0.10), transparent)", border: "1px solid rgba(249,115,22,0.28)" }}>
       <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: C.amberBright, animation: "hubTickerPulse 1.6s infinite" }} />
-      <style>{`@keyframes hubTickerPulse{0%,100%{opacity:1}50%{opacity:0.35}} @keyframes hubTickerFade{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}`}</style>
+      <style>{`
+        @keyframes hubTickerPulse{0%,100%{opacity:1}50%{opacity:0.35}}
+        @keyframes hubTickerFade{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes hubTickerMarquee{
+          0%,15%{transform:translateX(0)}
+          85%,100%{transform:translateX(calc(-1 * var(--ticker-overflow)))}
+        }
+      `}</style>
       <span className="f-mono text-[8px] uppercase tracking-widest flex-shrink-0" style={{ color: C.amberBright }}>League</span>
-      <span key={idx} className="f-body text-[11.5px] flex-1 truncate" style={{ color: C.chalk, animation: "hubTickerFade 0.4s ease" }}>
-        {lines[idx]}
+      <span className="flex-1 min-w-0 overflow-hidden">
+        <span key={idx} ref={textRef}
+          className={"f-body text-[11.5px] inline-block whitespace-nowrap" + (overflowPx > 0 ? "" : " truncate w-full")}
+          style={{
+            color: C.chalk,
+            animation: overflowPx > 0
+              ? "hubTickerFade 0.4s ease, hubTickerMarquee 6.2s ease-in-out 0.3s"
+              : "hubTickerFade 0.4s ease",
+            "--ticker-overflow": overflowPx + "px",
+          }}>
+          {lines[idx]}
+        </span>
       </span>
     </div>
   );
@@ -4760,7 +4868,7 @@ function Hub({ player, onPlaySeason, onRetireConsider, onManageInvestments, onRe
     <div className="min-h-full w-full px-4 py-6 sm:py-10" style={{ background: C.ink }}>
       <div className="max-w-md mx-auto">
         {banner && (
-          <div className="mb-4 p-3 rounded-xl f-body text-sm flex items-center gap-2" style={{ background: "rgba(20,184,166,0.12)", border: `1px solid ${C.teal}`, color: C.teal }}>
+          <div className="mb-4 p-3 rounded-[10px] f-body text-sm flex items-center gap-2" style={{ background: "rgba(20,184,166,0.12)", border: `1px solid ${C.teal}`, color: C.teal }}>
             <Sparkles size={14} /> {banner}
           </div>
         )}
@@ -4775,7 +4883,7 @@ function Hub({ player, onPlaySeason, onRetireConsider, onManageInvestments, onRe
         <div className="flex gap-1.5 mt-4">
           {TABS.map(([id, label]) => (
             <button key={id} onClick={() => setTab(id)}
-              className="btn-tactile flex-1 f-mono text-[10px] uppercase tracking-wide py-2 rounded-xl transition"
+              className="btn-tactile flex-1 f-mono text-[10px] uppercase tracking-wide py-2 rounded-[10px] transition"
               style={active === id
                 ? { background: C.amber, color: C.ink, border: `1px solid ${C.amber}`, fontWeight: 800 }
                 : { background: C.ink3, color: C.chalkDim, border: `1px solid ${C.line}` }}>
@@ -4785,14 +4893,14 @@ function Hub({ player, onPlaySeason, onRetireConsider, onManageInvestments, onRe
         </div>
 
         {active === "attrs" && (
-          <div className="rounded-xl p-4 mt-3" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+          <div className="rounded-[10px] p-4 mt-3" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
             {STAT_LIST.map(s => <StatBar key={s} statKey={s} value={player.stats[s]} />)}
           </div>
         )}
 
         {active === "wellbeing" && (
           <div className="flex flex-col gap-3 mt-3">
-            <div className="rounded-xl p-4" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+            <div className="rounded-[10px] p-4" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
               <div className="space-y-2">
                 <Meter label="Morale" value={player.morale} icon={HeartPulse} color={C.chalk} />
                 <Meter label="Fatigue" value={player.fatigue} icon={Activity} color={C.chalkDim} />
@@ -4805,7 +4913,7 @@ function Hub({ player, onPlaySeason, onRetireConsider, onManageInvestments, onRe
                 50/50 on every new signing, so showing them before that would
                 just be a flat, meaningless bar. */}
             {hasLockerRoom && (
-              <div className="rounded-xl p-4" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+              <div className="rounded-[10px] p-4" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
                 <div className="f-display text-xs uppercase tracking-wide mb-3" style={{ color: C.chalkDim }}>Locker Room</div>
                 <div className="space-y-2">
                   <Meter label="Coach Trust" value={player.relationships.coach} icon={Star} color={C.chalk} />
@@ -4817,7 +4925,7 @@ function Hub({ player, onPlaySeason, onRetireConsider, onManageInvestments, onRe
         )}
 
         {active === "rival" && player.rival && (
-          <div className="rounded-xl p-4 mt-3" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+          <div className="rounded-[10px] p-4 mt-3" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
             <div className="flex items-center gap-2 mb-3">
               <ClubCrest name={player.name} size={32} />
               <div className="flex-1 min-w-0">
@@ -4860,7 +4968,7 @@ function Hub({ player, onPlaySeason, onRetireConsider, onManageInvestments, onRe
 
         {active === "career" && (
           <div className="flex flex-col gap-3 mt-3">
-            <div className="rounded-xl p-4 flex items-center justify-between" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+            <div className="rounded-[10px] p-4 flex items-center justify-between" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
               {player.age >= 18 ? (
                 <div className="flex items-center gap-3 flex-wrap">
                   <div className="flex items-center gap-2">
@@ -4868,7 +4976,7 @@ function Hub({ player, onPlaySeason, onRetireConsider, onManageInvestments, onRe
                     <span className="f-mono text-lg" style={{ color: C.chalk }}>{rm(player.money)}</span>
                   </div>
                   {player.contractSalary > 0 && (
-                    <span className="f-mono text-[10px] uppercase tracking-wide px-2 py-1 rounded-xl" style={{ background: C.ink3, color: C.teal, border: `1px solid ${C.line}` }}>
+                    <span className="f-mono text-[10px] uppercase tracking-wide px-2 py-1 rounded-[10px]" style={{ background: C.ink3, color: C.teal, border: `1px solid ${C.line}` }}>
                       {rm(player.contractSalary)}/mo · {player.contractYearsLeft}yr left
                     </span>
                   )}
@@ -5030,7 +5138,7 @@ function BodySetup({ player, onConfirm }) {
           stronger overall; they lead to different players.
         </p>
 
-        <div className="rounded-[20px] px-4 py-1 mb-4" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+        <div className="rounded-[22px] px-4 py-1 mb-4" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
           <div className="py-3" style={{ borderBottom: `1px solid ${C.line}` }}>
             <div className="flex justify-between items-baseline mb-2">
               <span className="f-display text-[12px]" style={{ color: C.chalk }}>Height</span>
@@ -5085,7 +5193,7 @@ function BodySetup({ player, onConfirm }) {
             const v = mods[k] || 0;
             const col = v > 0 ? "#10B981" : v < 0 ? C.red : C.chalkDim;
             return (
-              <div key={k} className="rounded-xl px-2 py-2.5 text-center"
+              <div key={k} className="rounded-[10px] px-2 py-2.5 text-center"
                 style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
                 <div className="f-mono text-[15px] font-bold" style={{ color: col }}>
                   {v > 0 ? `+${v}` : v === 0 ? "—" : v}
@@ -5136,7 +5244,7 @@ function InvestmentsScreen({ player, onConfirm, onBack }) {
   return (
     <div className="min-h-full w-full flex items-start justify-center px-4 py-8" style={{ background: C.ink }}>
       <div className="max-w-md w-full">
-        <div className="rounded-[20px] p-4 mb-3.5" style={{ background: C.ink2, border: `1px solid ${C.amber}` }}>
+        <div className="rounded-[22px] p-4 mb-3.5" style={{ background: C.ink2, border: `1px solid ${C.amber}` }}>
           <div className="flex items-center gap-3.5">
             <div>
               <div className="f-mono text-[22px] leading-none" style={{ color: C.amberBright }}>{rm(salary)}</div>
@@ -5171,7 +5279,7 @@ function InvestmentsScreen({ player, onConfirm, onBack }) {
               className={`rounded-2xl px-4 py-3.5 mb-2 transition ${locked ? "" : "choice-card cursor-pointer"}`}
               style={{ background: on ? "#171310" : C.ink2, border: `1px solid ${on ? C.amber : C.line}`, opacity: locked ? 0.45 : 1, cursor: locked ? "not-allowed" : "pointer" }}>
               <div className="flex items-start gap-3">
-                <div className="w-5 h-5 rounded-md flex items-center justify-center shrink-0 mt-0.5 f-mono text-[12px]"
+                <div className="w-5 h-5 rounded-[10px] flex items-center justify-center shrink-0 mt-0.5 f-mono text-[12px]"
                   style={{ background: on ? C.amber : "transparent", border: `1.5px solid ${on ? C.amber : C.line}`, color: C.ink }}>
                   {on ? "✓" : ""}
                 </div>
@@ -5256,7 +5364,7 @@ function AttributeBuilder({ player, points, onConfirm, creation = false }) {
   return (
     <div className="min-h-full w-full flex items-start justify-center px-4 py-8" style={{ background: C.ink }}>
       <div className="max-w-md w-full">
-        <div className="rounded-[20px] p-4 mb-3.5 flex items-center gap-3.5"
+        <div className="rounded-[22px] p-4 mb-3.5 flex items-center gap-3.5"
           style={{ background: C.ink2, border: `1px solid ${C.amber}` }}>
           <div>
             <div className="f-display text-3xl leading-none" style={{ color: C.amberBright }}>{left}</div>
@@ -5583,7 +5691,7 @@ function EventChoiceIcon({ risk, scene, icon, brandLogo }) {
 function EventScreen({ event, onChoose }) {
   return (
     <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
         <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>Season Event</div>
         <div className="f-display text-xl font-extrabold mb-1.5" style={{ color: C.chalk }}>{event.title}</div>
         <p className="f-body text-[13px] mb-4" style={{ color: C.chalkDim }}>{event.desc}</p>
@@ -5591,7 +5699,7 @@ function EventScreen({ event, onChoose }) {
           {event.choices.map((c, i) => {
             const pills = deriveEffectPills(c);
             return (
-              <button key={i} onClick={() => onChoose(c)} className="choice-card text-left rounded-[20px] overflow-hidden transition"
+              <button key={i} onClick={() => onChoose(c)} className="choice-card text-left rounded-[22px] overflow-hidden transition"
                 style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
                 <div className="text-center text-[13px] font-bold py-3" style={{ color: C.chalk }}>{c.label}</div>
                 <EventChoiceIcon risk={c.risk} scene={c.scene || event.scene} icon={c.icon} brandLogo={event.brandLogo} />
@@ -5636,14 +5744,14 @@ function InjuryRecoveryScreen({ pending, onChoose }) {
   const hasScience = pending.hasScience;
   return (
     <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
         <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>Injury · {pending.missed} Games Missed</div>
         <div className="f-display text-xl font-extrabold mb-1.5" style={{ color: C.chalk }}>Recovery Plan</div>
         <p className="f-body text-[13px] mb-4" style={{ color: C.chalkDim }}>
           The physio lays out how to handle the rest of the recovery. One gets you back to full speed sooner. One protects you properly.
         </p>
         <div className={`grid ${hasScience ? "grid-cols-1" : "grid-cols-2"} gap-3`}>
-          <button onClick={() => onChoose("rush")} className="choice-card text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+          <button onClick={() => onChoose("rush")} className="choice-card text-left rounded-[22px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
             <div className="text-center text-[13px] font-bold py-3" style={{ color: C.chalk }}>Rush Back</div>
             <EventChoiceIcon risk="risky" icon="flame" />
             <div className="p-3 flex flex-col gap-2">
@@ -5657,7 +5765,7 @@ function InjuryRecoveryScreen({ pending, onChoose }) {
               </div>
             </div>
           </button>
-          <button onClick={() => onChoose("full")} className="choice-card text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+          <button onClick={() => onChoose("full")} className="choice-card text-left rounded-[22px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
             <div className="text-center text-[13px] font-bold py-3" style={{ color: C.chalk }}>Full Rehab</div>
             <EventChoiceIcon risk="safe" icon="stretch" />
             <div className="p-3 flex flex-col gap-2">
@@ -5672,7 +5780,7 @@ function InjuryRecoveryScreen({ pending, onChoose }) {
             </div>
           </button>
           {hasScience && (
-            <button onClick={() => onChoose("guided")} className="choice-card text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.amber}` }}>
+            <button onClick={() => onChoose("guided")} className="choice-card text-left rounded-[22px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.amber}` }}>
               <div className="text-center text-[13px] font-bold py-3" style={{ color: C.chalk }}>Guided Rehab <span className="f-mono text-[10px]" style={{ color: C.amberBright }}>· Sports Science</span></div>
               <EventChoiceIcon risk="safe" icon="scalpel" />
               <div className="p-3 flex flex-col gap-2">
@@ -5737,13 +5845,13 @@ function OffseasonPlanScreen({ player, onChoose }) {
   }
   return (
     <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
         <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>Season {player.seasonNum} · Off-season</div>
         <div className="f-display text-xl font-extrabold mb-1.5" style={{ color: C.chalk }}>Off-season Plan</div>
         <p className="f-body text-[13px] mb-4" style={{ color: C.chalkDim }}>How do you spend the months before training camp?</p>
         <div className="grid grid-cols-2 gap-3">
           {PLANS.map(plan => (
-            <button key={plan.id} onClick={() => onChoose(plan.id)} className="choice-card text-left rounded-[20px] overflow-hidden transition"
+            <button key={plan.id} onClick={() => onChoose(plan.id)} className="choice-card text-left rounded-[22px] overflow-hidden transition"
               style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
               <div className="text-center text-[13px] font-bold py-3" style={{ color: C.chalk }}>{plan.label}</div>
               <EventChoiceIcon risk={plan.risk} icon={plan.icon} />
@@ -5780,7 +5888,7 @@ function OffseasonPlanScreen({ player, onChoose }) {
 function ChooseIdentityScreen({ player, onChoose }) {
   return (
     <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
         <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>Career Creation</div>
         <div className="f-display text-xl font-extrabold mb-1.5" style={{ color: C.chalk }}>Choose Your Identity</div>
         <p className="f-body text-[13px] mb-4" style={{ color: C.chalkDim }}>
@@ -5790,7 +5898,7 @@ function ChooseIdentityScreen({ player, onChoose }) {
           {PLAYING_STYLES.map(style => {
             const fits = style.bestFit.includes(player.position);
             return (
-              <button key={style.id} onClick={() => onChoose(style.id)} className="choice-card text-left rounded-[20px] overflow-hidden transition"
+              <button key={style.id} onClick={() => onChoose(style.id)} className="choice-card text-left rounded-[22px] overflow-hidden transition"
                 style={{ background: C.ink3, border: `1px solid ${fits ? "rgba(250,204,21,0.35)" : C.line}` }}>
                 <div className="text-center text-[13px] font-bold pt-3" style={{ color: C.chalk }}>{style.label}</div>
                 <div className="text-center f-body text-[10px] pb-1" style={{ color: C.chalkDim }}>{style.tagline}</div>
@@ -5827,7 +5935,7 @@ function NameRivalScreen({ player, onConfirm }) {
   const [position, setPosition] = useState(player.position);
   return (
     <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
         <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>Career Creation</div>
         <div className="f-display text-xl font-extrabold mb-1.5" style={{ color: C.chalk }}>Name Your Rival</div>
         <p className="f-body text-[13px] mb-4" style={{ color: C.chalkDim }}>
@@ -5839,7 +5947,7 @@ function NameRivalScreen({ player, onConfirm }) {
           value={name}
           onChange={e => setName(e.target.value.slice(0, 24))}
           placeholder="e.g. Farid Zulkarnain"
-          className="f-body w-full mt-1 mb-4 px-3 py-2.5 rounded-xl outline-none text-sm"
+          className="f-body w-full mt-1 mb-4 px-3 py-2.5 rounded-[10px] outline-none text-sm"
           style={{ background: C.ink3, color: C.chalk, border: `1px solid ${C.line}` }}
         />
 
@@ -5847,7 +5955,7 @@ function NameRivalScreen({ player, onConfirm }) {
         <div className="grid grid-cols-5 gap-2 mt-2 mb-5">
           {POSITIONS.map(p => (
             <button key={p.id} onClick={() => setPosition(p.id)}
-              className="choice-card text-center py-2.5 rounded-xl transition"
+              className="choice-card text-center py-2.5 rounded-[10px] transition"
               style={{ background: position === p.id ? C.ink3 : "transparent", border: `1px solid ${position === p.id ? C.amber : C.line}` }}>
               <span className="f-display text-xs" style={{ color: position === p.id ? C.amberBright : C.chalk }}>{p.id}</span>
             </button>
@@ -5870,7 +5978,7 @@ function U15SelectionScreen({ player, selected, onContinue }) {
   const tm = TIER_META[tier];
   return (
     <div className="court-hero min-h-full w-full flex items-center justify-center px-4 py-10">
-      <div className="max-w-md w-full rounded-[28px] p-6 text-center" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+      <div className="max-w-md w-full rounded-[32px] p-6 text-center" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
         <div className="flex items-center justify-center gap-2 mb-3">
           <FlagIcon name={player.hometown} size={22} />
           <span className="f-mono text-[11px] uppercase tracking-widest" style={{ color: tm.color }}>
@@ -5932,7 +6040,7 @@ function U15TournamentScreen({ player, onContinue }) {
   const awards = player.u15Awards || [];
   return (
     <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
         <div className="flex items-center gap-2 mb-1">
           <Trophy size={16} color={C.trophyGold} />
           <span className="f-display text-sm uppercase tracking-wide" style={{ color: C.gold }}>
@@ -5944,7 +6052,7 @@ function U15TournamentScreen({ player, onContinue }) {
           {player.hometown}'s campaign in the tournament, and your individual stat line.
         </p>
 
-        <div className="grid grid-cols-4 gap-y-3 p-3 rounded-xl mb-3" style={{ background: C.ink3 }}>
+        <div className="grid grid-cols-4 gap-y-3 p-3 rounded-[10px] mb-3" style={{ background: C.ink3 }}>
           <StatCell label="PPG" value={u15.ppg} />
           <StatCell label="RPG" value={u15.rpg} />
           <StatCell label="APG" value={u15.apg} />
@@ -5981,7 +6089,7 @@ function U15TournamentScreen({ player, onContinue }) {
 function U15ShortlistScreen({ player, onAccept, onDecline }) {
   return (
     <div className="court-hero min-h-full w-full flex items-center justify-center px-4 py-10">
-      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
         <div className="flex items-center gap-2 mb-3">
           <Flag size={16} color={C.gold} />
           <span className="f-mono text-[11px] uppercase tracking-widest" style={{ color: C.gold }}>National Youth Shortlist</span>
@@ -6013,7 +6121,7 @@ function U15BootcampResultScreen({ player, onContinue }) {
   const gains = player.bootcampGains || {};
   return (
     <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
         <div className="flex items-center gap-2 mb-1">
           <Trophy size={16} color={C.trophyGold} />
           <span className="f-display text-sm uppercase tracking-wide" style={{ color: C.gold }}>Bukit Jalil Sports School</span>
@@ -6026,7 +6134,7 @@ function U15BootcampResultScreen({ player, onContinue }) {
           <div className="f-mono text-[10px] uppercase tracking-widest mb-2" style={{ color: C.chalkDim }}>Development</div>
           <div className="grid grid-cols-2 gap-2">
             {STAT_LIST.map(s => (
-              <div key={s} className="flex items-center justify-between px-3 py-2 rounded-xl" style={{ background: C.ink3 }}>
+              <div key={s} className="flex items-center justify-between px-3 py-2 rounded-[10px]" style={{ background: C.ink3 }}>
                 <span className="f-body text-xs" style={{ color: C.chalkDim }}>{STAT_META[s].label}</span>
                 <span className="f-mono text-xs" style={{ color: C.teal }}>+{gains[s] ?? 0}</span>
               </div>
@@ -6035,7 +6143,7 @@ function U15BootcampResultScreen({ player, onContinue }) {
         </div>
 
         {player.bootcampInjury && (
-          <div className="mb-4 p-3 rounded-xl" style={{ background: "rgba(229,72,77,0.1)", border: `1px solid ${C.red}` }}>
+          <div className="mb-4 p-3 rounded-[10px]" style={{ background: "rgba(229,72,77,0.1)", border: `1px solid ${C.red}` }}>
             <div className="f-display text-xs uppercase" style={{ color: C.red }}>Injury Setback</div>
             <p className="f-body text-xs mt-1" style={{ color: C.chalkDim }}>{player.bootcampInjury}</p>
           </div>
@@ -6059,7 +6167,7 @@ function A17TournamentScreen({ player, onContinue }) {
   if (!s) {
     return (
       <div className="court-hero min-h-full w-full flex items-center justify-center px-4 py-10">
-        <div className="max-w-md w-full rounded-[28px] p-6 text-center" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+        <div className="max-w-md w-full rounded-[32px] p-6 text-center" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
           <Users size={32} color={C.chalkDim} className="mx-auto mb-3" />
           <div className="f-display text-xl uppercase" style={{ color: C.chalk }}>Not Selected</div>
           <p className="f-body text-sm mt-2 mb-5" style={{ color: C.chalkDim }}>
@@ -6073,7 +6181,7 @@ function A17TournamentScreen({ player, onContinue }) {
   }
   return (
     <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
         <div className="flex items-center gap-2 mb-1">
           <Trophy size={16} color={C.trophyGold} />
           <span className="f-display text-sm uppercase tracking-wide" style={{ color: C.gold }}>
@@ -6085,7 +6193,7 @@ function A17TournamentScreen({ player, onContinue }) {
           {player.hometown}'s campaign in the tournament, and your individual stat line.
         </p>
 
-        <div className="grid grid-cols-4 gap-y-3 p-3 rounded-xl mb-3" style={{ background: C.ink3 }}>
+        <div className="grid grid-cols-4 gap-y-3 p-3 rounded-[10px] mb-3" style={{ background: C.ink3 }}>
           <StatCell label="PPG" value={s.ppg} />
           <StatCell label="RPG" value={s.rpg} />
           <StatCell label="APG" value={s.apg} />
@@ -6119,7 +6227,7 @@ function A17TournamentScreen({ player, onContinue }) {
 function A17ShortlistScreen({ player, onAccept, onDecline }) {
   return (
     <div className="court-hero min-h-full w-full flex items-center justify-center px-4 py-10">
-      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
         <div className="flex items-center gap-2 mb-3">
           <Flag size={16} color={C.gold} />
           <span className="f-mono text-[11px] uppercase tracking-widest" style={{ color: C.gold }}>U18 National Shortlist</span>
@@ -6148,7 +6256,7 @@ function A17BootcampResultScreen({ player, onContinue }) {
   const gains = player.bootcampGains || {};
   return (
     <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
         <div className="flex items-center gap-2 mb-1">
           <Trophy size={16} color={C.trophyGold} />
           <span className="f-display text-sm uppercase tracking-wide" style={{ color: C.gold }}>Bukit Jalil Sports School</span>
@@ -6161,7 +6269,7 @@ function A17BootcampResultScreen({ player, onContinue }) {
           <div className="f-mono text-[10px] uppercase tracking-widest mb-2" style={{ color: C.chalkDim }}>Development</div>
           <div className="grid grid-cols-2 gap-2">
             {STAT_LIST.map(s => (
-              <div key={s} className="flex items-center justify-between px-3 py-2 rounded-xl" style={{ background: C.ink3 }}>
+              <div key={s} className="flex items-center justify-between px-3 py-2 rounded-[10px]" style={{ background: C.ink3 }}>
                 <span className="f-body text-xs" style={{ color: C.chalkDim }}>{STAT_META[s].label}</span>
                 <span className="f-mono text-xs" style={{ color: C.teal }}>+{gains[s] ?? 0}</span>
               </div>
@@ -6170,7 +6278,7 @@ function A17BootcampResultScreen({ player, onContinue }) {
         </div>
 
         {player.bootcampInjury && (
-          <div className="mb-4 p-3 rounded-xl" style={{ background: "rgba(229,72,77,0.1)", border: `1px solid ${C.red}` }}>
+          <div className="mb-4 p-3 rounded-[10px]" style={{ background: "rgba(229,72,77,0.1)", border: `1px solid ${C.red}` }}>
             <div className="f-display text-xs uppercase" style={{ color: C.red }}>Injury Setback</div>
             <p className="f-body text-xs mt-1" style={{ color: C.chalkDim }}>{player.bootcampInjury}</p>
           </div>
@@ -6193,7 +6301,7 @@ function U16ResultScreen({ player, onContinue }) {
   const hasGains = Object.keys(gains).length > 0;
   return (
     <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
         <div className="flex items-center gap-2 mb-1">
           <Flag size={16} color={C.gold} />
           <span className="f-display text-sm uppercase tracking-wide" style={{ color: C.gold }}>Malaysia U16 · FIBA Asia Cup Qualifiers</span>
@@ -6206,12 +6314,12 @@ function U16ResultScreen({ player, onContinue }) {
         </p>
 
         {s.nbaTalent && (
-          <div className="mb-3 p-2 rounded-xl text-center" style={{ background: "rgba(250,204,21,0.1)", border: `1px solid ${C.trophyGold}` }}>
+          <div className="mb-3 p-2 rounded-[10px] text-center" style={{ background: "rgba(250,204,21,0.1)", border: `1px solid ${C.trophyGold}` }}>
             <span className="f-mono text-[11px] uppercase tracking-widest" style={{ color: C.gold }}>★ Standout Performer ★</span>
           </div>
         )}
 
-        <div className="grid grid-cols-4 gap-y-3 p-3 rounded-xl mb-3" style={{ background: C.ink3 }}>
+        <div className="grid grid-cols-4 gap-y-3 p-3 rounded-[10px] mb-3" style={{ background: C.ink3 }}>
           <StatCell label="PPG" value={s.ppg} />
           <StatCell label="RPG" value={s.rpg} />
           <StatCell label="APG" value={s.apg} />
@@ -6240,7 +6348,7 @@ function U16ResultScreen({ player, onContinue }) {
             <div className="f-mono text-[10px] uppercase tracking-widest mb-2" style={{ color: C.chalkDim }}>Development</div>
             <div className="grid grid-cols-3 gap-1.5">
               {STAT_LIST.filter(st => gains[st]).map(st => (
-                <div key={st} className="flex items-center justify-between px-2 py-1.5 rounded-xl" style={{ background: C.ink3 }}>
+                <div key={st} className="flex items-center justify-between px-2 py-1.5 rounded-[10px]" style={{ background: C.ink3 }}>
                   <span className="f-body text-[10px]" style={{ color: C.chalkDim }}>{STAT_META[st].label}</span>
                   <span className="f-mono text-[10px]" style={{ color: C.teal }}>+{gains[st]}</span>
                 </div>
@@ -6250,7 +6358,7 @@ function U16ResultScreen({ player, onContinue }) {
         )}
 
         {player.age16NatU17Stats && (
-          <div className="mb-4 p-3 rounded-xl" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+          <div className="mb-4 p-3 rounded-[10px]" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
             <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>Also This Year — National U17 Tournament</div>
             <p className="f-body text-xs mb-2" style={{ color: C.chalkDim }}>
               Different months, same year — you also suited up for {player.hometown} against genuine 17-year-olds. Finished as <span style={{ color: C.chalk }}>{player.age16NatU17ResultLabel}</span>.
@@ -6294,7 +6402,7 @@ function NationalTryoutScreen({ player, tryout, onAttend, onDecline }) {
     : "FIBA Asia Cup";
   return (
     <div className="court-hero min-h-full w-full flex items-center justify-center px-4 py-10">
-      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
         <div className="flex items-center gap-2 mb-3">
           <Flag size={16} color={C.gold} />
           <span className="f-mono text-[11px] uppercase tracking-widest" style={{ color: C.gold }}>National Team Call</span>
@@ -6326,14 +6434,14 @@ function NationalTryoutScreen({ player, tryout, onAttend, onDecline }) {
 function StudyDecisionScreen({ onStudy, onFocus }) {
   return (
     <div className="court-hero min-h-full w-full flex items-center justify-center px-4 py-10">
-      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
         <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>Life Decision</div>
         <div className="f-display text-xl font-extrabold mb-1.5" style={{ color: C.chalk }}>Continue Study or Not?</div>
         <p className="f-body text-[13px] mb-4" style={{ color: C.chalkDim }}>
           A university has offered you a place. Balancing a degree with basketball is possible — but it means stepping back from the pro pathway for a few years.
         </p>
         <div className="grid grid-cols-2 gap-3">
-          <button onClick={onStudy} className="choice-card text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+          <button onClick={onStudy} className="choice-card text-left rounded-[22px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
             <div className="text-center text-[13px] font-bold py-3" style={{ color: C.chalk }}>Continue Study</div>
             <div className="aspect-[16/11] mx-3 rounded-2xl flex items-center justify-center relative overflow-hidden" style={{ background: "linear-gradient(150deg, #164E63, #0A0A0A)" }}>
               <Brain size={34} color="#22D3EE" strokeWidth={1.6} />
@@ -6350,7 +6458,7 @@ function StudyDecisionScreen({ onStudy, onFocus }) {
               </div>
             </div>
           </button>
-          <button onClick={onFocus} className="choice-card text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+          <button onClick={onFocus} className="choice-card text-left rounded-[22px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
             <div className="text-center text-[13px] font-bold py-3" style={{ color: C.chalk }}>Focus on Basketball</div>
             <div className="aspect-[16/11] mx-3 rounded-2xl flex items-center justify-center relative overflow-hidden" style={{ background: "linear-gradient(150deg, #78350F, #1C0A00)" }}>
               <Dumbbell size={34} color={C.gold} strokeWidth={1.6} />
@@ -6374,7 +6482,7 @@ function NationalResultScreen({ event, onContinue }) {
   const s = event.stats || {};
   return (
     <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
         <div className="flex items-center gap-2 mb-1">
           <Flag size={16} color={C.gold} />
           <span className="f-display text-sm uppercase tracking-wide" style={{ color: C.gold }}>🇲🇾 Malaysia National Team</span>
@@ -6397,12 +6505,12 @@ function NationalResultScreen({ event, onContinue }) {
         )}
 
         {s.standout && (
-          <div className="mb-3 p-2 rounded-xl text-center" style={{ background: "rgba(250,204,21,0.1)", border: `1px solid ${C.trophyGold}` }}>
+          <div className="mb-3 p-2 rounded-[10px] text-center" style={{ background: "rgba(250,204,21,0.1)", border: `1px solid ${C.trophyGold}` }}>
             <span className="f-mono text-[11px] uppercase tracking-widest" style={{ color: C.gold }}>★ Standout Performer ★</span>
           </div>
         )}
 
-        <div className="grid grid-cols-4 gap-y-3 p-3 rounded-xl mb-3" style={{ background: C.ink3 }}>
+        <div className="grid grid-cols-4 gap-y-3 p-3 rounded-[10px] mb-3" style={{ background: C.ink3 }}>
           <StatCell label="PPG" value={s.ppg} />
           <StatCell label="RPG" value={s.rpg} />
           <StatCell label="APG" value={s.apg} />
@@ -6424,7 +6532,7 @@ function U18ResultScreen({ player, onContinue }) {
   if (!player.age18Made) {
     return (
       <div className="court-hero min-h-full w-full flex items-center justify-center px-4 py-10">
-        <div className="max-w-md w-full rounded-[28px] p-6 text-center" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+        <div className="max-w-md w-full rounded-[32px] p-6 text-center" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
           <Users size={32} color={C.chalkDim} className="mx-auto mb-3" />
           <div className="f-display text-xl uppercase" style={{ color: C.chalk }}>Just Missed Out</div>
           <p className="f-body text-sm mt-2 mb-5" style={{ color: C.chalkDim }}>
@@ -6441,7 +6549,7 @@ function U18ResultScreen({ player, onContinue }) {
   const hasGains = Object.keys(gains).length > 0;
   return (
     <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
         <div className="flex items-center gap-2 mb-1">
           <Flag size={16} color={C.gold} />
           <span className="f-display text-sm uppercase tracking-wide" style={{ color: C.gold }}>Malaysia U18 · FIBA Asia Cup Qualifiers</span>
@@ -6454,12 +6562,12 @@ function U18ResultScreen({ player, onContinue }) {
         </p>
 
         {s.nbaTalent && (
-          <div className="mb-3 p-2 rounded-xl text-center" style={{ background: "rgba(250,204,21,0.1)", border: `1px solid ${C.trophyGold}` }}>
+          <div className="mb-3 p-2 rounded-[10px] text-center" style={{ background: "rgba(250,204,21,0.1)", border: `1px solid ${C.trophyGold}` }}>
             <span className="f-mono text-[11px] uppercase tracking-widest" style={{ color: C.gold }}>★ Standout Performer ★</span>
           </div>
         )}
 
-        <div className="grid grid-cols-4 gap-y-3 p-3 rounded-xl mb-3" style={{ background: C.ink3 }}>
+        <div className="grid grid-cols-4 gap-y-3 p-3 rounded-[10px] mb-3" style={{ background: C.ink3 }}>
           <StatCell label="PPG" value={s.ppg} />
           <StatCell label="RPG" value={s.rpg} />
           <StatCell label="APG" value={s.apg} />
@@ -6488,7 +6596,7 @@ function U18ResultScreen({ player, onContinue }) {
             <div className="f-mono text-[10px] uppercase tracking-widest mb-2" style={{ color: C.chalkDim }}>Development</div>
             <div className="grid grid-cols-3 gap-1.5">
               {STAT_LIST.filter(st => gains[st]).map(st => (
-                <div key={st} className="flex items-center justify-between px-2 py-1.5 rounded-xl" style={{ background: C.ink3 }}>
+                <div key={st} className="flex items-center justify-between px-2 py-1.5 rounded-[10px]" style={{ background: C.ink3 }}>
                   <span className="f-body text-[10px]" style={{ color: C.chalkDim }}>{STAT_META[st].label}</span>
                   <span className="f-mono text-[10px]" style={{ color: C.teal }}>+{gains[st]}</span>
                 </div>
@@ -6513,7 +6621,7 @@ function MSSMResultScreen({ player, onContinue }) {
   const awards = player.mssmAwards || [];
   return (
     <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
         <div className="flex items-center gap-2 mb-1">
           <Trophy size={16} color={C.gold} />
           <span className="f-display text-sm uppercase tracking-wide" style={{ color: C.gold }}>MSSM · {player.hometown}</span>
@@ -6525,7 +6633,7 @@ function MSSMResultScreen({ player, onContinue }) {
             : `Majlis Sukan Sekolah-Sekolah Malaysia — ${player.hometown}'s run this year, ${s.games} games.`}
         </p>
 
-        <div className="grid grid-cols-4 gap-y-3 p-3 rounded-xl mb-3" style={{ background: C.ink3 }}>
+        <div className="grid grid-cols-4 gap-y-3 p-3 rounded-[10px] mb-3" style={{ background: C.ink3 }}>
           <StatCell label="PPG" value={s.ppg} />
           <StatCell label="RPG" value={s.rpg} />
           <StatCell label="APG" value={s.apg} />
@@ -6564,7 +6672,7 @@ function U17ResultScreen({ player, onContinue }) {
   const awards = player.age16Awards || [];
   return (
     <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
         <div className="flex items-center gap-2 mb-1">
           <TrendingUp size={16} color={C.teal} />
           <span className="f-display text-sm uppercase tracking-wide" style={{ color: C.teal }}>National U17 Championship · Jumpclass</span>
@@ -6574,7 +6682,7 @@ function U17ResultScreen({ player, onContinue }) {
           Playing up a full year against older, stronger opponents is brutal — but the experience is priceless.
         </p>
 
-        <div className="grid grid-cols-4 gap-y-3 p-3 rounded-xl mb-3" style={{ background: C.ink3 }}>
+        <div className="grid grid-cols-4 gap-y-3 p-3 rounded-[10px] mb-3" style={{ background: C.ink3 }}>
           <StatCell label="PPG" value={s.ppg} />
           <StatCell label="RPG" value={s.rpg} />
           <StatCell label="APG" value={s.apg} />
@@ -6601,7 +6709,7 @@ function U17ResultScreen({ player, onContinue }) {
           <div className="f-mono text-[10px] uppercase tracking-widest mb-2" style={{ color: C.chalkDim }}>Development</div>
           <div className="grid grid-cols-3 gap-1.5">
             {STAT_LIST.filter(st => gains[st]).map(st => (
-              <div key={st} className="flex items-center justify-between px-2 py-1.5 rounded-xl" style={{ background: C.ink3 }}>
+              <div key={st} className="flex items-center justify-between px-2 py-1.5 rounded-[10px]" style={{ background: C.ink3 }}>
                 <span className="f-body text-[10px]" style={{ color: C.chalkDim }}>{STAT_META[st].label}</span>
                 <span className="f-mono text-[10px]" style={{ color: C.teal }}>+{gains[st]}</span>
               </div>
@@ -6654,7 +6762,7 @@ function ClubOffersScreen({ player, offers, context, onJoin, onStay, onRetire, o
   const stayTerms = currentClub ? computeClubTerms(player, currentClub, { firstProSigning: false }) : null;
   return (
     <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
         <div className="flex items-center gap-2 mb-1">
           <Icon size={16} color={h.color} />
           <span className="f-mono text-[11px] uppercase tracking-widest" style={{ color: h.color }}>{h.kicker}</span>
@@ -6663,7 +6771,7 @@ function ClubOffersScreen({ player, offers, context, onJoin, onStay, onRetire, o
         <p className="f-body text-xs mt-1 mb-4" style={{ color: C.chalkDim }}>{h.sub}</p>
 
         {canStay && currentClub && stayTerms && (
-          <div className="mb-4 p-3 rounded-xl" style={{ background: "rgba(20,184,166,0.08)", border: `1px solid ${C.teal}` }}>
+          <div className="mb-4 p-3 rounded-[10px]" style={{ background: "rgba(20,184,166,0.08)", border: `1px solid ${C.teal}` }}>
             <div className="flex items-center justify-between">
               <span className="f-display text-sm uppercase flex items-center gap-2" style={{ color: C.chalk }}>
                 <ClubCrest name={currentClub.name} size={26} /> {currentClub.name}
@@ -6672,7 +6780,7 @@ function ClubOffersScreen({ player, offers, context, onJoin, onStay, onRetire, o
                 Current Team
               </span>
             </div>
-            <div className="flex items-center gap-2 mt-2 p-2 rounded-xl" style={{ background: C.ink2 }}>
+            <div className="flex items-center gap-2 mt-2 p-2 rounded-[10px]" style={{ background: C.ink2 }}>
               <div className="flex-1">
                 <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>League</div>
                 <div className="f-mono text-[11px]" style={{ color: stayTerms.league === "mbl" ? C.gold : C.teal }}>{LEAGUE[stayTerms.league].short}</div>
@@ -6695,7 +6803,7 @@ function ClubOffersScreen({ player, offers, context, onJoin, onStay, onRetire, o
 
         <div className="space-y-2.5">
           {offers.map(({ club, terms }) => (
-            <div key={club.id} className="rounded-xl p-3" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+            <div key={club.id} className="rounded-[10px] p-3" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5 min-w-0">
                   <ClubCrest name={club.name} size={32} />
@@ -6707,7 +6815,7 @@ function ClubOffersScreen({ player, offers, context, onJoin, onStay, onRetire, o
               </div>
 
               {/* Concrete offer terms */}
-              <div className="flex items-center gap-2 mt-2.5 p-2 rounded-xl" style={{ background: C.ink2 }}>
+              <div className="flex items-center gap-2 mt-2.5 p-2 rounded-[10px]" style={{ background: C.ink2 }}>
                 <div className="flex-1">
                   <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>League</div>
                   <div className="f-mono text-[11px]" style={{ color: terms.league === "mbl" ? C.gold : C.teal }}>{LEAGUE[terms.league].short}</div>
@@ -6756,7 +6864,7 @@ function ClubOffersScreen({ player, offers, context, onJoin, onStay, onRetire, o
         )}
 
         {canRetire && (
-          <button onClick={onRetire} className="choice-card w-full flex items-center justify-center gap-2 mt-3 p-3.5 rounded-xl transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+          <button onClick={onRetire} className="choice-card w-full flex items-center justify-center gap-2 mt-3 p-3.5 rounded-[10px] transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
             <RotateCcw size={14} color={C.chalkDim} />
             <span className="f-body text-sm font-semibold" style={{ color: C.chalkDim }}>Retire — End Your Professional Career</span>
           </button>
@@ -6790,7 +6898,7 @@ function NegotiateOfferScreen({ player, club, terms, onCommit }) {
 
   return (
     <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
         <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>{club.name} · Negotiation</div>
         <div className="f-display text-xl font-extrabold mb-1.5" style={{ color: C.chalk }}>
           {active ? `${ASK_META[active].label}?` : "What do you push for?"}
@@ -6801,7 +6909,7 @@ function NegotiateOfferScreen({ player, club, terms, onCommit }) {
             : `Their opening offer: ${rm(terms.salary)}/mo, ${terms.years || 2}-year ${terms.firstOption ? "1st Option" : terms.role} deal.`}
         </p>
 
-        <div className="flex items-center gap-2 mb-4 px-3 py-2.5 rounded-xl" style={{ background: C.ink3 }}>
+        <div className="flex items-center gap-2 mb-4 px-3 py-2.5 rounded-[10px]" style={{ background: C.ink3 }}>
           <span className="f-mono text-[9px] uppercase tracking-wide flex-shrink-0" style={{ color: C.chalkDim }}>Leverage</span>
           <div className="flex-1 h-1.5 rounded-full overflow-hidden flex gap-0.5" style={{ background: C.ink }}>
             {[0, 1, 2].map(i => (
@@ -6813,7 +6921,7 @@ function NegotiateOfferScreen({ player, club, terms, onCommit }) {
 
         {!active && (
           <div className={`grid ${ASK_META.role ? "grid-cols-2" : "grid-cols-1"} gap-3`}>
-            <button onClick={() => setAsk("money")} className="choice-card text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+            <button onClick={() => setAsk("money")} className="choice-card text-left rounded-[22px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
               <div className="text-center text-[13px] font-bold py-3" style={{ color: C.chalk }}>Push For Money</div>
               <div className="text-center f-body text-[9.5px] pb-1" style={{ color: C.chalkDim }}>{ASK_META.money.tagline}</div>
               <EventChoiceIcon icon="dollarUp" />
@@ -6827,7 +6935,7 @@ function NegotiateOfferScreen({ player, club, terms, onCommit }) {
               </div>
             </button>
             {ASK_META.role && (
-              <button onClick={() => setAsk("role")} className="choice-card text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+              <button onClick={() => setAsk("role")} className="choice-card text-left rounded-[22px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
                 <div className="text-center text-[13px] font-bold py-3" style={{ color: C.chalk }}>Push For Role</div>
                 <div className="text-center f-body text-[9.5px] pb-1" style={{ color: C.chalkDim }}>{ASK_META.role.tagline}</div>
                 <EventChoiceIcon icon="star" />
@@ -6852,7 +6960,7 @@ function NegotiateOfferScreen({ player, club, terms, onCommit }) {
               </p>
             )}
             <div className="grid grid-cols-2 gap-3">
-              <button onClick={() => onCommit(active)} className="choice-card text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+              <button onClick={() => onCommit(active)} className="choice-card text-left rounded-[22px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
                 <div className="text-center text-[13px] font-bold py-3" style={{ color: C.chalk }}>Accept As-Is</div>
                 <div className="text-center f-body text-[9.5px] pb-1" style={{ color: C.chalkDim }}>No risk</div>
                 <EventChoiceIcon icon="handshake" />
@@ -6862,7 +6970,7 @@ function NegotiateOfferScreen({ player, club, terms, onCommit }) {
                   </div>
                 </div>
               </button>
-              <button onClick={() => onCommit(active)} className="choice-card text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.amber}` }}>
+              <button onClick={() => onCommit(active)} className="choice-card text-left rounded-[22px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.amber}` }}>
                 <div className="text-center text-[13px] font-bold py-3" style={{ color: C.chalk }}>{ASK_META[active].label}</div>
                 <div className="text-center f-body text-[9.5px] pb-1" style={{ color: C.chalkDim }}>Commit to the ask</div>
                 <EventChoiceIcon icon={ASK_META[active].icon} />
@@ -6898,14 +7006,14 @@ function TradeRequestScreen({ player, club, onCommit }) {
   const tierColor = tier === "high" ? "#10B981" : tier === "medium" ? C.amberBright : "#EF4444";
   return (
     <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
         <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>{club.name} · Trade Request</div>
         <div className="f-display text-xl font-extrabold mb-1.5" style={{ color: C.chalk }}>Why do you want out?</div>
         <p className="f-body text-[13px] mb-4" style={{ color: C.chalkDim }}>
           The reason isn't flavor — it changes your case. A weak ask can still be granted, just not on your terms, and a bad one can cost you more than a "no."
         </p>
 
-        <div className="flex items-center gap-2 mb-4 px-3 py-2.5 rounded-xl" style={{ background: C.ink3 }}>
+        <div className="flex items-center gap-2 mb-4 px-3 py-2.5 rounded-[10px]" style={{ background: C.ink3 }}>
           <span className="f-mono text-[9px] uppercase tracking-wide flex-shrink-0" style={{ color: C.chalkDim }}>Your Standing</span>
           <div className="flex-1 h-1.5 rounded-full overflow-hidden flex gap-0.5" style={{ background: C.ink }}>
             {[0, 1, 2].map(i => (
@@ -6917,7 +7025,7 @@ function TradeRequestScreen({ player, club, onCommit }) {
 
         <div className="grid grid-cols-3 gap-2">
           {cases.map(c => (
-            <button key={c.id} onClick={() => onCommit(c.id)} className="choice-card text-left rounded-[18px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+            <button key={c.id} onClick={() => onCommit(c.id)} className="choice-card text-left rounded-[22px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
               <div className="text-center text-[11.5px] font-bold pt-2.5" style={{ color: C.chalk }}>{c.label}</div>
               <div className="text-center f-body text-[8.5px] pb-1" style={{ color: C.chalkDim }}>{c.tagline(player)}</div>
               <EventChoiceIcon icon={c.icon} />
@@ -6948,20 +7056,20 @@ function TradeRequestScreen({ player, club, onCommit }) {
 function MidseasonCheckpointScreen({ player, onChoose }) {
   return (
     <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}`, boxShadow: "0 20px 50px rgba(0,0,0,0.5)" }}>
         <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>Midseason · {player.teamName}</div>
         <div className="f-display text-xl font-extrabold mb-4" style={{ color: C.chalk }}>"Coach, can we talk about my role?"</div>
 
         <div className="grid grid-cols-3 gap-2 mb-5">
-          <div className="rounded-xl p-2.5 text-center" style={{ background: "rgba(16,185,129,0.10)", border: "1px solid rgba(16,185,129,0.3)" }}>
+          <div className="rounded-[10px] p-2.5 text-center" style={{ background: "rgba(16,185,129,0.10)", border: "1px solid rgba(16,185,129,0.3)" }}>
             <div className="f-display text-[12px] font-extrabold" style={{ color: "#10B981" }}>Above Role</div>
             <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Form Read</div>
           </div>
-          <div className="rounded-xl p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+          <div className="rounded-[10px] p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
             <div className="f-display text-[12px] font-extrabold" style={{ color: C.chalk }}>{player.starterStatus}</div>
             <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Current Role</div>
           </div>
-          <div className="rounded-xl p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+          <div className="rounded-[10px] p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
             <div className="f-display text-[12px] font-extrabold" style={{ color: C.chalk }}>{computeOverall(player.stats, player.position)}</div>
             <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Overall</div>
           </div>
@@ -6971,7 +7079,7 @@ function MidseasonCheckpointScreen({ player, onChoose }) {
         </p>
 
         <div className="grid grid-cols-2 gap-3">
-          <button onClick={() => onChoose("press")} className="choice-card text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+          <button onClick={() => onChoose("press")} className="choice-card text-left rounded-[22px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
             <div className="text-center text-[13px] font-bold pt-3" style={{ color: C.chalk }}>Make Your Case</div>
             <div className="text-center f-body text-[10px] pb-2" style={{ color: C.chalkDim }}>Push for more minutes</div>
             <EventChoiceIcon icon="handshake" />
@@ -6984,7 +7092,7 @@ function MidseasonCheckpointScreen({ player, onChoose }) {
               </div>
             </div>
           </button>
-          <button onClick={() => onChoose("patient")} className="choice-card text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+          <button onClick={() => onChoose("patient")} className="choice-card text-left rounded-[22px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
             <div className="text-center text-[13px] font-bold pt-3" style={{ color: C.chalk }}>Stay Patient</div>
             <div className="text-center f-body text-[10px] pb-2" style={{ color: C.chalkDim }}>Trust the process</div>
             <EventChoiceIcon icon="star" />
@@ -7013,13 +7121,13 @@ function LockerRoomScreen({ player, subScenario, onChoose }) {
   const meta = LOCKER_ROOM_META[subScenario] || LOCKER_ROOM_META.blame;
   return (
     <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}`, boxShadow: "0 20px 50px rgba(0,0,0,0.5)" }}>
         <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>{meta.kicker} · {player.teamName}</div>
         <div className="f-display text-xl font-extrabold mb-3" style={{ color: C.chalk }}>{meta.title}</div>
         <p className="f-body text-[13px] mb-5" style={{ color: C.chalkDim }}>{meta.desc}</p>
 
         <div className="grid grid-cols-2 gap-3">
-          <button onClick={() => onChoose(meta.choiceA.id)} className="choice-card text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+          <button onClick={() => onChoose(meta.choiceA.id)} className="choice-card text-left rounded-[22px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
             <div className="text-center text-[13px] font-bold pt-3" style={{ color: C.chalk }}>{meta.choiceA.label}</div>
             <div className="text-center f-body text-[10px] pb-2" style={{ color: C.chalkDim }}>{meta.choiceA.tagline}</div>
             <EventChoiceIcon icon="handshake" />
@@ -7040,7 +7148,7 @@ function LockerRoomScreen({ player, subScenario, onChoose }) {
               )}
             </div>
           </button>
-          <button onClick={() => onChoose(meta.choiceB.id)} className="choice-card text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+          <button onClick={() => onChoose(meta.choiceB.id)} className="choice-card text-left rounded-[22px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
             <div className="text-center text-[13px] font-bold pt-3" style={{ color: C.chalk }}>{meta.choiceB.label}</div>
             <div className="text-center f-body text-[10px] pb-2" style={{ color: C.chalkDim }}>{meta.choiceB.tagline}</div>
             <EventChoiceIcon icon="star" />
@@ -7066,7 +7174,7 @@ function LockerRoomScreen({ player, subScenario, onChoose }) {
 function InjuryScareScreen({ player, onChoose }) {
   return (
     <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}`, boxShadow: "0 20px 50px rgba(0,0,0,0.5)" }}>
         <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>Midseason · {player.teamName}</div>
         <div className="f-display text-xl font-extrabold mb-3" style={{ color: C.chalk }}>That Didn't Feel Right</div>
         <p className="f-body text-[13px] mb-5" style={{ color: C.chalkDim }}>
@@ -7074,7 +7182,7 @@ function InjuryScareScreen({ player, onChoose }) {
         </p>
 
         <div className="grid grid-cols-2 gap-3">
-          <button onClick={() => onChoose("push")} className="choice-card text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+          <button onClick={() => onChoose("push")} className="choice-card text-left rounded-[22px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
             <div className="text-center text-[13px] font-bold pt-3" style={{ color: C.chalk }}>Push Through</div>
             <div className="text-center f-body text-[10px] pb-2" style={{ color: C.chalkDim }}>Keep playing, work through it</div>
             <EventChoiceIcon icon="dumbbell" />
@@ -7084,7 +7192,7 @@ function InjuryScareScreen({ player, onChoose }) {
               </div>
             </div>
           </button>
-          <button onClick={() => onChoose("rest")} className="choice-card text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+          <button onClick={() => onChoose("rest")} className="choice-card text-left rounded-[22px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
             <div className="text-center text-[13px] font-bold pt-3" style={{ color: C.chalk }}>Sit Out a Few Games</div>
             <div className="text-center f-body text-[10px] pb-2" style={{ color: C.chalkDim }}>Let it settle down first</div>
             <EventChoiceIcon icon="star" />
@@ -7110,7 +7218,7 @@ function InjuryScareScreen({ player, onChoose }) {
 function TradeBuzzScreen({ player, onChoose }) {
   return (
     <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}`, boxShadow: "0 20px 50px rgba(0,0,0,0.5)" }}>
         <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>Midseason · {player.teamName}</div>
         <div className="f-display text-xl font-extrabold mb-3" style={{ color: C.chalk }}>Other Clubs Are Asking</div>
         <p className="f-body text-[13px] mb-5" style={{ color: C.chalkDim }}>
@@ -7118,7 +7226,7 @@ function TradeBuzzScreen({ player, onChoose }) {
         </p>
 
         <div className="grid grid-cols-2 gap-3">
-          <button onClick={() => onChoose("motivate")} className="choice-card text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+          <button onClick={() => onChoose("motivate")} className="choice-card text-left rounded-[22px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
             <div className="text-center text-[13px] font-bold pt-3" style={{ color: C.chalk }}>Let It Motivate You</div>
             <div className="text-center f-body text-[10px] pb-2" style={{ color: C.chalkDim }}>Play like everyone's watching</div>
             <EventChoiceIcon icon="star" />
@@ -7128,7 +7236,7 @@ function TradeBuzzScreen({ player, onChoose }) {
               </div>
             </div>
           </button>
-          <button onClick={() => onChoose("focus")} className="choice-card text-left rounded-[20px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+          <button onClick={() => onChoose("focus")} className="choice-card text-left rounded-[22px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
             <div className="text-center text-[13px] font-bold pt-3" style={{ color: C.chalk }}>Stay Focused</div>
             <div className="text-center f-body text-[10px] pb-2" style={{ color: C.chalkDim }}>Ignore the noise, trust the room</div>
             <EventChoiceIcon icon="handshake" />
@@ -7157,21 +7265,21 @@ function MidseasonRecapScreen({ player, onContinue }) {
   const stats = half && half.leagueStats1;
   return (
     <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}`, boxShadow: "0 20px 50px rgba(0,0,0,0.5)" }}>
         <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>Midseason · {player.teamName}</div>
         <div className="f-display text-xl font-extrabold mb-4" style={{ color: C.chalk }}>First Half in the Books</div>
 
         {stats && (
           <div className="grid grid-cols-3 gap-2 mb-2.5">
-            <div className="rounded-xl p-3 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+            <div className="rounded-[10px] p-3 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
               <div className="f-display text-[16px] font-extrabold" style={{ color: C.gold }}>{stats.ppg.toFixed(1)}</div>
               <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>PPG</div>
             </div>
-            <div className="rounded-xl p-3 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+            <div className="rounded-[10px] p-3 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
               <div className="f-display text-[16px] font-extrabold" style={{ color: C.chalk }}>{stats.rpg.toFixed(1)}</div>
               <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>RPG</div>
             </div>
-            <div className="rounded-xl p-3 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+            <div className="rounded-[10px] p-3 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
               <div className="f-display text-[16px] font-extrabold" style={{ color: C.chalk }}>{stats.apg.toFixed(1)}</div>
               <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>APG</div>
             </div>
@@ -7183,15 +7291,15 @@ function MidseasonRecapScreen({ player, onContinue }) {
             Coach Trust specifically are what determine whether Coach Talk
             or Locker Room even fire at the checkpoint in the first place. */}
         <div className="grid grid-cols-3 gap-2 mb-5">
-          <div className="rounded-xl p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+          <div className="rounded-[10px] p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
             <div className="f-display text-[13px] font-extrabold" style={{ color: C.amberBright }}>{player.starterStatus}</div>
             <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Role</div>
           </div>
-          <div className="rounded-xl p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+          <div className="rounded-[10px] p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
             <div className="f-display text-[13px] font-extrabold" style={{ color: C.chalk }}>{player.relationships.coach}</div>
             <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Coach Trust</div>
           </div>
-          <div className="rounded-xl p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+          <div className="rounded-[10px] p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
             <div className="f-display text-[13px] font-extrabold" style={{ color: C.chalk }}>{player.relationships.team}</div>
             <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Team Chemistry</div>
           </div>
@@ -7231,7 +7339,7 @@ function SeasonDigestScreen({ player, onContinue }) {
 
   return (
     <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
         <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.amberBright }}>The Quiet Years · {player.teamName}</div>
         <div className="f-display text-xl font-extrabold mb-1" style={{ color: C.chalk }}>Ages {first ? first.age : "?"}–{last ? last.age : "?"}</div>
         <p className="f-body text-[11.5px] mb-4" style={{ color: C.chalkDim }}>
@@ -7247,17 +7355,17 @@ function SeasonDigestScreen({ player, onContinue }) {
         )}
 
         <div className="grid grid-cols-3 gap-2 mb-4">
-          <div className="rounded-xl p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+          <div className="rounded-[10px] p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
             <div className="f-display text-[14px] font-extrabold" style={{ color: C.chalk }}>{avgPpg != null ? avgPpg.toFixed(1) : "—"}</div>
             <div className="f-mono text-[7.5px] uppercase" style={{ color: C.chalkDim }}>PPG · Avg</div>
           </div>
-          <div className="rounded-xl p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+          <div className="rounded-[10px] p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
             <div className="f-display text-[14px] font-extrabold" style={{ color: ppgGrowth > 0 ? "#10B981" : C.chalk }}>
               {ppgGrowth != null ? `${ppgGrowth > 0 ? "+" : ""}${ppgGrowth.toFixed(1)}` : "—"}
             </div>
             <div className="f-mono text-[7.5px] uppercase" style={{ color: C.chalkDim }}>PPG Growth</div>
           </div>
-          <div className="rounded-xl p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+          <div className="rounded-[10px] p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
             <div className="f-display text-[14px] font-extrabold" style={{ color: C.chalk }}>{bestGames}</div>
             <div className="f-mono text-[7.5px] uppercase" style={{ color: C.chalkDim }}>Season Highs</div>
           </div>
@@ -7292,11 +7400,11 @@ function CareerHighlightsScreen({ player, onBack }) {
         <div className="f-display text-xl font-extrabold mb-4" style={{ color: C.chalk }}>Career Highlights</div>
 
         {!highlights.length ? (
-          <div className="rounded-[24px] p-6 text-center" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+          <div className="rounded-[22px] p-6 text-center" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
             <p className="f-body text-[13px]" style={{ color: C.chalkDim }}>No standout games yet — check back after your first pro season.</p>
           </div>
         ) : (
-          <div className="rounded-[24px] p-4" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+          <div className="rounded-[22px] p-4" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
             {highlights.slice().reverse().map((h, i) => (
               <div key={i} className="flex items-center gap-3 py-2.5" style={{ borderBottom: i < highlights.length - 1 ? `1px solid ${C.line}` : "none" }}>
                 <div className="w-9 text-center f-mono text-[11px] font-extrabold" style={{ color: C.chalkDim }}>{h.age}</div>
@@ -7398,7 +7506,7 @@ function LifestyleSpendingScreen({ player, onBuyHome, onBuyVehicle, onBuyGear, o
 
   return (
     <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
         <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>Lifestyle</div>
         <div className="f-display text-xl font-extrabold mb-4" style={{ color: C.chalk }}>Where the money goes</div>
 
@@ -7420,7 +7528,7 @@ function LifestyleSpendingScreen({ player, onBuyHome, onBuyVehicle, onBuyGear, o
         <div className="flex gap-1.5 mb-4 overflow-x-auto">
           {CATS.map(([id, label, icon]) => (
             <button key={id} onClick={() => setCat(id)}
-              className="btn-tactile flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl transition"
+              className="btn-tactile flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-[10px] transition"
               style={cat === id
                 ? { background: "rgba(249,115,22,0.10)", border: `1px solid ${C.amber}` }
                 : { background: C.ink3, border: `1px solid ${C.line}` }}>
@@ -7494,15 +7602,15 @@ function LifestyleSpendingScreen({ player, onBuyHome, onBuyVehicle, onBuyGear, o
             </div>
             <p className="f-body text-[12px] mb-3" style={{ color: C.chalkDim }}>A new watch, a new chain — costs more as the collection grows, but there's always a bigger flex available.</p>
             <div className="grid grid-cols-3 gap-2 mb-3">
-              <div className="text-center rounded-xl p-2" style={{ background: C.ink3 }}>
+              <div className="text-center rounded-[10px] p-2" style={{ background: C.ink3 }}>
                 <div className="f-mono text-sm font-extrabold" style={{ color: C.chalk }}>{jewelryPieces}</div>
                 <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Pieces Owned</div>
               </div>
-              <div className="text-center rounded-xl p-2" style={{ background: C.ink3 }}>
+              <div className="text-center rounded-[10px] p-2" style={{ background: C.ink3 }}>
                 <div className="f-mono text-sm font-extrabold" style={{ color: C.gold }}>{rm(jewelryCost)}</div>
                 <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Next Piece</div>
               </div>
-              <div className="text-center rounded-xl p-2" style={{ background: C.ink3 }}>
+              <div className="text-center rounded-[10px] p-2" style={{ background: C.ink3 }}>
                 <div className="f-mono text-sm font-extrabold" style={{ color: C.amberBright }}>+{jewelryGain}</div>
                 <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Popularity</div>
               </div>
@@ -7529,13 +7637,13 @@ function ClutchMomentScreen({ pending, onChoose }) {
   const event = CLUTCH_EVENTS.find(e => e.id === pending.clutchEventId) || CLUTCH_EVENTS[0];
   return (
     <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.trophyGold}` }}>
+      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.trophyGold}` }}>
         <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.trophyGold }}>⚡ Clutch Moment</div>
         <div className="f-display text-xl font-extrabold mb-1.5" style={{ color: C.chalk }}>{event.title}</div>
         <p className="f-body text-[13px] mb-4" style={{ color: C.chalkDim }}>{event.desc}</p>
         <div className="grid grid-cols-2 gap-3">
           {event.choices.map((c, i) => (
-            <button key={c.id} onClick={() => onChoose(c)} className="choice-card text-left rounded-[20px] overflow-hidden transition"
+            <button key={c.id} onClick={() => onChoose(c)} className="choice-card text-left rounded-[22px] overflow-hidden transition"
               style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
               <div className="text-center text-[13px] font-bold py-3 px-2" style={{ color: C.chalk }}>{c.label}</div>
               <EventChoiceIcon scene="clutch_pressure" icon={c.icon} />
@@ -7648,7 +7756,7 @@ function BuzzerBeaterScreen({ player, onComplete }) {
 
   return (
     <div className="min-h-full w-full flex items-center justify-center px-4 py-8" style={{ background: "#000" }}>
-      <div className="w-full max-w-md rounded-[24px] overflow-hidden relative" style={{
+      <div className="w-full max-w-md rounded-[22px] overflow-hidden relative" style={{
         aspectRatio: "9/16", maxHeight: 640,
         background: "radial-gradient(ellipse at 50% 30%, #1a0f05 0%, #000 70%)", border: "1px solid #2a1a0a",
       }}>
@@ -7738,7 +7846,7 @@ function HblSeasonScreen({ player, onContinue }) {
   if (!s) return null;
   return (
     <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
         <div className="flex items-center gap-2 mb-1">
           <Trophy size={16} color={C.trophyGold} />
           <span className="f-display text-sm uppercase tracking-wide" style={{ color: C.gold }}>
@@ -7751,7 +7859,7 @@ function HblSeasonScreen({ player, onContinue }) {
           {player.hblGames ? ` — ${player.hblGames} games as a starter.` : "."}
         </p>
 
-        <div className="grid grid-cols-4 gap-y-3 p-3 rounded-xl mb-3" style={{ background: C.ink3 }}>
+        <div className="grid grid-cols-4 gap-y-3 p-3 rounded-[10px] mb-3" style={{ background: C.ink3 }}>
           <StatCell label="PPG" value={s.ppg} />
           <StatCell label="RPG" value={s.rpg} />
           <StatCell label="APG" value={s.apg} />
@@ -7777,7 +7885,7 @@ function HblSeasonScreen({ player, onContinue }) {
         {Object.keys(gains).length > 0 && (
           <div className="mb-4">
             <div className="f-mono text-[10px] uppercase tracking-widest mb-2" style={{ color: C.chalkDim }}>Development</div>
-            <div className="grid grid-cols-3 gap-2 p-3 rounded-xl" style={{ background: C.ink3 }}>
+            <div className="grid grid-cols-3 gap-2 p-3 rounded-[10px]" style={{ background: C.ink3 }}>
               {STAT_LIST.filter(k => gains[k]).map(k => (
                 <div key={k} className="text-center">
                   <div className="f-mono text-sm font-bold" style={{ color: "#10B981" }}>+{gains[k]}</div>
@@ -7803,7 +7911,7 @@ function UbaOffersScreen({ player, onAccept, onDecline }) {
     .filter(o => o.team);
   return (
     <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
         <div className="flex items-center gap-2 mb-1">
           <Plane size={16} color={C.trophyGold} />
           <span className="f-mono text-[11px] uppercase tracking-widest" style={{ color: C.trophyGold }}>University Scholarship Offer</span>
@@ -7814,7 +7922,7 @@ function UbaOffersScreen({ player, onAccept, onDecline }) {
         </p>
         <div className="flex flex-col gap-2.5">
           {resolved.map(({ team, role }) => (
-            <button key={team.id} onClick={() => onAccept(team, role)} className="choice-card w-full text-left p-3 rounded-xl transition"
+            <button key={team.id} onClick={() => onAccept(team, role)} className="choice-card w-full text-left p-3 rounded-[10px] transition"
               style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
               <div className="flex items-center gap-2.5 min-w-0">
                 <ClubCrest name={team.short} size={32} />
@@ -7823,7 +7931,7 @@ function UbaOffersScreen({ player, onAccept, onDecline }) {
                   <div className="f-mono text-[10px]" style={{ color: C.chalkDim }}>{team.cn}</div>
                 </div>
               </div>
-              <div className="flex items-center gap-2 mt-2.5 p-2 rounded-xl" style={{ background: C.ink2 }}>
+              <div className="flex items-center gap-2 mt-2.5 p-2 rounded-[10px]" style={{ background: C.ink2 }}>
                 <div className="flex-1">
                   <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>League</div>
                   <div className="f-mono text-[11px]" style={{ color: C.trophyGold }}>Taiwan UBA</div>
@@ -7858,7 +7966,7 @@ function HblOffersScreen({ player, onAccept, onDecline }) {
     : sampleN(HBL_TEAMS, HBL_OFFER_COUNT);
   return (
     <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
         <div className="flex items-center gap-2 mb-1">
           <Plane size={16} color={C.trophyGold} />
           <span className="f-mono text-[11px] uppercase tracking-widest" style={{ color: C.trophyGold }}>Overseas Student-Athlete Offer</span>
@@ -7869,7 +7977,7 @@ function HblOffersScreen({ player, onAccept, onDecline }) {
         </p>
         <div className="flex flex-col gap-2.5">
           {offeredTeams.map(team => (
-            <button key={team.id} onClick={() => onAccept(team)} className="choice-card w-full text-left p-3 rounded-xl transition"
+            <button key={team.id} onClick={() => onAccept(team)} className="choice-card w-full text-left p-3 rounded-[10px] transition"
               style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
               <div className="flex items-center gap-2.5 min-w-0">
                 <ClubCrest name={team.name} size={32} />
@@ -7895,7 +8003,7 @@ function OverseasOffersScreen({ player, offer, onSign, onDecline }) {
   const monthlyRange = teams.map(t => Math.round(t.salaryPerSeason / 12));
   return (
     <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
         <div className="flex items-center gap-2 mb-1">
           <Plane size={16} color={C.trophyGold} />
           <span className="f-mono text-[11px] uppercase tracking-widest" style={{ color: C.trophyGold }}>Overseas Interest</span>
@@ -7906,7 +8014,7 @@ function OverseasOffersScreen({ player, offer, onSign, onDecline }) {
         </p>
         <div className="flex flex-col gap-2.5">
           {teams.map((team, i) => (
-            <button key={team.name} onClick={() => onSign(team)} className="choice-card w-full text-left p-3 rounded-xl transition"
+            <button key={team.name} onClick={() => onSign(team)} className="choice-card w-full text-left p-3 rounded-[10px] transition"
               style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
               <div className="flex items-center gap-2.5 min-w-0">
                 <ClubCrest name={team.name} size={32} />
@@ -7916,7 +8024,7 @@ function OverseasOffersScreen({ player, offer, onSign, onDecline }) {
                 </div>
               </div>
               {/* Concrete offer terms — same layout as domestic club offers */}
-              <div className="flex items-center gap-2 mt-2.5 p-2 rounded-xl" style={{ background: C.ink2 }}>
+              <div className="flex items-center gap-2 mt-2.5 p-2 rounded-[10px]" style={{ background: C.ink2 }}>
                 <div className="flex-1">
                   <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>League</div>
                   <div className="f-mono text-[11px]" style={{ color: C.trophyGold }}>{tier.label}</div>
@@ -7970,7 +8078,7 @@ const LeagueContext = memo(function LeagueContext({ summary }) {
       <div className="flex gap-1.5 mb-3">
         {TABS.map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)}
-            className="btn-tactile flex-1 f-mono text-[10px] uppercase tracking-wide py-2 rounded-xl transition"
+            className="btn-tactile flex-1 f-mono text-[10px] uppercase tracking-wide py-2 rounded-[10px] transition"
             style={active === id
               ? { background: C.amber, color: C.ink, border: `1px solid ${C.amber}`, fontWeight: 800 }
               : { background: C.ink3, color: C.chalkDim, border: `1px solid ${C.line}` }}>
@@ -8124,7 +8232,7 @@ const ResultScreen = memo(function ResultScreen({ summary, onContinue }) {
   };
   return (
     <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
         <div className="flex items-center gap-2 mb-4">
           <Trophy size={16} color={C.trophyGold} />
           <span className="f-display text-sm uppercase tracking-wide" style={{ color: C.gold }}>Season {summary.seasonNum} Recap</span>
@@ -8152,14 +8260,14 @@ const ResultScreen = memo(function ResultScreen({ summary, onContinue }) {
           </div>
           <p className="f-body text-sm" style={{ color: C.chalk }}>{summary.eventText}</p>
           {summary.eventAchievementLabel && (
-            <div className="mt-2 p-2.5 rounded-lg flex items-center gap-2" style={{ background: "rgba(250,204,21,0.10)", border: `1px solid ${C.trophyGold}` }}>
+            <div className="mt-2 p-2.5 rounded-[10px] flex items-center gap-2" style={{ background: "rgba(250,204,21,0.10)", border: `1px solid ${C.trophyGold}` }}>
               <Gem size={14} color={C.trophyGold} />
               <span className="f-body text-xs font-semibold" style={{ color: C.trophyGold }}>Hidden Achievement Unlocked: {summary.eventAchievementLabel}</span>
             </div>
           )}
         </div>
 
-        <div className="mb-4 p-3 rounded-xl" style={{ background: C.ink3 }}>
+        <div className="mb-4 p-3 rounded-[10px]" style={{ background: C.ink3 }}>
           <div className="f-display text-sm uppercase" style={{ color: C.amberBright }}>{summary.tierLabel} Season</div>
           <p className="f-body text-xs mt-1" style={{ color: C.chalkDim }}>{summary.note}</p>
           <div className="flex gap-4 mt-3">
@@ -8185,19 +8293,19 @@ const ResultScreen = memo(function ResultScreen({ summary, onContinue }) {
             {(summary.gamesPlayed != null || summary.wonChampionship) && (
               <div className="flex items-center gap-2 mb-2">
                 {summary.gamesPlayed != null && (
-                  <span className="f-mono text-[10px] px-2 py-0.5 rounded-xl" style={{ background: C.ink3, color: C.chalk, border: `1px solid ${C.line}` }}>
+                  <span className="f-mono text-[10px] px-2 py-0.5 rounded-[10px]" style={{ background: C.ink3, color: C.chalk, border: `1px solid ${C.line}` }}>
                     {summary.gamesPlayed} games
                   </span>
                 )}
                 {summary.wonChampionship && (
-                  <span className="f-mono text-[10px] px-2 py-0.5 rounded-xl flex items-center gap-1" style={{ background: "rgba(250,204,21,0.18)", color: C.trophyGold, border: `1px solid ${C.trophyGold}` }}>
+                  <span className="f-mono text-[10px] px-2 py-0.5 rounded-[10px] flex items-center gap-1" style={{ background: "rgba(250,204,21,0.18)", color: C.trophyGold, border: `1px solid ${C.trophyGold}`, boxShadow: "0 0 12px rgba(250,204,21,0.25)" }}>
                     <Trophy size={10} /> Champions
                   </span>
                 )}
               </div>
             )}
             {summary.injury && (
-              <div className="mb-2 p-2 rounded-xl" style={{ background: "rgba(229,72,77,0.1)", border: `1px solid ${C.red}` }}>
+              <div className="mb-2 p-2 rounded-[10px]" style={{ background: "rgba(229,72,77,0.1)", border: `1px solid ${C.red}` }}>
                 <span className="f-body text-[11px]" style={{ color: C.red }}>
                   {summary.injury.serious
                     ? `Serious injury — you missed ${summary.injury.missed} games this season.`
@@ -8210,7 +8318,7 @@ const ResultScreen = memo(function ResultScreen({ summary, onContinue }) {
                 )}
               </div>
             )}
-            <div className="grid grid-cols-4 gap-y-3 p-3 rounded-xl" style={{ background: C.ink3 }}>
+            <div className="grid grid-cols-4 gap-y-3 p-3 rounded-[10px]" style={{ background: C.ink3 }}>
               <StatCell label="PPG" value={summary.leagueStats.ppg} />
               <StatCell label="RPG" value={summary.leagueStats.rpg} />
               <StatCell label="APG" value={summary.leagueStats.apg} />
@@ -8228,15 +8336,15 @@ const ResultScreen = memo(function ResultScreen({ summary, onContinue }) {
                 shown up on this screen despite driving the Midseason
                 Checkpoint pool all season. */}
             <div className="grid grid-cols-3 gap-2 mt-3">
-              <div className="rounded-xl p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+              <div className="rounded-[10px] p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
                 <div className="f-display text-[13px] font-extrabold" style={{ color: C.amberBright }}>{summary.leagueStats.role}</div>
                 <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Role</div>
               </div>
-              <div className="rounded-xl p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+              <div className="rounded-[10px] p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
                 <div className="f-display text-[13px] font-extrabold" style={{ color: C.chalk }}>{summary.coachTrust}</div>
                 <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Coach Trust</div>
               </div>
-              <div className="rounded-xl p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+              <div className="rounded-[10px] p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
                 <div className="f-display text-[13px] font-extrabold" style={{ color: C.chalk }}>{summary.teamChemistry}</div>
                 <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Team Chemistry</div>
               </div>
@@ -8250,10 +8358,14 @@ const ResultScreen = memo(function ResultScreen({ summary, onContinue }) {
                 when it genuinely IS a career high, checked against every
                 entry in careerHighlights, in which case it gets to say
                 so and reads with a distinct gold treatment rather than
-                the same amber every ordinary season high gets. */}
+                the same amber every ordinary season high gets. The
+                gradient + shadow only apply to the career-high case —
+                keeping that contrast is what makes it read as rare;
+                using it on every season high would flatten the signal
+                right back out. */}
             {summary.bestGame && (
-              <div className="mt-3 p-3 rounded-xl" style={summary.isCareerHigh
-                ? { background: "rgba(250,204,21,0.08)", border: `1px solid rgba(250,204,21,0.4)` }
+              <div className="mt-3 p-3 rounded-[10px]" style={summary.isCareerHigh
+                ? { background: "linear-gradient(160deg, rgba(250,204,21,0.14), rgba(249,115,22,0.05) 60%, " + C.ink3 + ")", border: "1px solid rgba(250,204,21,0.4)", boxShadow: "0 10px 28px rgba(250,204,21,0.08)" }
                 : { background: "rgba(249,115,22,0.06)", border: `1px solid rgba(249,115,22,0.3)` }}>
                 <div className="f-mono text-[9px] uppercase tracking-widest mb-2 flex items-center gap-1.5" style={{ color: summary.isCareerHigh ? C.trophyGold : C.amberBright }}>
                   {summary.isCareerHigh && <span>★</span>}
@@ -8288,7 +8400,7 @@ const ResultScreen = memo(function ResultScreen({ summary, onContinue }) {
                 <div className="f-mono text-[9px] uppercase tracking-widest mb-1.5" style={{ color: C.gold }}>Season Awards</div>
                 <div className="flex flex-wrap gap-1.5">
                   {summary.leagueAwards.map(a => (
-                    <span key={a} className="f-mono text-[9px] px-1.5 py-0.5 rounded-xl" style={{ background: "rgba(250,204,21,0.12)", color: C.trophyGold, border: `1px solid ${C.line}` }}>
+                    <span key={a} className="f-mono text-[9px] px-1.5 py-0.5 rounded-[10px]" style={{ background: "rgba(250,204,21,0.12)", color: C.trophyGold, border: `1px solid ${C.line}` }}>
                       {LEAGUE_AWARD_META[a] ? LEAGUE_AWARD_META[a].label : a}
                     </span>
                   ))}
@@ -8844,7 +8956,7 @@ function AchievementGalleryScreen({ gallery, onBack }) {
           <button onClick={onBack} className="btn-tactile f-mono text-xs px-4 py-2 rounded-full" style={{ background: C.ink3, color: C.chalkDim, border: `1px solid ${C.line}` }}>← Back</button>
         </div>
 
-        <div className="rounded-[20px] p-5 mt-5" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+        <div className="rounded-[22px] p-5 mt-5" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
           <div className="flex items-center justify-between mb-2.5">
             <span className="f-display text-sm font-bold" style={{ color: C.chalk }}>{unlockedCount} / {ids.length} Unlocked</span>
             <span className="f-mono text-xs font-bold" style={{ color: C.trophyGold }}>{pct}%</span>
@@ -8916,7 +9028,7 @@ function HallOfFameScreen({ entries, onBack, onPlayAgain }) {
           <button onClick={onBack} className="btn-tactile f-mono text-xs px-4 py-2 rounded-full" style={{ background: C.ink3, color: C.chalkDim, border: `1px solid ${C.line}` }}>← Back</button>
         </div>
 
-        <div className="flex mt-5 rounded-[20px] py-5" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+        <div className="flex mt-5 rounded-[22px] py-5" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
           {[["Careers Played", total, C.chalk], ["Best Peak OVR", bestOvr || "—", C.trophyGold], ["NBA Careers", nbaCareers, C.chalk], ["Total Trophies", totalTrophies, C.chalk]].map(([label, val, color], i) => (
             <div key={label} className="flex-1 text-center" style={i < 3 ? { borderRight: `1px solid ${C.line}` } : {}}>
               <div className="f-display text-2xl font-black" style={{ color }}>{val}</div>
@@ -8936,7 +9048,7 @@ function HallOfFameScreen({ entries, onBack, onPlayAgain }) {
               const t = tintStyle(e.tierTint);
               const isNewest = i === 0;
               return (
-                <div key={e.id} className="rounded-[20px] p-5 relative" style={{ background: t.bg, border: `1px solid ${isNewest ? C.amber : t.border}` }}>
+                <div key={e.id} className="rounded-[22px] p-5 relative" style={{ background: t.bg, border: `1px solid ${isNewest ? C.amber : t.border}` }}>
                   {isNewest && (
                     <div className="absolute -top-2.5 right-4 f-mono text-[9px] font-extrabold px-2.5 py-0.5 rounded-full" style={{ background: C.amber, color: "#1A0A00" }}>JUST RETIRED</div>
                   )}
@@ -8949,7 +9061,7 @@ function HallOfFameScreen({ entries, onBack, onPlayAgain }) {
                       <div className="f-display text-lg font-bold" style={{ color: C.chalk }}>{e.name}</div>
                       <div className="f-mono text-[10px] mt-0.5" style={{ color: C.chalkDim }}>#{e.jersey} {e.position}</div>
                     </div>
-                    <div className="rounded-xl px-3 py-1.5 text-center" style={{ background: e.tierTint === "gold" ? `linear-gradient(160deg, ${C.trophyGold}, ${C.amber})` : C.ink3, border: e.tierTint === "gold" ? "none" : `1px solid ${isNewest ? C.amber : C.line}` }}>
+                    <div className="rounded-[10px] px-3 py-1.5 text-center" style={{ background: e.tierTint === "gold" ? `linear-gradient(160deg, ${C.trophyGold}, ${C.amber})` : C.ink3, border: e.tierTint === "gold" ? "none" : `1px solid ${isNewest ? C.amber : C.line}` }}>
                       <div className="f-mono text-[8px] font-bold" style={{ color: e.tierTint === "gold" ? "rgba(0,0,0,0.55)" : C.chalkDim }}>PEAK</div>
                       <div className="font-black text-xl" style={{ color: e.tierTint === "gold" ? "#1A0A00" : C.chalk }}>{e.peakOverall}</div>
                     </div>
@@ -9095,7 +9207,7 @@ function RetiredScreen({ player, onPlayAgain, onViewHallOfFame, onViewAchievemen
 
   return (
     <div className="court-hero min-h-full w-full flex items-center justify-center px-4 py-10">
-      <div className="max-w-md w-full rounded-[28px] p-6 text-center" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+      <div className="max-w-md w-full rounded-[32px] p-6 text-center" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
         <Trophy size={32} color={C.trophyGold} className="mx-auto mb-3" />
         <div className="f-mono text-[11px] uppercase tracking-widest" style={{ color: C.chalkDim }}>Career Retired</div>
         <div className="flex items-center justify-center gap-3 mt-1">
@@ -9111,7 +9223,7 @@ function RetiredScreen({ player, onPlayAgain, onViewHallOfFame, onViewAchievemen
           </span>
         </div>
 
-        <div className="grid grid-cols-4 gap-2 mt-4 mb-2 p-3 rounded-xl" style={{ background: C.ink3 }}>
+        <div className="grid grid-cols-4 gap-2 mt-4 mb-2 p-3 rounded-[10px]" style={{ background: C.ink3 }}>
           <div className="text-center">
             <div className="f-mono text-sm font-bold" style={{ color: C.chalk }}>#{player.jersey}</div>
             <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Jersey</div>
@@ -9184,10 +9296,10 @@ function RetiredScreen({ player, onPlayAgain, onViewHallOfFame, onViewAchievemen
           return (
             <div className="mb-5 text-left">
               <div className="f-mono text-[10px] uppercase tracking-widest mb-2 text-center" style={{ color: C.chalkDim }}>The Rivalry, Settled</div>
-              <div className="p-4 rounded-xl text-center mb-3" style={{ background: "rgba(250,204,21,0.08)", border: `1px solid rgba(250,204,21,0.3)` }}>
+              <div className="p-4 rounded-[10px] text-center mb-3" style={{ background: "rgba(250,204,21,0.08)", border: `1px solid rgba(250,204,21,0.3)` }}>
                 <span className="f-display text-sm" style={{ color: C.trophyGold }}>🏆 {verdict}</span>
               </div>
-              <div className="p-3 rounded-xl" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+              <div className="p-3 rounded-[10px]" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2"><ClubCrest name={player.name} size={28} /><span className="f-body text-xs font-semibold" style={{ color: C.chalk }}>{player.name}</span></div>
                   <div className="flex items-center gap-2"><span className="f-body text-xs font-semibold" style={{ color: C.chalk }}>{player.rival.name}</span><ClubCrest name={player.rival.name} size={28} /></div>
@@ -9210,7 +9322,7 @@ function RetiredScreen({ player, onPlayAgain, onViewHallOfFame, onViewAchievemen
             <div className="f-mono text-[10px] uppercase tracking-widest mb-2" style={{ color: C.chalkDim }}>Career Season Awards</div>
             <div className="flex flex-wrap gap-1.5 justify-center">
               {careerSummary.totalAwards.map(a => (
-                <span key={a.id} className="f-mono text-[10px] px-2 py-0.5 rounded-xl" style={{ background: "rgba(250,204,21,0.14)", color: C.trophyGold, border: `1px solid ${C.line}` }}>
+                <span key={a.id} className="f-mono text-[10px] px-2 py-0.5 rounded-[10px]" style={{ background: "rgba(250,204,21,0.14)", color: C.trophyGold, border: `1px solid ${C.line}` }}>
                   {a.count}× {LEAGUE_AWARD_META[a.id] ? LEAGUE_AWARD_META[a.id].short : a.id}
                 </span>
               ))}
@@ -9221,7 +9333,7 @@ function RetiredScreen({ player, onPlayAgain, onViewHallOfFame, onViewAchievemen
         {careerSummary.national && (
           <div className="mb-5 text-left">
             <div className="f-mono text-[10px] uppercase tracking-widest mb-2 text-center" style={{ color: C.chalkDim }}>National Team Career</div>
-            <div className="p-3 rounded-xl" style={{ background: C.ink3, border: `1px solid ${C.gold}` }}>
+            <div className="p-3 rounded-[10px]" style={{ background: C.ink3, border: `1px solid ${C.gold}` }}>
               <div className="flex items-center justify-between mb-2">
                 <span className="f-display text-xs uppercase" style={{ color: C.chalk }}>🇲🇾 Malaysia</span>
                 <span className="f-mono text-[9px]" style={{ color: C.chalkDim }}>
@@ -9247,7 +9359,7 @@ function RetiredScreen({ player, onPlayAgain, onViewHallOfFame, onViewAchievemen
               {careerSummary.categories.map(cat => {
                 const isPro = cat.id === "pro";
                 return (
-                  <div key={cat.id} className="p-3 rounded-xl" style={{ background: C.ink3, border: `1px solid ${isPro ? C.amber : C.line}` }}>
+                  <div key={cat.id} className="p-3 rounded-[10px]" style={{ background: C.ink3, border: `1px solid ${isPro ? C.amber : C.line}` }}>
                     <div className="flex items-center justify-between mb-2">
                       <span className="f-display text-xs uppercase" style={{ color: C.chalk }}>{cat.label}</span>
                       <span className="f-mono text-[9px]" style={{ color: C.chalkDim }}>
@@ -12487,7 +12599,7 @@ export default function App() {
           never scrolls away, and never blocks anything underneath it. */}
       <button onClick={toggleMuted}
         className="fixed top-3 right-3 z-50 w-9 h-9 rounded-full flex items-center justify-center transition"
-        style={{ background: "rgba(20,20,20,0.85)", border: `1px solid ${C.line}`, backdropFilter: "blur(4px)" }}
+        style={{ background: "rgba(20,20,20,0.55)", border: `1px solid rgba(255,255,255,0.12)`, backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", boxShadow: "0 4px 16px rgba(0,0,0,0.4)" }}
         aria-label={muted ? "Unmute sound" : "Mute sound"}>
         <span className="text-[15px]">{muted ? "🔇" : "🔊"}</span>
       </button>
