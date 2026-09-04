@@ -1916,6 +1916,7 @@ function _playTone(freq, duration, type, gainPeak) {
 const UI_SOUNDS = {
   tap: () => _playTone(720, 0.08, "sine", 0.1),
   confirm: () => { _playTone(440, 0.1, "triangle", 0.14); setTimeout(() => _playTone(660, 0.12, "triangle", 0.12), 60); },
+  success: () => { _playTone(523, 0.09, "triangle", 0.13); setTimeout(() => _playTone(659, 0.09, "triangle", 0.13), 90); setTimeout(() => _playTone(784, 0.16, "triangle", 0.14), 180); },
 };
 const SOUND_MUTE_KEY = "hoops_life_muted";
 function isSoundMuted() {
@@ -4140,7 +4141,7 @@ function newPlayer({ name, position, hometown, height, jersey }) {
     relationships: { coach: 50, team: 50, family: 60 },
     stage: "youth",
     teamName: `${shortHome(hometown)} Youth Selection`,
-    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null, rival: null, tradeRequestCooldown: 0, seasonsAtClub: 0, mblTitles: 0, hadBuzzerBeaterMoment: false, totalEarnings: 0, homeTier: null, vehicleTier: null, gearTier: null, jewelryPieces: 0, familyTier: null, isSecretLegend: false, careerHighlights: [],
+    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null, rival: null, tradeRequestCooldown: 0, seasonsAtClub: 0, mblTitles: 0, hadBuzzerBeaterMoment: false, totalEarnings: 0, homeTier: null, vehicleTier: null, gearTier: null, jewelryPieces: 0, familyTier: null, isSecretLegend: false, careerHighlights: [], highlightMode: false, pendingDigest: [], pendingAfterDigest: null, pendingBufferedRecap: false, digestJustBuffered: false, digestDismissed: false, readyToAutoContinue: false,
     nationalTeam: false, nationalCaps: 0,
     achievements: [],
     peakOverall: overall,
@@ -4164,7 +4165,7 @@ function normalizePlayer(p) {
     mblContributor: false, wonderkid: false, hadMblSeason: false, semiProClub: null,
     contractSalary: 0, contractYearsLeft: 0,
     mssmPendingReveal: false, age18MssmResolved: false, lastSeasonLeagueAwards: [], studying: false, studyDecisionResolved: false, studyGraduated: false,
-    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null, rival: null, tradeRequestCooldown: 0, seasonsAtClub: 0, mblTitles: 0, hadBuzzerBeaterMoment: false, totalEarnings: 0, homeTier: null, vehicleTier: null, gearTier: null, jewelryPieces: 0, familyTier: null, isSecretLegend: false, careerHighlights: [],
+    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null, rival: null, tradeRequestCooldown: 0, seasonsAtClub: 0, mblTitles: 0, hadBuzzerBeaterMoment: false, totalEarnings: 0, homeTier: null, vehicleTier: null, gearTier: null, jewelryPieces: 0, familyTier: null, isSecretLegend: false, careerHighlights: [], highlightMode: false, pendingDigest: [], pendingAfterDigest: null, pendingBufferedRecap: false, digestJustBuffered: false, digestDismissed: false, readyToAutoContinue: false,
     nationalTeam: false, nationalCaps: 0, morale: 60, fatigue: 20,
     popularity: 5, money: 0, highlyTalented: false,
     slowDecliner: false, slowStartNextSeason: false,
@@ -4447,6 +4448,7 @@ function StartScreen({ onStart, savedGame, onContinue, onViewHallOfFame, onViewA
   // this placeholder is overwritten there before any stats are generated.
   const height = 178;
   const [jersey, setJersey] = useState("");
+  const [highlightMode, setHighlightMode] = useState(false);
 
   const handleJerseyChange = (val) => {
     if (val === "") { setJersey(""); return; }
@@ -4589,9 +4591,30 @@ function StartScreen({ onStart, savedGame, onContinue, onViewHallOfFame, onViewA
           ))}
         </div>
 
-        <PrimaryButton full onClick={() => onStart({ name, position, hometown, height, jersey })}>
+        {/* Highlight Career — an alternate pacing option, not a different
+            simulation. Every checkpoint that actually matters (Coach Talk,
+            Locker Room, Rival Game, Injury Scare, Trade Buzz) still stops
+            the game exactly as it does in Full Career; this only changes
+            what happens on seasons where the checkpoint resolves to a
+            plain Recap, bundling a run of them into one digest instead of
+            showing each one individually. */}
+        <button onClick={() => setHighlightMode(v => !v)}
+          className="w-full flex items-center gap-3 px-4 py-3 mb-6 rounded-2xl text-left transition"
+          style={{ background: C.ink2, border: `1px solid ${highlightMode ? C.amber : C.line}` }}>
+          <div className="w-5 h-5 rounded-md flex-shrink-0 flex items-center justify-center"
+            style={{ background: highlightMode ? C.amber : C.ink3, border: `1px solid ${highlightMode ? C.amber : C.line}` }}>
+            {highlightMode && <span style={{ color: "#1A0A00", fontSize: 12, fontWeight: 900, lineHeight: 1 }}>✓</span>}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="f-display text-[12.5px]" style={{ color: C.chalk }}>Highlight Career</div>
+            <div className="f-body text-[10px] mt-0.5" style={{ color: C.chalkDim }}>Bundle quiet seasons together. Every real moment still stops the game.</div>
+          </div>
+        </button>
+
+        <PrimaryButton full disabled={!name.trim()} onClick={() => onStart({ name: name.trim(), position, hometown, height, jersey, highlightMode })}>
           Start Career <ChevronRight size={14} className="inline ml-1" />
         </PrimaryButton>
+        {!name.trim() && <p className="f-body text-[10px] mt-2 text-center" style={{ color: C.chalkDim }}>Give your player a name first.</p>}
       </div>
     </div>
   );
@@ -7185,6 +7208,74 @@ function MidseasonRecapScreen({ player, onContinue }) {
 }
 
 /* ---------------------------------------------------------
+   SEASON DIGEST SCREEN
+   Highlight Career mode — shown once three consecutive "recap" seasons
+   (nothing eventful, per rollMidseasonCheckpoint) have been bundled.
+   Every season inside the bundle was still fully simulated individually
+   through the same finishSecondHalfAndBuildResult everything else uses;
+   this only changes how they're DISPLAYED, not how they were computed.
+   Any real checkpoint (Coach Talk, Locker Room, Rival Game, Injury
+   Scare, Trade Buzz) always still gets its own screen, in both modes.
+--------------------------------------------------------- */
+function SeasonDigestScreen({ player, onContinue }) {
+  const bundle = player.pendingDigest || [];
+  const first = bundle[0], last = bundle[bundle.length - 1];
+  const totalGames = bundle.reduce((sum, s) => sum + (s.gamesPlayed || 0), 0);
+  const avgPpg = bundle.filter(s => s.ppg != null).length
+    ? bundle.reduce((sum, s) => sum + (s.ppg || 0), 0) / bundle.filter(s => s.ppg != null).length
+    : null;
+  const ppgGrowth = (first && last && first.ppg != null && last.ppg != null) ? (last.ppg - first.ppg) : null;
+  const totalAwards = bundle.reduce((sum, s) => sum + ((s.leagueAwards || []).length), 0);
+  const bestGames = bundle.filter(s => s.bestGame).length;
+  const maxHeight = Math.max(...bundle.map(s => s.ppg || 0), 1);
+
+  return (
+    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
+      <div className="max-w-md w-full rounded-[28px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+        <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.amberBright }}>The Quiet Years · {player.teamName}</div>
+        <div className="f-display text-xl font-extrabold mb-1" style={{ color: C.chalk }}>Ages {first ? first.age : "?"}–{last ? last.age : "?"}</div>
+        <p className="f-body text-[11.5px] mb-4" style={{ color: C.chalkDim }}>
+          {bundle.length} seasons · {last ? last.role : player.starterStatus} · {totalGames} games played
+        </p>
+
+        {avgPpg != null && (
+          <div className="flex items-end gap-2 mb-4" style={{ height: 48 }}>
+            {bundle.map((s, i) => (
+              <div key={i} className="flex-1 rounded-t" style={{ background: C.amber, opacity: 0.85, height: `${Math.max(12, (s.ppg || 0) / maxHeight * 100)}%` }} />
+            ))}
+          </div>
+        )}
+
+        <div className="grid grid-cols-3 gap-2 mb-4">
+          <div className="rounded-xl p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+            <div className="f-display text-[14px] font-extrabold" style={{ color: C.chalk }}>{avgPpg != null ? avgPpg.toFixed(1) : "—"}</div>
+            <div className="f-mono text-[7.5px] uppercase" style={{ color: C.chalkDim }}>PPG · Avg</div>
+          </div>
+          <div className="rounded-xl p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+            <div className="f-display text-[14px] font-extrabold" style={{ color: ppgGrowth > 0 ? "#10B981" : C.chalk }}>
+              {ppgGrowth != null ? `${ppgGrowth > 0 ? "+" : ""}${ppgGrowth.toFixed(1)}` : "—"}
+            </div>
+            <div className="f-mono text-[7.5px] uppercase" style={{ color: C.chalkDim }}>PPG Growth</div>
+          </div>
+          <div className="rounded-xl p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
+            <div className="f-display text-[14px] font-extrabold" style={{ color: C.chalk }}>{bestGames}</div>
+            <div className="f-mono text-[7.5px] uppercase" style={{ color: C.chalkDim }}>Season Highs</div>
+          </div>
+        </div>
+
+        <p className="f-body text-[12px] mb-5" style={{ color: C.chalkDim }}>
+          {totalAwards > 0
+            ? `Nothing that stopped the game, but ${totalAwards} award${totalAwards === 1 ? "" : "s"} came out of these seasons regardless.`
+            : "Steady, uneventful seasons — no drama, no detours."}
+        </p>
+
+        <PrimaryButton full onClick={onContinue}>Continue <ChevronRight size={14} className="inline ml-1" /></PrimaryButton>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------
    CAREER HIGHLIGHTS SCREEN
    generateSeasonBestGame already produces a real standout line every
    season — it used to be shown once on the Result recap and then gone.
@@ -7223,7 +7314,7 @@ function CareerHighlightsScreen({ player, onBack }) {
           </div>
         )}
 
-        <button onClick={onBack} className="btn-tactile f-mono text-[10px] uppercase tracking-widest mt-5 transition" style={{ color: C.chalkDim }}>← Back to Hub</button>
+        <button onClick={onBack} className="btn-tactile f-mono text-xs px-4 py-2 rounded-full mt-5 transition" style={{ background: C.ink3, color: C.chalkDim, border: `1px solid ${C.line}` }}>← Back to Hub</button>
       </div>
     </div>
   );
@@ -7424,7 +7515,7 @@ function LifestyleSpendingScreen({ player, onBuyHome, onBuyVehicle, onBuyGear, o
           </div>
         )}
 
-        <button onClick={onBack} className="btn-tactile f-mono text-[10px] uppercase tracking-widest mt-5 transition" style={{ color: C.chalkDim }}>← Back to Hub</button>
+        <button onClick={onBack} className="btn-tactile f-mono text-xs px-4 py-2 rounded-full mt-5 transition" style={{ background: C.ink3, color: C.chalkDim, border: `1px solid ${C.line}` }}>← Back to Hub</button>
       </div>
     </div>
   );
@@ -8155,13 +8246,22 @@ const ResultScreen = memo(function ResultScreen({ summary, onContinue }) {
                 averages, never individual box scores, so this is a
                 generated standout performance rather than a logged one.
                 Framed as "Season High," not "Career High" or a specific
-                date, to stay honest about what it actually is. */}
+                date, to stay honest about what it actually is — except
+                when it genuinely IS a career high, checked against every
+                entry in careerHighlights, in which case it gets to say
+                so and reads with a distinct gold treatment rather than
+                the same amber every ordinary season high gets. */}
             {summary.bestGame && (
-              <div className="mt-3 p-3 rounded-xl" style={{ background: "rgba(249,115,22,0.06)", border: `1px solid rgba(249,115,22,0.3)` }}>
-                <div className="f-mono text-[9px] uppercase tracking-widest mb-2" style={{ color: C.amberBright }}>Season High</div>
+              <div className="mt-3 p-3 rounded-xl" style={summary.isCareerHigh
+                ? { background: "rgba(250,204,21,0.08)", border: `1px solid rgba(250,204,21,0.4)` }
+                : { background: "rgba(249,115,22,0.06)", border: `1px solid rgba(249,115,22,0.3)` }}>
+                <div className="f-mono text-[9px] uppercase tracking-widest mb-2 flex items-center gap-1.5" style={{ color: summary.isCareerHigh ? C.trophyGold : C.amberBright }}>
+                  {summary.isCareerHigh && <span>★</span>}
+                  {summary.isCareerHigh ? "Career High" : "Season High"}
+                </div>
                 <div className="flex items-center gap-5">
                   <div>
-                    <div className="f-display text-xl font-extrabold" style={{ color: C.gold }}>{summary.bestGame.pts}</div>
+                    <div className="f-display text-xl font-extrabold" style={{ color: summary.isCareerHigh ? C.trophyGold : C.gold }}>{summary.bestGame.pts}</div>
                     <div className="f-mono text-[9px] uppercase" style={{ color: C.chalkDim }}>PTS</div>
                   </div>
                   <div>
@@ -9301,6 +9401,16 @@ export default function App() {
   const [player, setPlayer] = useState(null);
   const [savedGame, setSavedGame] = useState(null);
   const [banner, setBanner] = useState(null);
+  // Auto-dismiss — banners used to persist indefinitely until the next
+  // explicit action cleared them; now they settle on their own after a
+  // few seconds, like a normal toast. Cleared/reset whenever a NEW
+  // banner replaces an old one, so a fresh message always gets its own
+  // full window rather than inheriting whatever was left on a stale timer.
+  useEffect(() => {
+    if (!banner) return;
+    const t = setTimeout(() => setBanner(null), 4500);
+    return () => clearTimeout(t);
+  }, [banner]);
   const [currentEvent, setCurrentEvent] = useState(null);
   const [pending, setPending] = useState({ trainingText: "" });
   const [summary, setSummary] = useState(null);
@@ -9320,6 +9430,24 @@ export default function App() {
   const [muted, setMuted] = useState(isSoundMuted);
   const toggleMuted = () => setMuted(m => { const next = !m; setSoundMuted(next); return next; });
 
+  // Achievement sound — one centralized effect rather than touching each
+  // of the ~10 places p.achievements gets recalculated (season resolution,
+  // tournament results, national team call-ups, and more). Reacts to the
+  // achievements array itself changing, regardless of which system
+  // granted the new entry. lastAchievementCount starts at null, not 0,
+  // specifically so loading a save with existing achievements doesn't
+  // fire the sound on its very first render — only a GENUINE new unlock
+  // during this session does.
+  const lastAchievementCount = useRef(null);
+  useEffect(() => {
+    if (!player) return;
+    const count = (player.achievements || []).length;
+    if (lastAchievementCount.current !== null && count > lastAchievementCount.current && !muted) {
+      UI_SOUNDS.success();
+    }
+    lastAchievementCount.current = count;
+  }, [player && player.achievements, muted]);
+
   // A single delegated listener rather than touching every individual
   // onClick handler in the file — .choice-card and .btn-tactile are
   // already the shared classes every interactive element in the game
@@ -9337,6 +9465,83 @@ export default function App() {
     document.addEventListener("click", handleClick);
     return () => document.removeEventListener("click", handleClick);
   }, [muted]);
+
+  // Highlight Career — buffers a "recap" season's real result into the
+  // digest instead of showing it individually. Split into two effects on
+  // purpose, each doing exactly one state transition: Stage 1 captures
+  // the season's data and clears the buffering flag; Stage 2 (a separate
+  // effect, firing on the NEXT commit once Stage 1's update has already
+  // rendered) decides whether to show the digest or auto-advance through
+  // handleContinueAfterResult. Never chained synchronously in one call —
+  // handleContinueAfterResult reads player from its own closure, and
+  // calling it before a prior setPlayer has actually committed would
+  // read stale data.
+  useEffect(() => {
+    if (screen === "result" && player && player.pendingBufferedRecap && summary) {
+      const entry = {
+        age: player.age, leagueLabel: summary.leagueLabel, teamName: player.teamName,
+        role: player.starterStatus,
+        ppg: summary.leagueStats ? summary.leagueStats.ppg : null,
+        rpg: summary.leagueStats ? summary.leagueStats.rpg : null,
+        apg: summary.leagueStats ? summary.leagueStats.apg : null,
+        gamesPlayed: summary.gamesPlayed, wonChampionship: summary.wonChampionship,
+        leagueAwards: summary.leagueAwards, bestGame: summary.bestGame,
+      };
+      setPlayer(p => ({
+        ...p, pendingBufferedRecap: false, digestJustBuffered: true,
+        pendingDigest: [...(p.pendingDigest || []), entry],
+      }));
+    }
+  }, [screen, player && player.pendingBufferedRecap, summary]);
+
+  useEffect(() => {
+    if (screen === "result" && player && player.digestJustBuffered) {
+      if ((player.pendingDigest || []).length >= 3) {
+        setPlayer(p => ({ ...p, digestJustBuffered: false }));
+        setScreen("season_digest");
+      } else {
+        // Do NOT call handleContinueAfterResult() here — only set a
+        // flag. handleContinueAfterResult is a useCallback closing over
+        // `player`; calling it in the same tick as this setPlayer would
+        // still read THIS render's pre-clear player (the closure isn't
+        // refreshed until the next render actually commits), and its
+        // own internal setPlayer call would silently overwrite this
+        // clear with a stale copy. The actual call happens in a
+        // dedicated, later effect below that does nothing else.
+        setPlayer(p => ({ ...p, digestJustBuffered: false, readyToAutoContinue: true }));
+      }
+    }
+  }, [screen, player && player.digestJustBuffered]);
+
+  useEffect(() => {
+    if (screen === "season_digest" && player && player.digestDismissed) {
+      // Same reasoning as above — set the flag only, never call
+      // handleContinueAfterResult in the same tick as a setPlayer.
+      setPlayer(p => ({ ...p, digestDismissed: false, readyToAutoContinue: true }));
+    }
+  }, [screen, player && player.digestDismissed]);
+
+  // The ONLY place handleContinueAfterResult gets called programmatically
+  // — and this effect calls it and NOTHING else. By the time this runs,
+  // readyToAutoContinue's own setPlayer (from one of the two effects
+  // above) has already committed on a prior render, so
+  // handleContinueAfterResult's closure is guaranteed fresh.
+  useEffect(() => {
+    if (player && player.readyToAutoContinue) {
+      handleContinueAfterResult();
+    }
+  }, [player && player.readyToAutoContinue]);
+
+  // Cleanup — once handleContinueAfterResult has actually run and moved
+  // the game off both Result and the digest screen, clear the flag so it
+  // can never leak forward and falsely fire on some later, unrelated
+  // season's Result screen. Never combined with the call above; this is
+  // its own effect, its own tick, no function call alongside it.
+  useEffect(() => {
+    if (screen !== "result" && screen !== "season_digest" && player && player.readyToAutoContinue) {
+      setPlayer(p => ({ ...p, readyToAutoContinue: false }));
+    }
+  }, [screen, player && player.readyToAutoContinue]);
 
   // Storage: uses window.storage when available (Claude.ai artifact runtime),
   // and falls back to plain browser localStorage everywhere else — this is
@@ -9414,6 +9619,7 @@ export default function App() {
 
   const handleStart = (data) => {
     let p = newPlayer(data);
+    p.highlightMode = !!data.highlightMode;
     // Frame first, then attributes — body modifiers shape the starting
     // spread the player is allocating on top of.
     setPlayer(p);
@@ -11339,13 +11545,27 @@ export default function App() {
       const checkpoint = rollMidseasonCheckpoint(p);
       if (checkpoint.type === "rival_game") {
         setScreen("buzzer_beater");
-      } else if (checkpoint.type === "coach_talk" || checkpoint.type === "locker_room") {
+      } else if (checkpoint.type === "coach_talk" || checkpoint.type === "locker_room" || checkpoint.type === "injury_scare" || checkpoint.type === "trade_buzz") {
+        // Every real, interactive checkpoint — never buffered by Highlight
+        // Career mode, regardless of type. Only a plain "recap" (checked
+        // explicitly below, not caught by a generic else) is eligible for
+        // bundling; these four always stop the game exactly as they do
+        // in Full Career.
         setMidseasonEvent(checkpoint);
         setScreen("midseason_checkpoint");
+      } else if (p.highlightMode) {
+        // "recap" under Highlight Career — buffer this season's real
+        // result instead of showing it individually. The season itself
+        // is computed exactly the same way, through the same shared
+        // finishSecondHalfAndBuildResult used everywhere else; only what
+        // happens to the resulting Result screen differs, and that
+        // decision happens in a useEffect once the season has actually
+        // finished and committed to state — never synchronously here,
+        // to avoid reading stale player data.
+        p.pendingBufferedRecap = true;
+        finishSecondHalfAndBuildResult(p);
       } else {
-        // "recap" — the guaranteed fallback. Every pro-club season stops
-        // here now, showing the real first-half line before continuing,
-        // rather than silently jumping straight to the second half.
+        // "recap" under Full Career — unchanged from before.
         setMidseasonEvent(checkpoint);
         setScreen("midseason_checkpoint");
       }
@@ -11407,10 +11627,16 @@ export default function App() {
     // Persisted so a season's standout game survives past its own recap
     // screen — without this, generateSeasonBestGame's output was shown
     // once and then gone, with no way to look back at it later.
+    let isCareerHigh = false;
     if (bestGame) {
       p.careerHighlights = [...(p.careerHighlights || []), {
         age: p.age, leagueLabel, teamName: p.teamName, pts: bestGame.pts, reb: bestGame.reb, ast: bestGame.ast,
       }];
+      // A career-best game deserves to read differently from a routine
+      // season high — checked against every entry including this one,
+      // so a tie with a past best still counts as reaching that peak
+      // again, not just "the highest of this one season."
+      isCareerHigh = bestGame.pts >= Math.max(...p.careerHighlights.map(h => h.pts));
     }
 
     setSummary({
@@ -11426,7 +11652,7 @@ export default function App() {
       leagueYear: p.year,
       gamesPlayed, wonChampionship, injury,
       playingStyle: p.playingStyle, shotProfile, styleNote,
-      bestGame,
+      bestGame, isCareerHigh,
       coachTrust: p.relationships.coach, teamChemistry: p.relationships.team,
     });
     setPlayer(p);
@@ -12425,7 +12651,17 @@ export default function App() {
       {screen === "injury_recovery" && player && player.pendingInjuryDecision && (
         <InjuryRecoveryScreen pending={player.pendingInjuryDecision} onChoose={handleInjuryRecoveryChoice} />
       )}
-      {screen === "result" && summary && <ResultScreen summary={summary} onContinue={handleContinueAfterResult} />}
+      {screen === "result" && summary && !(player && (player.pendingBufferedRecap || player.digestJustBuffered)) && <ResultScreen summary={summary} onContinue={handleContinueAfterResult} />}
+      {screen === "season_digest" && player && (
+        <SeasonDigestScreen player={player} onContinue={() => {
+          // Clear the buffer and set the flag in ONE atomic update — not
+          // two separate setPlayer calls — so there's no race between
+          // clearing pendingDigest and whatever handleContinueAfterResult
+          // does with its own player closure. The actual call happens in
+          // a separate effect below, once this commits.
+          setPlayer(p => ({ ...p, pendingDigest: [], digestDismissed: true }));
+        }} />
+      )}
       {screen === "retired" && player && <RetiredScreen player={player} onPlayAgain={handlePlayAgain} onViewHallOfFame={() => setScreen("hall_of_fame")} onViewAchievements={() => setScreen("achievement_gallery")} />}
       {screen === "hall_of_fame" && (
         <HallOfFameScreen
