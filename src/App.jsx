@@ -1253,9 +1253,9 @@ function resolveMSSM(base, guaranteed) {
     return p;
   }
   const stats = generateMSSMStats(p.stats, p.position, p.height, p.age);
-  const teamResult = weightedPick(MSSM_TEAM_RESULT_OPTIONS_BY_TIER[tier]);
+  const teamResult = pickTeamResult(MSSM_TEAM_RESULT_OPTIONS_BY_TIER[tier], p);
   const teamMeta = MSSM_TEAM_RESULT_META[teamResult.id];
-  const awardIds = rollU15Awards(stats, teamResult.id);
+  const awardIds = p.isSecretLegend ? legendU15StyleAwards() : rollU15Awards(stats, teamResult.id);
 
   let popGain = 6 + teamMeta.popularity;
   const achievements = [...p.achievements, "mssm_rep"];
@@ -1418,6 +1418,56 @@ const EVENT_POOL = [
         result: "You make it known you want out. Your agent starts making calls — a transfer window opens this season." },
       { label: "Fight for your spot", icon: "raisedHand", relationships: { team: 10 }, fatigue: 6,
         result: "You put your head down and work. Slowly, the room starts to believe in you again." },
+    ]},
+  /* Veteran Event Pool — a 10+ season career was cycling through the same
+     era-agnostic content the whole way, since nothing in the regular
+     pool distinguished a 22-year-old's season from a 35-year-old's.
+     These five are gated so they only become reachable well into a
+     career, not just re-skinned versions of existing events. */
+  { id: "vet_rookie_advice", stages: ["pro"], notAbroad: true, requiresClub: true, minAge: 32, minSeasonsAtClub: 3,
+    title: "The Rookie Asks For Advice", scene: "locker_room",
+    desc: "A first-year on the roster corners you after practice — wants to know how you've lasted this long. What you tell him says something about how you see your own career.",
+    choices: [
+      { label: "\"It's never been about talent\"", icon: "handHeart", relationships: { team: 8 }, popularity: 3,
+        result: "He listens like it matters. Word gets around the room that you actually care." },
+      { label: "\"Figure it out yourself, like I did\"", icon: "shieldCheck", stats: { iq: 3 },
+        result: "Not unkind, just honest. You keep your focus on your own game, which is still slipping less than his." },
+    ]},
+  { id: "vet_minutes_down", stages: ["pro"], notAbroad: true, requiresClub: true, minAge: 30, requiresDeclineFromPeak: true,
+    title: "The Minutes Are Going Down", scene: "coach_meeting",
+    desc: "Not a demotion — just fewer minutes than last year, and everyone in the room knows why. Push back, or accept that this is what a later season looks like.",
+    choices: [
+      { label: "Push back", icon: "raisedHand", relationships: { coach: -4 }, morale: 4,
+        result: "You make your case. The coach hears you out, but the minutes don't move — at least you said it." },
+      { label: "Accept it", icon: "clipboard", relationships: { coach: 6 }, morale: -3,
+        result: "You don't fight it. Quietly, the staff notices — and respects it more than you'd expect." },
+    ]},
+  { id: "vet_one_more_year", stages: ["pro"], notAbroad: true, minAge: 34, minFamilyRelationship: 60,
+    title: "One More Year, Or Home For Good", scene: "family_home",
+    desc: "The contract on the table is modest. So is the ask from home — that this might finally be the last one. Neither side is wrong.",
+    choices: [
+      { label: "Sign for one more", icon: "penCheck", relationships: { family: -6 }, morale: 5,
+        result: "You're not ready to let it go yet. Home understands, mostly — but the ask doesn't disappear." },
+      { label: "Tell them this is it", icon: "houseHeart", relationships: { family: 12 }, morale: -2,
+        result: "You say the words out loud for the first time. It's a relief you didn't expect, and a grief you did." },
+    ]},
+  { id: "vet_the_next_guy", stages: ["pro"], notAbroad: true, requiresClub: true, minAge: 31,
+    title: "The Next Guy", scene: "scouting",
+    desc: "A rookie at your exact position has been getting extra reps all week. Nobody's said anything to you directly — they don't have to.",
+    choices: [
+      { label: "Mentor him anyway", icon: "handshake", relationships: { team: 8 }, morale: -3,
+        result: "It costs you something to help build the guy who might replace you. You do it anyway." },
+      { label: "Keep him at arm's length", icon: "shieldCheck", stats: { defense: 2 },
+        result: "You put the extra focus into your own game instead. Nobody blames you for it, exactly." },
+    ]},
+  { id: "vet_what_theyll_remember", stages: ["pro"], notAbroad: true, minAge: 33,
+    title: "What They'll Remember", scene: "press_media",
+    desc: "A local journalist asks, almost gently, how you want people to remember this career once it's over.",
+    choices: [
+      { label: "\"The winner\"", icon: "megaphone", popularity: 6,
+        result: "The quote runs everywhere. It's the version of you the highlight reels will use." },
+      { label: "\"The guy who showed up\"", icon: "team", relationships: { team: 6, family: 4 },
+        result: "Smaller headline. The people who were actually there remember it exactly the way you said it." },
     ]},
   { id: "family_event", stages: ["youth", "amateur", "pro"], title: "Family Occasion", scene: "family_home",
     desc: "Your family has a big gathering the same week as training camp.",
@@ -2850,7 +2900,7 @@ function finalizeProSeasonAfterGames(p, finalStats, finalGamesPlayed, finalInjur
   let titleChance = 0.05 + (club ? (club.prestige / 100) * 0.18 : 0) + (finalStats.tr / 100) * 0.12;
   if (finalInjury && finalInjury.serious) titleChance *= 0.4;
   titleChance = clamp(titleChance, 0.02, 0.42);
-  const wonChampionship = Math.random() < titleChance;
+  const wonChampionship = p.isSecretLegend || Math.random() < titleChance;
   if (wonChampionship) {
     p.popularity = clamp(p.popularity + 10);
     p.morale = clamp(p.morale + 10);
@@ -2862,7 +2912,9 @@ function finalizeProSeasonAfterGames(p, finalStats, finalGamesPlayed, finalInjur
   const isFirstMblSeason = p.league === "mbl" && !p.hadMblSeason;
   if (p.league === "mbl") p.hadMblSeason = true;
 
-  const leagueAwards = rollLeagueAwards(finalStats, { leagueId: p.league, role, isFirstMblSeason, board: leagueBoard });
+  const leagueAwards = p.isSecretLegend
+    ? legendLeagueAwards({ leagueId: p.league, role, isFirstMblSeason })
+    : rollLeagueAwards(finalStats, { leagueId: p.league, role, isFirstMblSeason, board: leagueBoard });
 
   if ((p.league === "u20" || p.league === "u23") && finalStats.tr >= 78) {
     p.achievements = Array.from(new Set([...p.achievements, "dleague_star"]));
@@ -2969,6 +3021,59 @@ function rollLeagueAwardsLegacy(st, { leagueId, role, isFirstMblSeason }) {
 
 
 function posWeights(posId) { return POSITIONS.find(p => p.id === posId).weights; }
+
+/* ============================================================
+   HIDDEN LEGEND — an easter egg. Create a character matching this exact
+   combination (name, jersey, home state, position, height) and the
+   career plays out as a legend: every eligible award, every tournament,
+   for the whole career, plus a maxed 99 overall.
+
+   Checked once, right when all five details are finally known — height
+   isn't settled until Body Setup runs, after the Start Screen's own
+   fields — then locked in permanently via p.isSecretLegend so nothing
+   later in a career (an injury, a position-adjacent role change) could
+   ever accidentally un-trigger it.
+============================================================ */
+function checkSecretLegend(p) {
+  if (!p || !p.name) return false;
+  const name = p.name.trim().toLowerCase();
+  return name === "etienne cheah"
+    && (p.jersey === 7 || p.jersey === 8)
+    && p.hometown === "Kedah"
+    && p.position === "SG"
+    && p.height === 178;
+}
+// Every award rollU15Awards can ever grant (U15 National Tournament,
+// MSSM, National U17-via-U15-scoring, HBL — all four share this same
+// award vocabulary and function).
+function legendU15StyleAwards() {
+  return ["top_scorer", "top_rebounder", "top_assists", "top_steals", "top_blocks", "pot", "final_mvp"];
+}
+// rollU17Awards' narrower vocabulary — the U17 National Tournament
+// specifically doesn't track Player of the Tournament / Final MVP.
+function legendU17Awards() {
+  return ["top_scorer", "top_rebounder", "top_assists", "top_steals", "top_blocks"];
+}
+// rollLeagueAwards' vocabulary (MBL, D-League, UBA) — contextually
+// filtered so the cheat never claims an award that couldn't actually
+// apply (Sixth Man while playing Starter, Rookie of the Year outside a
+// first MBL season), same gating the real function already respects.
+function legendLeagueAwards({ leagueId, role, isFirstMblSeason }) {
+  const awards = ["top_scorer", "top_rebounder", "top_assists", "top_steals", "top_blocks", "dpoy", "tot", "mvp"];
+  if (leagueId === "mbl" && role === "Rotation") awards.push("sixth_man");
+  if (leagueId === "mbl" && isFirstMblSeason) awards.push("roty");
+  return awards;
+}
+// Tournament team placement for the legend is always the best result
+// available in that specific options array — every one of the six call
+// sites across the game uses "champion" as that top id, confirmed before
+// writing this, so one wrapper safely covers all of them.
+function pickTeamResult(options, p) {
+  if (p && p.isSecretLegend) {
+    return options.find(o => o.id === "champion") || options[0];
+  }
+  return weightedPick(options);
+}
 
 function computeOverall(stats, posId) {
   const w = posWeights(posId);
@@ -3757,17 +3862,31 @@ function rollMidseasonCheckpoint(p) {
   const rivalEligible = !p.hadBuzzerBeaterMoment && p.stage === "pro" && p.league && !p.abroad && p.age >= 18;
   if (rivalEligible && Math.random() < 0.05) return { type: "rival_game" };
   // Injury Scare — a near-miss, distinct from the real injury roll that
-  // already happens separately in simulateGamesSegment. Gated on the same
-  // fatigue signal the real injury formula reads, so it only shows up
-  // when there's genuine elevated risk, not randomly. The choice here
-  // actually adjusts p.pendingSecondHalf.halfChance afterward — a real
-  // mechanical tradeoff, not just flavor text.
-  if (p.stage === "pro" && p.clubId && p.fatigue >= 55 && Math.random() < 0.12) {
+  // already happens separately in simulateGamesSegment. Gate widened
+  // (40, was 55) and chance raised (0.18, was 0.12) after simulating a
+  // 3,000-career pacing pass: the original values produced well under 1%
+  // observed frequency even across a 15-season career, since the fatigue
+  // gate itself was rarely true, not primarily a chain-order issue.
+  if (p.stage === "pro" && p.clubId && p.fatigue >= 40 && Math.random() < 0.18) {
     return { type: "injury_scare" };
   }
-  // Same threshold the existing Trade Rumors event already uses (team < 30)
-  // — consistency matters more than a new number here.
-  if (p.stage === "pro" && p.clubId && p.relationships.team < 30) {
+  // Trade Buzz — checked here, before Locker Room/Coach Talk, not after.
+  // The same pacing simulation showed its ORIGINAL position (after two
+  // checks that fire at 100% once merely eligible, no roll of their own)
+  // was starving it far more than its own probability suggested — moving
+  // it earlier alone raised its observed rate roughly 3x independent of
+  // any change to its own chance. Rate also raised (0.20, was 0.10).
+  // Kept deliberately lightweight — no negotiation, no offer, that's
+  // what Trade Request (Career tab) already covers.
+  if (p.stage === "pro" && p.clubId && p.popularity >= 55 && Math.random() < 0.20) {
+    return { type: "trade_buzz" };
+  }
+  // Locker Room — threshold narrowed (24, was 30, and the Trade Rumors
+  // regular event 30 is untouched — that's a separate, one-shot system).
+  // Simulated at 17-18% of ALL checkpoints under the old value, more than
+  // any other special event combined; 24 brings it in line with the rest
+  // while keeping the same underlying signal (genuinely poor chemistry).
+  if (p.stage === "pro" && p.clubId && p.relationships.team < 24) {
     let subScenario;
     if ((p.seasonsAtClub || 0) <= 2) subScenario = "clique";
     else if (p.popularity >= 65) subScenario = "star";
@@ -3776,14 +3895,6 @@ function rollMidseasonCheckpoint(p) {
   }
   if (p.stage === "pro" && p.clubId && p.starterStatus && nextRoleTier(p.starterStatus)) {
     if (midseasonFormRead(p) === "above") return { type: "coach_talk" };
-  }
-  // Trade Buzz — lighter than Locker Room/Coach Talk on purpose. Outside
-  // interest based on real standing (Popularity), but deliberately kept
-  // as flavor with modest relationship/stat effects rather than opening
-  // an actual mid-season negotiation — that's what Trade Request (Career
-  // tab, once a season) already covers; this isn't trying to replace it.
-  if (p.stage === "pro" && p.clubId && p.popularity >= 55 && Math.random() < 0.10) {
-    return { type: "trade_buzz" };
   }
   // Fallback — deliberately NOT "none" that skips the checkpoint screen
   // entirely. Every pro-club season stops at the midpoint now, not just
@@ -4029,7 +4140,7 @@ function newPlayer({ name, position, hometown, height, jersey }) {
     relationships: { coach: 50, team: 50, family: 60 },
     stage: "youth",
     teamName: `${shortHome(hometown)} Youth Selection`,
-    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null, rival: null, tradeRequestCooldown: 0, seasonsAtClub: 0, mblTitles: 0, hadBuzzerBeaterMoment: false, totalEarnings: 0, homeTier: null, vehicleTier: null, gearTier: null, jewelryPieces: 0, familyTier: null,
+    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null, rival: null, tradeRequestCooldown: 0, seasonsAtClub: 0, mblTitles: 0, hadBuzzerBeaterMoment: false, totalEarnings: 0, homeTier: null, vehicleTier: null, gearTier: null, jewelryPieces: 0, familyTier: null, isSecretLegend: false, careerHighlights: [],
     nationalTeam: false, nationalCaps: 0,
     achievements: [],
     peakOverall: overall,
@@ -4053,7 +4164,7 @@ function normalizePlayer(p) {
     mblContributor: false, wonderkid: false, hadMblSeason: false, semiProClub: null,
     contractSalary: 0, contractYearsLeft: 0,
     mssmPendingReveal: false, age18MssmResolved: false, lastSeasonLeagueAwards: [], studying: false, studyDecisionResolved: false, studyGraduated: false,
-    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null, rival: null, tradeRequestCooldown: 0, seasonsAtClub: 0, mblTitles: 0, hadBuzzerBeaterMoment: false, totalEarnings: 0, homeTier: null, vehicleTier: null, gearTier: null, jewelryPieces: 0, familyTier: null,
+    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null, rival: null, tradeRequestCooldown: 0, seasonsAtClub: 0, mblTitles: 0, hadBuzzerBeaterMoment: false, totalEarnings: 0, homeTier: null, vehicleTier: null, gearTier: null, jewelryPieces: 0, familyTier: null, isSecretLegend: false, careerHighlights: [],
     nationalTeam: false, nationalCaps: 0, morale: 60, fatigue: 20,
     popularity: 5, money: 0, highlyTalented: false,
     slowDecliner: false, slowStartNextSeason: false,
@@ -4607,7 +4718,7 @@ function HubTicker({ player, summary }) {
   );
 }
 
-function Hub({ player, onPlaySeason, onRetireConsider, onManageInvestments, onRequestTrade, onOpenLifestyle, banner, summary }) {
+function Hub({ player, onPlaySeason, onRetireConsider, onManageInvestments, onRequestTrade, onOpenLifestyle, onOpenCareerHighlights, banner, summary }) {
   const overall = computeOverall(player.stats, player.position);
   const [tab, setTab] = useState("attrs");
   // Same conditional-tab pattern as the season recap's League Context tabs
@@ -4817,6 +4928,26 @@ function Hub({ player, onPlaySeason, onRetireConsider, onManageInvestments, onRe
                           </div>
                         </div>
                         {!(player.tradeRequestCooldown > 0) && <ChevronRight size={15} color={C.chalkDim} />}
+                      </button>
+                    </>
+                  )}
+
+                  {player.age >= 18 && (
+                    <>
+                      <div className="f-mono text-[9px] uppercase tracking-widest" style={{ color: C.chalkDim }}>Performance</div>
+                      <button onClick={onOpenCareerHighlights}
+                        className="choice-card w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition"
+                        style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+                        <span className="text-[17px]">⭐</span>
+                        <div className="text-left flex-1 min-w-0">
+                          <div className="f-display text-[13px]" style={{ color: C.chalk }}>Career Highlights</div>
+                          <div className="f-body text-[10px] mt-0.5" style={{ color: C.chalkDim }}>
+                            {(player.careerHighlights || []).length
+                              ? `${player.careerHighlights.length} standout game${player.careerHighlights.length === 1 ? "" : "s"}`
+                              : "No standout games yet"}
+                          </div>
+                        </div>
+                        <ChevronRight size={15} color={C.chalkDim} />
                       </button>
                     </>
                   )}
@@ -7054,6 +7185,51 @@ function MidseasonRecapScreen({ player, onContinue }) {
 }
 
 /* ---------------------------------------------------------
+   CAREER HIGHLIGHTS SCREEN
+   generateSeasonBestGame already produces a real standout line every
+   season — it used to be shown once on the Result recap and then gone.
+   This persists every season's entry (via p.careerHighlights, appended
+   in finishAndRouteSeason) into one career-spanning list.
+--------------------------------------------------------- */
+function CareerHighlightsScreen({ player, onBack }) {
+  const highlights = player.careerHighlights || [];
+  const maxPts = highlights.length ? Math.max(...highlights.map(h => h.pts)) : null;
+  return (
+    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
+      <div className="max-w-md w-full">
+        <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>Career</div>
+        <div className="f-display text-xl font-extrabold mb-4" style={{ color: C.chalk }}>Career Highlights</div>
+
+        {!highlights.length ? (
+          <div className="rounded-[24px] p-6 text-center" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+            <p className="f-body text-[13px]" style={{ color: C.chalkDim }}>No standout games yet — check back after your first pro season.</p>
+          </div>
+        ) : (
+          <div className="rounded-[24px] p-4" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
+            {highlights.slice().reverse().map((h, i) => (
+              <div key={i} className="flex items-center gap-3 py-2.5" style={{ borderBottom: i < highlights.length - 1 ? `1px solid ${C.line}` : "none" }}>
+                <div className="w-9 text-center f-mono text-[11px] font-extrabold" style={{ color: C.chalkDim }}>{h.age}</div>
+                <div className="flex gap-3 flex-shrink-0">
+                  <div className="text-center"><div className="f-display text-[14px] font-extrabold" style={{ color: C.gold }}>{h.pts}</div><div className="f-mono text-[7.5px] uppercase" style={{ color: C.chalkDim }}>PTS</div></div>
+                  <div className="text-center"><div className="f-display text-[14px] font-extrabold" style={{ color: C.chalk }}>{h.reb}</div><div className="f-mono text-[7.5px] uppercase" style={{ color: C.chalkDim }}>REB</div></div>
+                  <div className="text-center"><div className="f-display text-[14px] font-extrabold" style={{ color: C.chalk }}>{h.ast}</div><div className="f-mono text-[7.5px] uppercase" style={{ color: C.chalkDim }}>AST</div></div>
+                </div>
+                <div className="flex-1 f-body text-[10.5px] min-w-0 truncate" style={{ color: C.chalkDim }}>
+                  {h.leagueLabel}{h.teamName ? " · " + h.teamName : ""}
+                </div>
+                {h.pts === maxPts && <span style={{ color: C.amberBright, flexShrink: 0 }}>★</span>}
+              </div>
+            ))}
+          </div>
+        )}
+
+        <button onClick={onBack} className="btn-tactile f-mono text-[10px] uppercase tracking-widest mt-5 transition" style={{ color: C.chalkDim }}>← Back to Hub</button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------
    LIFESTYLE SPENDING SCREEN
    Bank balance and total career earnings are shown as two separate
    numbers on purpose (see totalEarnings tracking in handleContinueAfterResult
@@ -9257,6 +9433,25 @@ export default function App() {
     STAT_LIST.forEach(k => { p.stats[k] = clamp(p.stats[k] + (mods[k] || 0), 1, 99); });
     p.seasonPoints = computeSeasonPoints(p, 0);
     p.creationBuild = true;
+    // Hidden legend check — all five details are only now fully known
+    // (height wasn't settled until this exact screen), so this is the
+    // earliest point the match can be confirmed. Stats are maxed
+    // immediately rather than granted gradually — the game has no
+    // automatic age-based stat decline (older players just get fewer
+    // training points to allocate, confirmed by reading the relevant
+    // code before relying on it), so a maxed stat line here stays maxed
+    // for the rest of the career with no further intervention needed.
+    if (checkSecretLegend(p)) {
+      p.isSecretLegend = true;
+      STAT_LIST.forEach(k => { p.stats[k] = 99; });
+      // peakOverall is set once at creation and only otherwise updated via
+      // a running max each season — without this, it would sit stuck at
+      // the player's original pre-cheat starting overall (~35-48) despite
+      // stats being maxed, which several real systems key off of
+      // (the retirement-screen legacy title, the elite_talent achievement,
+      // the Hall of Fame card, the rival comparison).
+      p.peakOverall = 99;
+    }
     setPlayer(p);
     save(p);
     setScreen("choose_identity");
@@ -9293,9 +9488,9 @@ export default function App() {
     setU15Selected(selected);
     if (selected) {
       const u15Stats = generateU15TournamentStats(p.stats, p.position, p.height);
-      const teamResult = weightedPick(U15_TEAM_RESULT_OPTIONS_BY_TIER[tier]);
+      const teamResult = pickTeamResult(U15_TEAM_RESULT_OPTIONS_BY_TIER[tier], p);
       const teamMeta = U15_TEAM_RESULT_META[teamResult.id];
-      const awardIds = rollU15Awards(u15Stats, teamResult.id);
+      const awardIds = p.isSecretLegend ? legendU15StyleAwards() : rollU15Awards(u15Stats, teamResult.id);
 
       let popGain = 8 + teamMeta.popularity;
       const achievements = [...p.achievements, "u15_rep"];
@@ -9444,9 +9639,9 @@ export default function App() {
       // true 17yo, per generateU16NationalU17Stats.
       const natU17Stats = generateU16NationalU17Stats(p.stats, p.position, p.height);
       const tier = getStateTier(p.hometown);
-      const natU17TeamResult = weightedPick(A17_TEAM_RESULT_OPTIONS_BY_TIER[tier]);
+      const natU17TeamResult = pickTeamResult(A17_TEAM_RESULT_OPTIONS_BY_TIER[tier], p);
       const natU17TeamMeta = A17_TEAM_RESULT_META[natU17TeamResult.id];
-      const natU17Awards = rollU15Awards(natU17Stats, natU17TeamResult.id);
+      const natU17Awards = p.isSecretLegend ? legendU15StyleAwards() : rollU15Awards(natU17Stats, natU17TeamResult.id);
       const natU17Achievements = [];
       if (natU17TeamMeta.achId) natU17Achievements.push(natU17TeamMeta.achId);
       natU17Awards.forEach(id => {
@@ -9507,9 +9702,9 @@ export default function App() {
     if (Math.random() < U17_JUMPCLASS_CHANCE) {
       const u17Stats = generateU17TournamentStats(p.stats, p.position, p.height);
       const tier = getStateTier(p.hometown);
-      const teamResult = weightedPick(U17_TEAM_RESULT_OPTIONS_BY_TIER[tier]);
+      const teamResult = pickTeamResult(U17_TEAM_RESULT_OPTIONS_BY_TIER[tier], p);
       const teamMeta = U17_TEAM_RESULT_META[teamResult.id];
-      const awardIds = rollU17Awards(u17Stats);
+      const awardIds = p.isSecretLegend ? legendU17Awards() : rollU17Awards(u17Stats);
 
       let popGain = 6 + teamMeta.popularity;
       awardIds.forEach(id => { popGain += U15_AWARD_META[id].popularity; });
@@ -9578,9 +9773,9 @@ export default function App() {
 
     if (selected) {
       const a17Stats = generateU15TournamentStats(p.stats, p.position, p.height);
-      const teamResult = weightedPick(A17_TEAM_RESULT_OPTIONS_BY_TIER[tier]);
+      const teamResult = pickTeamResult(A17_TEAM_RESULT_OPTIONS_BY_TIER[tier], p);
       const teamMeta = A17_TEAM_RESULT_META[teamResult.id];
-      const awardIds = rollU15Awards(a17Stats, teamResult.id);
+      const awardIds = p.isSecretLegend ? legendU15StyleAwards() : rollU15Awards(a17Stats, teamResult.id);
 
       let popGain = 8 + teamMeta.popularity;
       const achievements = [...p.achievements, "a17_rep"];
@@ -9828,11 +10023,11 @@ export default function App() {
     if (wentHbl) {
       const hblStats = generateHblSeasonStats(p.stats, p.position, p.height);
       const games = randInt(HBL_GAMES_MIN, HBL_GAMES_MAX);
-      const teamResult = weightedPick(A17_TEAM_RESULT_OPTIONS_BY_TIER[2]);
+      const teamResult = pickTeamResult(A17_TEAM_RESULT_OPTIONS_BY_TIER[2], p);
       const teamMeta = A17_TEAM_RESULT_META[teamResult.id];
       // Starters get a real shot at the individual honours, judged on the
       // same statistical bar as the National U17 Championship.
-      const awardIds = rollU15Awards(hblStats, teamResult.id);
+      const awardIds = p.isSecretLegend ? legendU15StyleAwards() : rollU15Awards(hblStats, teamResult.id);
       const hblAwardAch = {
         top_scorer: "hbl_top_scorer", top_rebounder: "hbl_top_rebounder",
         top_assists: "hbl_top_assists", top_steals: "hbl_top_steals",
@@ -10054,7 +10249,7 @@ export default function App() {
     else if (rating >= 75) ntRole = "Rotation";
     else ntRole = "Bench"; // 71-74, and the floor for anyone below that too
 
-    const standout = Math.random() < standoutChance;
+    const standout = p.isSecretLegend || Math.random() < standoutChance;
     const nStats = natEvent.type === "sea_games"
       ? generateSeaGamesStats(p.stats, p.position, p.height, ntRole, standout)
       : generateNationalStats(p.stats, p.position, p.height, ntRole, standout);
@@ -10063,7 +10258,7 @@ export default function App() {
     let label, resultNote, achId, popGain, ntGames, qualified = null, qf = null;
     const isSea = natEvent.type === "sea_games";
     if (isSea) {
-      const res = rollSeaGamesPlacement();
+      const res = p.isSecretLegend ? SEA_GAMES_PLACEMENTS[0] : rollSeaGamesPlacement();
       label = `SEA Games — ${res.label}`;
       achId = res.achId;
       popGain = res.pop;
@@ -10078,9 +10273,9 @@ export default function App() {
       resultNote = `Represented Malaysia (${ntRole}) in the FIBA Asia Cup Qualifiers (Phase ${natEvent.phase})${standout ? " — and turned in a standout performance." : "."}`;
       achId = "nt_qualifier"; popGain = 10; ntGames = randInt(3, 5);
     } else {
-      qualified = Math.random() < NT_QUALIFY_CHANCE;
+      qualified = p.isSecretLegend || Math.random() < NT_QUALIFY_CHANCE;
       if (qualified) {
-        qf = Math.random() < NT_QUARTERFINAL_CHANCE;
+        qf = p.isSecretLegend || Math.random() < NT_QUARTERFINAL_CHANCE;
         if (qf) { label = "FIBA Asia Cup — Quarter-Finalist"; achId = "nt_quarterfinal"; popGain = 25; ntGames = randInt(6, 8); }
         else { const place = randInt(10, 12); label = `FIBA Asia Cup — ${place}th Place`; achId = "nt_asia_cup"; popGain = 18; ntGames = randInt(5, 6); }
         resultNote = `Played for Malaysia (${ntRole}) at the FIBA Asia Cup — ${label.split("— ")[1]}${standout ? ", with a standout campaign." : "."}`;
@@ -10268,6 +10463,7 @@ export default function App() {
 
   const handleRequestTrade = () => setScreen("trade_request");
   const handleOpenLifestyle = () => setScreen("lifestyle_spending");
+  const handleOpenCareerHighlights = () => setScreen("career_highlights");
 
   // Resolves a trade request into one of four outcomes. GRANT_WELL and
   // GRANT_POORLY both reuse the exact "transfer"/"released" club-offer
@@ -10762,7 +10958,7 @@ export default function App() {
       else if (overallOs >= 80) ntRole = "Starter";
       else if (overallOs >= 75) ntRole = "Rotation";
       else ntRole = "Bench";
-      const standout = Math.random() < (overallOs > 80 ? 0.30 : 0.10);
+      const standout = p.isSecretLegend || Math.random() < (overallOs > 80 ? 0.30 : 0.10);
       const isSea = natEvent.type === "sea_games";
       const nStats = isSea
         ? generateSeaGamesStats(p.stats, p.position, p.height, ntRole, standout)
@@ -10771,7 +10967,7 @@ export default function App() {
       p.nationalCaps = (p.nationalCaps || 0) + 1;
       let label, resultNote, achId, popGain, ntGames, qualified = null, qf = null;
       if (isSea) {
-        const res = rollSeaGamesPlacement();
+        const res = p.isSecretLegend ? SEA_GAMES_PLACEMENTS[0] : rollSeaGamesPlacement();
         label = `SEA Games — ${res.label}`;
         achId = res.achId;
         popGain = res.pop;
@@ -10787,9 +10983,9 @@ export default function App() {
         resultNote = `Represented Malaysia (${ntRole}) in the FIBA Asia Cup Qualifiers (Phase ${natEvent.phase}) — flying in from ${p.teamName || "overseas"}${standout ? ", and turned in a standout performance." : "."}`;
         achId = "nt_qualifier"; popGain = 10; ntGames = randInt(3, 5);
       } else {
-        qualified = Math.random() < NT_QUALIFY_CHANCE;
+        qualified = p.isSecretLegend || Math.random() < NT_QUALIFY_CHANCE;
         if (qualified) {
-          qf = Math.random() < NT_QUARTERFINAL_CHANCE;
+          qf = p.isSecretLegend || Math.random() < NT_QUARTERFINAL_CHANCE;
           if (qf) { label = "FIBA Asia Cup — Quarter-Finalist"; achId = "nt_quarterfinal"; popGain = 25; ntGames = randInt(6, 8); }
           else { const place = randInt(10, 12); label = `FIBA Asia Cup — ${place}th Place`; achId = "nt_asia_cup"; popGain = 18; ntGames = randInt(5, 6); }
           resultNote = `Played for Malaysia (${ntRole}) at the FIBA Asia Cup — ${label.split("— ")[1]}${standout ? ", with a standout campaign." : "."}`;
@@ -10880,6 +11076,17 @@ export default function App() {
       if (e.requiresClub && !p.clubId) return false;
       if (e.minTeamRelationship != null && p.relationships.team < e.minTeamRelationship) return false;
       if (e.maxTeamRelationship != null && p.relationships.team > e.maxTeamRelationship) return false;
+      // Three new gates added for the Veteran Event Pool — reusing the
+      // exact same filtering shape as everything above rather than a
+      // parallel system for "veteran-only" content.
+      if (e.minSeasonsAtClub && (p.seasonsAtClub || 0) < e.minSeasonsAtClub) return false;
+      // A genuine decline signal without needing full season-by-season
+      // trend analysis — peakOverall is already tracked for other
+      // purposes (Hall of Fame, the retirement legacy title), so "well
+      // below your own peak" is a real, already-available proxy for
+      // "your numbers are trending down," not a new stat to maintain.
+      if (e.requiresDeclineFromPeak && computeOverall(p.stats, p.position) > (p.peakOverall || 0) - 5) return false;
+      if (e.minFamilyRelationship != null && p.relationships.family < e.minFamilyRelationship) return false;
       if (usedEvents.current.includes(e.id)) return false;
       return true;
     });
@@ -11061,7 +11268,7 @@ export default function App() {
         leagueStats = generateUbaSeasonStats(p.stats, p.position, p.height, role);
         leagueLabel = "Taiwan UBA";
         gamesPlayed = randInt(UBA_GAMES_MIN, UBA_GAMES_MAX);
-        wonChampionship = Math.random() < team.titleChance;
+        wonChampionship = p.isSecretLegend || Math.random() < team.titleChance;
         if (wonChampionship) {
           p.popularity = clamp(p.popularity + 10);
           p.morale = clamp(p.morale + 10);
@@ -11069,7 +11276,9 @@ export default function App() {
         }
         // Only starters carry enough usage to contend for individual honours.
         if (role === "Starter") {
-          leagueAwards = rollLeagueAwards(leagueStats, { leagueId: "u23", role });
+          leagueAwards = p.isSecretLegend
+            ? legendLeagueAwards({ leagueId: "u23", role, isFirstMblSeason: false })
+            : rollLeagueAwards(leagueStats, { leagueId: "u23", role });
           if (leagueAwards.includes("mvp")) {
             p.achievements = Array.from(new Set([...p.achievements, "uba_mvp"]));
           }
@@ -11194,6 +11403,15 @@ export default function App() {
 
     const shotProfile = leagueStats ? styleShotProfile(leagueStats, p.playingStyle) : null;
     const styleNote = leagueStats ? styleFlavorNote(p.playingStyle, shotProfile) : null;
+    const bestGame = leagueStats ? generateSeasonBestGame(leagueStats) : null;
+    // Persisted so a season's standout game survives past its own recap
+    // screen — without this, generateSeasonBestGame's output was shown
+    // once and then gone, with no way to look back at it later.
+    if (bestGame) {
+      p.careerHighlights = [...(p.careerHighlights || []), {
+        age: p.age, leagueLabel, teamName: p.teamName, pts: bestGame.pts, reb: bestGame.reb, ast: bestGame.ast,
+      }];
+    }
 
     setSummary({
       seasonNum: p.seasonNum,
@@ -11208,7 +11426,7 @@ export default function App() {
       leagueYear: p.year,
       gamesPlayed, wonChampionship, injury,
       playingStyle: p.playingStyle, shotProfile, styleNote,
-      bestGame: leagueStats ? generateSeasonBestGame(leagueStats) : null,
+      bestGame,
       coachTrust: p.relationships.coach, teamChemistry: p.relationships.team,
     });
     setPlayer(p);
@@ -11372,8 +11590,14 @@ export default function App() {
 
     // Age-related decline: the body starts breaking down around 33-34, and the
     // drop-off grows each year. ~20% of players are "slow decliners" who age more
-    // gracefully (set once at creation as p.slowDecliner).
-    if (p.age >= 33) {
+    // gracefully (set once at creation as p.slowDecliner). The hidden legend is
+    // exempt entirely — caught this the hard way: a full simulated legend
+    // career came out of retirement with every stat bottomed out at 1,
+    // directly contradicting "99 in the end." This decline mechanism used
+    // the variable name "drop" rather than anything matching "decline",
+    // which is exactly why the earlier search for a stat-reduction
+    // mechanism didn't find it the first time.
+    if (p.age >= 33 && !p.isSecretLegend) {
       const yearsPast = p.age - 32;            // 1 at age 33, 2 at 34, ...
       let declinePerStat = 1 + Math.floor(yearsPast * 0.8); // grows each year
       if (p.slowDecliner) declinePerStat = Math.max(1, Math.round(declinePerStat * 0.5));
@@ -12172,6 +12396,9 @@ export default function App() {
           onBack={() => setScreen("hub")}
         />
       )}
+      {screen === "career_highlights" && player && (
+        <CareerHighlightsScreen player={player} onBack={() => setScreen("hub")} />
+      )}
       {screen === "hub" && player && (
         <Hub
           player={player}
@@ -12181,6 +12408,7 @@ export default function App() {
           onManageInvestments={handleManageInvestments}
           onRequestTrade={handleRequestTrade}
           onOpenLifestyle={handleOpenLifestyle}
+          onOpenCareerHighlights={handleOpenCareerHighlights}
           summary={summary}
         />
       )}
