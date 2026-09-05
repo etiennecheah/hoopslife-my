@@ -41,6 +41,7 @@ const IconStarter = svgIcon(<><rect x="3" y="14" width="3" height="7"/><rect x="
 const IconWonderkid = svgIcon(<><circle cx="12" cy="13" r="6"/><path d="M12 3v2M5 6l1.5 1.5M19 6l-1.5 1.5"/><path d="M12 13l-1-1.8 2-.2z" fill="currentColor"/></>);
 const IconStandout = svgIcon(<><path d="M12 21V7"/><path d="M7 12l5-5 5 5"/><ellipse cx="12" cy="21" rx="7" ry="2"/></>);
 const IconMVPCrown = svgIcon(<><path d="M4 8l3 3 5-6 5 6 3-3-2 10H6z"/><path d="M6 20h12"/></>);
+const IconShieldStar = svgIcon(<><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M12 8l1.2 2.4 2.6.4-1.9 1.9.4 2.6-2.3-1.2-2.3 1.2.4-2.6-1.9-1.9 2.6-.4z"/></>);
 const IconRookie = svgIcon(<><circle cx="12" cy="12" r="9"/><text x="12" y="16" fontSize="10" fill="currentColor" stroke="none" textAnchor="middle">R</text></>);
 const IconSixthMan = svgIcon(<><rect x="3" y="16" width="18" height="3" rx="0.5"/><circle cx="7" cy="10" r="2"/><circle cx="12" cy="8" r="2"/><circle cx="17" cy="10" r="2"/><path d="M7 12v2M12 10v2M17 12v2"/></>);
 const IconClubLoyal = svgIcon(<><path d="M12 20s-7-4.5-7-10a4.5 4.5 0 0 1 7-3.7A4.5 4.5 0 0 1 19 10c0 5.5-7 10-7 10z"/></>);
@@ -578,6 +579,8 @@ const ACHIEVEMENT_META = {
   wonderkid: { label: "Wonderkid", icon: IconWonderkid },
   dleague_star: { label: "D-League Standout", icon: IconStandout },
   mbl_mvp: { label: "MBL MVP", icon: IconMVPCrown },
+  dleague_dpoy: { label: "D-League DPOY", icon: IconShieldStar },
+  mbl_dpoy: { label: "MBL DPOY", icon: IconShieldStar },
   dleague_mvp: { label: "D-League MVP", icon: IconMVPCrown },
   mbl_roty: { label: "MBL Rookie of the Year", icon: IconRookie },
   mbl_sixth_man: { label: "MBL Sixth Man of the Year", icon: IconSixthMan },
@@ -2926,7 +2929,17 @@ function finalizeProSeasonAfterGames(p, finalStats, finalGamesPlayed, finalInjur
   if (p.league === "mbl" && role === "Starter") {
     p.achievements = Array.from(new Set([...p.achievements, "mbl_starter"]));
   }
-  if (leagueAwards.includes("mvp")) p.achievements = Array.from(new Set([...p.achievements, p.league === "mbl" ? "mbl_mvp" : "dleague_mvp"]));
+  if (leagueAwards.includes("mvp")) {
+    p.achievements = Array.from(new Set([...p.achievements, p.league === "mbl" ? "mbl_mvp" : "dleague_mvp"]));
+    p.mvpCount = (p.mvpCount || 0) + 1;
+  }
+  // DPOY was being rolled and counted toward popularity below, but never
+  // actually granted an achievement — no badge in the gallery, no entry
+  // in Hall of Fame, nothing. This is the first time it's tracked at all.
+  if (leagueAwards.includes("dpoy")) {
+    p.achievements = Array.from(new Set([...p.achievements, p.league === "mbl" ? "mbl_dpoy" : "dleague_dpoy"]));
+    p.dpoyCount = (p.dpoyCount || 0) + 1;
+  }
   if (leagueAwards.includes("roty")) p.achievements = Array.from(new Set([...p.achievements, "mbl_roty"]));
   if (leagueAwards.includes("sixth_man")) p.achievements = Array.from(new Set([...p.achievements, "mbl_sixth_man"]));
   if (leagueAwards.length) p.popularity = clamp(p.popularity + leagueAwards.length * 3 + (leagueAwards.includes("mvp") ? 8 : 0));
@@ -3144,22 +3157,32 @@ function offeredContractYears(p, { firstProSigning = false } = {}) {
   return randInt(1, 3);
 }
 
-function contractMonthlySalary({ leagueId, role, club, semiPro }) {
+// Honors bonus — a genuine market-value gap between a player who's
+// actually won things and one who hasn't, at the same league/role. Capped
+// (not linear) so a 10-time MVP doesn't spiral into an absurd number;
+// MVP counts for more than DPOY since it's the more valuable individual
+// honor in most GM's eyes, but both matter.
+function honorsSalaryMultiplier(mvpCount = 0, dpoyCount = 0) {
+  return 1 + Math.min(0.4, mvpCount * 0.10 + dpoyCount * 0.06);
+}
+function contractMonthlySalary({ leagueId, role, club, semiPro, mvpCount = 0, dpoyCount = 0 }) {
+  let base;
   if (leagueId === "mbl") {
     const lo = 3500, hi = 10000;
     const roleBase = role === "Starter" ? 0.7 : role === "Rotation" ? 0.4 : 0.12;
     const wealth = club ? clamp((club.salaryMult - 0.85) / (1.6 - 0.85), 0, 1) : 0.5;
     const t = clamp(roleBase + wealth * 0.3, 0, 1);
-    return Math.round(lo + t * (hi - lo));
-  }
-  if (semiPro) {
+    base = lo + t * (hi - lo);
+  } else if (semiPro) {
     const lo = 1700, hi = 2100;
     const t = clamp(((club ? club.salaryMult : 1) - 0.85) / (1.6 - 0.85), 0, 1);
-    return Math.round(lo + t * (hi - lo));
+    base = lo + t * (hi - lo);
+  } else {
+    const lo = 2000, hi = 2999;
+    const t = clamp(((club ? club.salaryMult : 1) - 0.85) / (1.6 - 0.85), 0, 1);
+    base = lo + t * (hi - lo);
   }
-  const lo = 2000, hi = 2999;
-  const t = clamp(((club ? club.salaryMult : 1) - 0.85) / (1.6 - 0.85), 0, 1);
-  return Math.round(lo + t * (hi - lo));
+  return Math.round(base * honorsSalaryMultiplier(mvpCount, dpoyCount));
 }
 
 /* ============================================================
@@ -3628,6 +3651,8 @@ function saveToHallOfFame(p, careerSummary) {
       games: pro ? pro.games : 0,
       retiredAge: p.age,
       trophies: (careerSummary.clubs || []).reduce((sum, c) => sum + (c.titles || 0), 0),
+      mvpCount: p.mvpCount || 0,
+      dpoyCount: p.dpoyCount || 0,
       timestamp: Date.now(),
     };
     const raw = window.localStorage.getItem(HALL_OF_FAME_KEY);
@@ -3757,7 +3782,7 @@ function computeClubTerms(p, club, { firstProSigning = false } = {}) {
     league = (rating >= MBL_RATING_THRESHOLD) ? "mbl" : ((p.age <= 20) ? "u20" : "u23");
   }
 
-  const salary = contractMonthlySalary({ leagueId: league, role, club, semiPro });
+  const salary = contractMonthlySalary({ leagueId: league, role, club, semiPro, mvpCount: p.mvpCount, dpoyCount: p.dpoyCount });
   const years = offeredContractYears(p, { firstProSigning });
   return { league, role, salary, firstOption, semiPro, years };
 }
@@ -4144,7 +4169,7 @@ function newPlayer({ name, position, hometown, height, jersey }) {
     relationships: { coach: 50, team: 50, family: 60 },
     stage: "youth",
     teamName: `${shortHome(hometown)} Youth Selection`,
-    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null, rival: null, tradeRequestCooldown: 0, seasonsAtClub: 0, mblTitles: 0, hadBuzzerBeaterMoment: false, totalEarnings: 0, homeTier: null, vehicleTier: null, gearTier: null, jewelryPieces: 0, familyTier: null, isSecretLegend: false, careerHighlights: [], highlightMode: false, pendingDigest: [], pendingAfterDigest: null, pendingBufferedRecap: false, digestJustBuffered: false, digestDismissed: false, readyToAutoContinue: false,
+    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null, rival: null, tradeRequestCooldown: 0, seasonsAtClub: 0, mblTitles: 0, hadBuzzerBeaterMoment: false, totalEarnings: 0, homeTier: null, vehicleTier: null, gearTier: null, jewelryPieces: 0, familyTier: null, isSecretLegend: false, careerHighlights: [], highlightMode: false, pendingDigest: [], pendingAfterDigest: null, pendingBufferedRecap: false, digestJustBuffered: false, digestDismissed: false, readyToAutoContinue: false, mvpCount: 0, dpoyCount: 0,
     nationalTeam: false, nationalCaps: 0,
     achievements: [],
     peakOverall: overall,
@@ -4168,7 +4193,7 @@ function normalizePlayer(p) {
     mblContributor: false, wonderkid: false, hadMblSeason: false, semiProClub: null,
     contractSalary: 0, contractYearsLeft: 0,
     mssmPendingReveal: false, age18MssmResolved: false, lastSeasonLeagueAwards: [], studying: false, studyDecisionResolved: false, studyGraduated: false,
-    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null, rival: null, tradeRequestCooldown: 0, seasonsAtClub: 0, mblTitles: 0, hadBuzzerBeaterMoment: false, totalEarnings: 0, homeTier: null, vehicleTier: null, gearTier: null, jewelryPieces: 0, familyTier: null, isSecretLegend: false, careerHighlights: [], highlightMode: false, pendingDigest: [], pendingAfterDigest: null, pendingBufferedRecap: false, digestJustBuffered: false, digestDismissed: false, readyToAutoContinue: false,
+    abroad: false, abroadEver: false, pendingOverseas: null, overseasTierId: null, overseasLeague: null, pendingOverseasOffer: null, pendingClutchMoment: null, pendingGuaranteedOverseasOffer: false, pendingForcedTransferRequest: false, pendingInjuryDecision: null, recentlyRehabbed: false, restedOffseason: false, offseasonPlan: null, playingStyle: null, rival: null, tradeRequestCooldown: 0, seasonsAtClub: 0, mblTitles: 0, hadBuzzerBeaterMoment: false, totalEarnings: 0, homeTier: null, vehicleTier: null, gearTier: null, jewelryPieces: 0, familyTier: null, isSecretLegend: false, careerHighlights: [], highlightMode: false, pendingDigest: [], pendingAfterDigest: null, pendingBufferedRecap: false, digestJustBuffered: false, digestDismissed: false, readyToAutoContinue: false, mvpCount: 0, dpoyCount: 0,
     nationalTeam: false, nationalCaps: 0, morale: 60, fatigue: 20,
     popularity: 5, money: 0, highlyTalented: false,
     slowDecliner: false, slowStartNextSeason: false,
@@ -9080,9 +9105,21 @@ function HallOfFameScreen({ entries, onBack, onPlayAgain }) {
                     ))}
                   </div>
 
-                  <div className="flex items-center justify-between mt-4 pt-3" style={{ borderTop: `1px solid ${C.line}` }}>
+                  <div className="flex items-center justify-between mt-4 pt-3 flex-wrap gap-y-2" style={{ borderTop: `1px solid ${C.line}` }}>
                     <span className="f-mono text-[11px]" style={{ color: C.chalkDim }}>{e.games} games · retired at {e.retiredAge}</span>
-                    <span className="f-mono text-[11px] font-bold" style={{ color: e.trophies > 0 ? C.trophyGold : C.chalkDim }}>🏆 {e.trophies}</span>
+                    <div className="flex items-center gap-3">
+                      {e.mvpCount > 0 && (
+                        <span className="f-mono text-[11px] font-bold flex items-center gap-1" style={{ color: C.trophyGold }} title={`${e.mvpCount} MVP${e.mvpCount > 1 ? "s" : ""} this career`}>
+                          👑 {e.mvpCount > 1 ? `×${e.mvpCount}` : "MVP"}
+                        </span>
+                      )}
+                      {e.dpoyCount > 0 && (
+                        <span className="f-mono text-[11px] font-bold flex items-center gap-1" style={{ color: C.teal }} title={`${e.dpoyCount} DPOY${e.dpoyCount > 1 ? "s" : ""} this career`}>
+                          🛡️ {e.dpoyCount > 1 ? `×${e.dpoyCount}` : "DPOY"}
+                        </span>
+                      )}
+                      <span className="f-mono text-[11px] font-bold" style={{ color: e.trophies > 0 ? C.trophyGold : C.chalkDim }}>🏆 {e.trophies}</span>
+                    </div>
                   </div>
                 </div>
               );
@@ -10759,7 +10796,7 @@ export default function App() {
       } else {
         const newRole = nextRoleTier(terms.role);
         newTerms.role = newRole;
-        newTerms.salary = contractMonthlySalary({ leagueId: terms.league, role: newRole, club, semiPro: terms.semiPro });
+        newTerms.salary = contractMonthlySalary({ leagueId: terms.league, role: newRole, club, semiPro: terms.semiPro, mvpCount: player.mvpCount, dpoyCount: player.dpoyCount });
       }
       setNegotiatingOffer(null);
       handleJoinClub({ club, terms: newTerms });
@@ -10828,7 +10865,7 @@ export default function App() {
     if (roll < grantWell + grantPoorly + denyHarsh) {
       const downgraded = player.starterStatus === "Starter" ? "Rotation" : player.starterStatus === "Rotation" ? "Bench" : player.starterStatus;
       p.starterStatus = downgraded;
-      p.contractSalary = contractMonthlySalary({ leagueId: player.league, role: downgraded, club, semiPro: !!player.semiProClub });
+      p.contractSalary = contractMonthlySalary({ leagueId: player.league, role: downgraded, club, semiPro: !!player.semiProClub, mvpCount: player.mvpCount, dpoyCount: player.dpoyCount });
       p.relationships.coach = clamp(p.relationships.coach - 10);
       setBanner(`"Asking to leave? Fine — you can ask for minutes too." ${club.name} heard you, and isn't pretending otherwise.`);
     } else {
@@ -10901,7 +10938,7 @@ export default function App() {
           p.starterStatus = newRole;
           if (p.clubId && p.league) {
             const club = getClub(p.clubId);
-            p.contractSalary = contractMonthlySalary({ leagueId: p.league, role: newRole, club, semiPro: !!p.semiProClub });
+            p.contractSalary = contractMonthlySalary({ leagueId: p.league, role: newRole, club, semiPro: !!p.semiProClub, mvpCount: p.mvpCount, dpoyCount: p.dpoyCount });
           }
         }
         p.relationships.coach = clamp(p.relationships.coach + 2);
@@ -11599,6 +11636,11 @@ export default function App() {
             : rollLeagueAwards(leagueStats, { leagueId: "u23", role });
           if (leagueAwards.includes("mvp")) {
             p.achievements = Array.from(new Set([...p.achievements, "uba_mvp"]));
+            p.mvpCount = (p.mvpCount || 0) + 1;
+          }
+          if (leagueAwards.includes("dpoy")) {
+            p.achievements = Array.from(new Set([...p.achievements, "dleague_dpoy"]));
+            p.dpoyCount = (p.dpoyCount || 0) + 1;
           }
           if (leagueAwards.length) {
             p.popularity = clamp(p.popularity + leagueAwards.length * 3 + (leagueAwards.includes("mvp") ? 8 : 0));
@@ -12045,7 +12087,7 @@ export default function App() {
 
       // If the league or role changed, refresh the locked salary to match the new band.
       if (leagueChanged && p.contractSalary > 0) {
-        p.contractSalary = contractMonthlySalary({ leagueId: p.league, role: p.starterStatus, club, semiPro: atSemiPro });
+        p.contractSalary = contractMonthlySalary({ leagueId: p.league, role: p.starterStatus, club, semiPro: atSemiPro, mvpCount: p.mvpCount, dpoyCount: p.dpoyCount });
       }
     }
 
