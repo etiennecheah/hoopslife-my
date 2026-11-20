@@ -5033,70 +5033,6 @@ h1.f-display,h2.f-display,.f-display.text-xl,.f-display.text-2xl,.f-display.text
 /* =====================================================================
    SHELL — sidebar on desktop, rail on tablet/landscape, bottom bar on phone
 ===================================================================== */
-function Shell({ show, screen, player, onNav, children }) {
-  const lay = useLayoutMode();
-  const [rotSeen, setRotSeen] = useState(() => { try { return window.localStorage.getItem("hl_rot_seen") === "1"; } catch (e) { return true; } });
-  if (!show || !player) return <div data-l={lay} className="rd-root">{children}</div>;
-  const free = RD_FREE.has(screen);
-  const adult = player.age >= 18;
-  const items = [["hub", "Hub", true], ["league", "League", true], ["pathway", "Pathway", true], ["lifestyle_spending", "Lifestyle", adult], ["career_highlights", "Highlights", adult]].filter(i => i[2]);
-  const ovr = computeOverall(player.stats, player.position);
-  const look = playerLook(player);
-  const crestKey = logoKeyFor(player.teamName);
-  const flag = !crestKey && stateFlagFor(player.teamName);
-  const dismissRot = () => { setRotSeen(true); try { window.localStorage.setItem("hl_rot_seen", "1"); } catch (e) { /* ignore */ } };
-  const nav = (cls) => items.map(([id, label]) => (
-    <button key={id} className={"rd-nav " + (screen === id ? "on " : "") + cls} disabled={!free} onClick={() => free && onNav(id)} title={free ? label : "Finish this step first"}>
-      {RD_ICONS[id](cls === "b" ? 18 : 17)}<span className="rd-wide">{label}</span>
-    </button>
-  ));
-  return (
-    <div data-l={lay} className="rd-root rd-shell">
-      <aside className="rd-side">
-        <div className="rd-wide" style={{ marginBottom: 18 }}>
-          <div className="bc" style={{ fontSize: 22, fontWeight: 800, color: C.chalk, lineHeight: 1 }}>HOOPS LIFE <span style={{ color: C.amberBright }}>MY</span></div>
-          <div className="rd-k" style={{ marginTop: 4, fontSize: 9 }}>The Climb · Career Sim</div>
-        </div>
-        <div className="rd-card" style={{ padding: 10, marginBottom: 14, width: "100%", display: "flex", alignItems: "center", gap: 10, background: C.ink3 }}>
-          <div style={{ width: 44, height: 46, borderRadius: 10, overflow: "hidden", background: "#1d2230", flexShrink: 0 }}>
-            <Sprite look={look} style={{ width: 44, height: 46 }} />
-          </div>
-          <div className="rd-wide" style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ font: "700 13px Inter,sans-serif", color: C.chalk, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{player.name}</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
-              {crestKey ? <LogoPlate k={crestKey} size={16} /> : flag ? <LogoPlate src={flag} size={16} round={false} /> : null}
-              <span style={{ font: "500 11px Inter,sans-serif", color: C.chalkDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>Age {player.age} · {player.position}</span>
-            </div>
-          </div>
-          <div className="rd-wide bc" style={{ fontSize: 24, fontWeight: 800, color: C.amberBright }}>{ovr}</div>
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 4, width: "100%" }}>{nav("s")}</div>
-        {!free && <div className="rd-wide rd-k" style={{ marginTop: 14, fontSize: 9, lineHeight: 1.5, letterSpacing: ".08em" }}>Finish this step to use the menu</div>}
-        <div className="rd-wide" style={{ marginTop: "auto", display: "flex", gap: 8, flexWrap: "wrap", opacity: .85 }}>
-          {["c_mbl", "c_maba", "c_u17", "c_harimau"].map(k => <LogoPlate key={k} k={k} size={28} />)}
-        </div>
-      </aside>
-      <div className="rd-top">
-        <div style={{ width: 30, height: 32, borderRadius: 8, overflow: "hidden", background: "#1d2230", flexShrink: 0 }}><Sprite look={look} style={{ width: 30, height: 32 }} /></div>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ font: "700 13px Inter,sans-serif", color: C.chalk, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{player.name}</div>
-          <div style={{ font: "500 10.5px Inter,sans-serif", color: C.chalkDim }}>Age {player.age} · {player.position} · {player.teamName}</div>
-        </div>
-        <div className="bc" style={{ fontSize: 22, fontWeight: 800, color: C.amberBright }}>{ovr}</div>
-      </div>
-      <main className="rd-main">{children}</main>
-      <nav className="rd-bottom">{nav("b")}</nav>
-      {lay === "phone" && !rotSeen && (
-        <div className="rd-rotate" role="status">
-          <RotateCcw size={18} color={C.amberBright} />
-          <span style={{ flex: 1 }}>Turn your phone sideways for the wide layout.</span>
-          <button className="rd-ghost" style={{ padding: "6px 12px" }} onClick={dismissRot}>OK</button>
-        </div>
-      )}
-    </div>
-  );
-}
-
 /* =====================================================================
    STAGE — the 8-bit scene beside each step of the career
 ===================================================================== */
@@ -5127,7 +5063,7 @@ const STAGE_SCREENS = {
 function Stage({ screen, player, event, children }) {
   const def = STAGE_SCREENS[screen] || (screen === "event" && event ? [EVENT_SCENE_PX[event.scene] || "street", event.title] : null);
   const o = useMemo(() => player ? { me: playerLook(player), kit: kitForPlayer(player), mates: teamMates(player), home: player.homeTier, ride: player.vehicleTier } : {}, [player]);
-  if (!def || !player) return children;
+  if (!def || !player || screen !== "buzzer_beater") return children;
   const [scene, label] = def;
   const crestKey = logoKeyFor(player.teamName);
   const ovr = computeOverall(player.stats, player.position);
@@ -5486,116 +5422,6 @@ const MBL_TEAMS_FULL = (() => {
 })();
 const LEAD_CATS = [["ppg", "Points"], ["rpg", "Rebounds"], ["apg", "Assists"], ["spg", "Steals"], ["bpg", "Blocks"], ["eff", "Efficiency"]];
 function teamCodeByName(n) { return Object.keys(MBL_TEAMS_FULL).find(k => MBL_TEAMS_FULL[k].name === n || n.indexOf(MBL_TEAMS_FULL[k].name.split(" ")[0]) === 0); }
-function LeagueScreen({ player, onBack }) {
-  const lay = useLayoutMode();
-  const [tab, setTab] = useState("table");
-  const [cat, setCat] = useState("ppg");
-  const myClub = player && player.clubId;
-  const stand = MBL_DATA.stand.map(r => ({ code: teamCodeByName(r[0]), n: r[0], gp: r[1], w: r[2], l: r[3], pf: r[4], pa: r[5] }));
-  const leaders = MBL_DATA.players.filter(p => p.g >= 2 && p[cat] != null).sort((a, b) => b[cat] - a[cat]).slice(0, 10);
-  const done = MBL_DATA.games.filter(g => g.st === "COMPLETE").slice(-8).reverse();
-  const next = MBL_DATA.games.filter(g => g.st !== "COMPLETE").slice(0, 8);
-  const TeamCell = ({ code, name }) => {
-    const club = code && MBL_CODE_TO_CLUB[code];
-    return <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>{club && LOGO[club] ? <LogoPlate k={club} size={24} /> : null}<span>{name || (MBL_TEAMS_FULL[code] && MBL_TEAMS_FULL[code].name) || code}</span></span>;
-  };
-  const top = leaders[0];
-  return (
-    <div style={{ padding: lay === "phone" ? "18px 14px 30px" : "28px 28px 40px", maxWidth: 1180, margin: "0 auto" }}>
-      <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 14, flexWrap: "wrap", marginBottom: 16 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <LogoPlate k="c_mbl" size={52} />
-          <div>
-            <div className="rd-k">Real world · HoopStatsMY</div>
-            <div className="bc" style={{ fontSize: 36, fontWeight: 800, color: C.chalk, lineHeight: 1 }}>Malaysia Basketball League 2026</div>
-          </div>
-        </div>
-        <div style={{ display: "flex", gap: 6 }}>
-          {[["table", "Standings"], ["leaders", "Leaders"], ["games", "Results"]].map(([id, l]) => <button key={id} className={"rd-tab " + (tab === id ? "on" : "")} onClick={() => setTab(id)}>{l}</button>)}
-        </div>
-      </div>
-      {tab === "table" && (
-        <div className="rd-card rd-up" style={{ overflowX: "auto" }}>
-          <table className="rd-table">
-            <thead><tr><th>Team</th><th>GP</th><th>W</th><th>L</th><th className="rd-hide-phone">PF</th><th className="rd-hide-phone">PA</th><th>Diff</th></tr></thead>
-            <tbody>
-              {stand.map((r, i) => (
-                <tr key={r.n} className={r.code && MBL_CODE_TO_CLUB[r.code] === myClub ? "mine" : ""}>
-                  <td><span className="tn"><span style={{ color: C.chalkDim, width: 18, display: "inline-block" }}>{i + 1}</span><TeamCell code={r.code} name={r.n} /></span></td>
-                  <td>{r.gp}</td><td style={{ fontWeight: 700 }}>{r.w}</td><td>{r.l}</td><td className="rd-hide-phone">{r.pf}</td><td className="rd-hide-phone">{r.pa}</td>
-                  <td style={{ color: r.pf - r.pa > 0 ? "#34d399" : r.pf - r.pa < 0 ? "#f87171" : C.chalkDim }}>{r.pf - r.pa > 0 ? "+" : ""}{r.pf - r.pa}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div style={{ padding: "10px 12px", font: "500 11px Inter,sans-serif", color: C.chalkDim }}>Your simulated career runs in its own season. This is the real league for reference.</div>
-        </div>
-      )}
-      {tab === "leaders" && (
-        <div className="rd-up" style={{ display: "grid", gridTemplateColumns: lay === "phone" ? "1fr" : "minmax(260px,320px) minmax(0,1fr)", gap: 16 }}>
-          {top && (
-            <div className="rd-card" style={{ overflow: "hidden", background: "#07080a" }}>
-              <div style={{ position: "relative", aspectRatio: "4/5", background: "radial-gradient(70% 60% at 50% 40%, #2a1a0e, #07080a)" }}>
-                <Sprite look={realLook(top.id, top.t)} full ball style={{ position: "absolute", left: "50%", bottom: "6%", transform: "translateX(-50%)", width: "62%", height: "auto" }} />
-                <div style={{ position: "absolute", left: 14, top: 14 }}>
-                  <div className="p8" style={{ fontSize: 8, color: "#FDBA74" }}>LEAGUE LEADER</div>
-                  <div className="bc" style={{ fontSize: 26, fontWeight: 800, color: "#fff", marginTop: 6, lineHeight: 1 }}>{top.n}</div>
-                </div>
-                <div style={{ position: "absolute", right: 14, top: 14 }}>{MBL_CODE_TO_CLUB[top.t] && <LogoPlate k={MBL_CODE_TO_CLUB[top.t]} size={36} />}</div>
-                <div style={{ position: "absolute", right: 14, bottom: 14, textAlign: "right" }}>
-                  <div className="bc" style={{ fontSize: 44, fontWeight: 800, color: C.amberBright, lineHeight: 1 }}>{top[cat]}</div>
-                  <div className="rd-k">{LEAD_CATS.find(c => c[0] === cat)[1]} per game</div>
-                </div>
-              </div>
-            </div>
-          )}
-          <div className="rd-card" style={{ padding: 12 }}>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
-              {LEAD_CATS.map(([id, l]) => <button key={id} className={"rd-tab " + (cat === id ? "on" : "")} onClick={() => setCat(id)}>{l}</button>)}
-            </div>
-            {leaders.map((p, i) => (
-              <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 4px", borderBottom: "1px solid #1d1d1d" }}>
-                <span className="bc" style={{ width: 20, color: C.chalkDim, fontSize: 16, fontWeight: 700 }}>{i + 1}</span>
-                <span style={{ width: 34, height: 36, borderRadius: 8, background: "#1d2230", overflow: "hidden", flexShrink: 0 }}><Sprite look={realLook(p.id, p.t)} ph={i * 3} style={{ width: 34, height: 36 }} /></span>
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ display: "block", font: "600 13px Inter,sans-serif", color: C.chalk, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.n}</span>
-                  <span style={{ font: "500 11px Inter,sans-serif", color: C.chalkDim }}>#{p.no} · {p.pos} · {p.nat}</span>
-                </span>
-                {MBL_CODE_TO_CLUB[p.t] && <LogoPlate k={MBL_CODE_TO_CLUB[p.t]} size={22} />}
-                <span className="bc" style={{ width: 52, textAlign: "right", fontSize: 20, fontWeight: 800, color: i === 0 ? C.amberBright : C.chalk }}>{p[cat]}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      {tab === "games" && (
-        <div className="rd-up" style={{ display: "grid", gridTemplateColumns: lay === "phone" ? "1fr" : "1fr 1fr", gap: 16 }}>
-          {[["Latest results", done], ["Coming up", next]].map(([title, list]) => (
-            <div key={title} className="rd-card" style={{ padding: 12 }}>
-              <div className="rd-k" style={{ marginBottom: 8 }}>{title}</div>
-              {!list.length && <p style={{ font: "400 12px Inter,sans-serif", color: C.chalkDim }}>Nothing scheduled.</p>}
-              {list.map(g => {
-                const hw = g.st === "COMPLETE" && +g.hs > +g.as, aw = g.st === "COMPLETE" && +g.as > +g.hs;
-                return (
-                  <div key={g.id} style={{ padding: "9px 2px", borderBottom: "1px solid #1d1d1d" }}>
-                    <div style={{ font: "500 10.5px Inter,sans-serif", color: C.chalkDim, marginBottom: 6 }}>{String(g.d).replace(/, \d{4},?/, " ·")} · {g.v}</div>
-                    {[[g.h, g.hs, hw], [g.a, g.as, aw]].map(([code, s, win]) => (
-                      <div key={code} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "2px 0", font: `${win ? 700 : 500} 13px Inter,sans-serif`, color: win || g.st !== "COMPLETE" ? C.chalk : C.chalkDim }}>
-                        <TeamCell code={code} /><span className="bc" style={{ fontSize: 18, fontWeight: 800 }}>{g.st === "COMPLETE" ? s : ""}</span>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })}
-            </div>
-          ))}
-        </div>
-      )}
-      <button className="rd-ghost" style={{ marginTop: 18 }} onClick={onBack}>← Back to Hub</button>
-    </div>
-  );
-}
-
 /* =====================================================================
    PATHWAY — every route from state trials to the pros, and where you are
 ===================================================================== */
@@ -7115,7 +6941,7 @@ function MdCompScreen({ player, comp, onPreGame, onSim, onSimBig, onSimAll, onFi
   const ko = comp.type === "league" ? comp.po : comp.ko;
   return (
     <div style={{ padding: lay === "phone" ? "16px 12px 28px" : "26px 28px 40px", maxWidth: 1180, margin: "0 auto" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 16, flexWrap: "wrap", paddingRight: lay === "phone" ? 0 : 52 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 16, flexWrap: "wrap" }}>
         {lbl && LOGO[lbl] ? <LogoPlate k={lbl} size={50} /> : <MdBadge team={meTeam} size={50} />}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className="rd-k">{comp.year} · {meTeam.name}</div>
@@ -7437,7 +7263,7 @@ function MdLiveScreen({ player, comp, game, onClutch, onDone }) {
   const pick = (id) => { const res = onClutch(id); setClutchBang(res); setTimeout(() => setClutchBang(null), 1600); };
   return (
     <div style={{ padding: lay === "phone" ? "12px 10px 24px" : "20px 24px 32px", maxWidth: 1180, margin: "0 auto" }}>
-      <div className="rd-card" style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", gap: 10, marginRight: lay === "phone" ? 0 : 48, padding: lay === "phone" ? 10 : 14, background: `linear-gradient(90deg, ${cols[0]}33, ${C.ink2} 40%, ${C.ink2} 60%, ${cols[1]}33)` }}>
+      <div className="rd-card" style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", gap: 10, padding: lay === "phone" ? 10 : 14, background: `linear-gradient(90deg, ${cols[0]}33, ${C.ink2} 40%, ${C.ink2} 60%, ${cols[1]}33)` }}>
         {[0, 1].map(s => (
           <div key={s} style={{ display: "flex", alignItems: "center", gap: 10, justifyContent: s ? "flex-end" : "flex-start", order: s ? 3 : 1, flexDirection: s ? "row-reverse" : "row" }}>
             <MdBadge team={T[s]} size={lay === "phone" ? 34 : 48} />
@@ -7593,6 +7419,2386 @@ function MdBoxScreen({ player, comp, gi, game, onContinue }) {
     </div>
   );
 }
+
+/* eslint-disable */
+/* =====================================================================
+   PROTOTYPE PAGES — hub, events and results in the approved prototype's
+   layout (.pr styles are the prototype's own, scoped to this app).
+===================================================================== */
+const PR_IC={
+home:'<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
+ball:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3v18M5.6 5.6c3.5 3 3.5 9.8 0 12.8M18.4 5.6c-3.5 3-3.5 9.8 0 12.8"/>',
+table:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M3 14h18M9 9v11"/>',
+route:'<circle cx="6" cy="19" r="2"/><circle cx="18" cy="5" r="2"/><path d="M8 19h7a3.5 3.5 0 0 0 0-7H9a3.5 3.5 0 0 1 0-7h7"/>',
+trophy:'<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a4 4 0 0 1-4 4M7 5H4v2a4 4 0 0 0 4 4"/>',
+star:'<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>',
+crown:'<path d="M3 8l4 4 5-7 5 7 4-4-2 11H5z"/>',
+sound:'<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9a4 4 0 0 1 0 6M19.5 6.5a8 8 0 0 1 0 11"/>',
+right:'<path d="M9 5l7 7-7 7"/>',left:'<path d="M15 5l-7 7 7 7"/>',
+play:'<path d="M7 4l13 8-13 8z"/>',pause:'<path d="M7 4h4v16H7zM14 4h4v16h-4z"/>',
+check:'<path d="M4 12l5 5L20 6"/>',x:'<path d="M6 6l12 12M18 6L6 18"/>',
+bolt:'<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',target:'<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/>',
+pass:'<path d="M4 17c4-8 12-8 16 0"/><path d="M16 13l4 4-5 1"/><circle cx="4" cy="17" r="1.5"/>',
+bow:'<path d="M5 19C9 15 9 9 5 5M5 19l14-14M14 5h5v5"/>',
+shield:'<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/>',
+swap:'<path d="M4 8h13l-3-3M20 16H7l3 3"/>',
+cal:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+pin:'<path d="M12 21s7-6.3 7-12a7 7 0 0 0-14 0c0 5.7 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/>',
+clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+user:'<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+grid:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+phone:'<rect x="7" y="2" width="10" height="20" rx="2.5"/><path d="M11 18h2"/>',
+replay:'<path d="M4 12a8 8 0 1 0 2.3-5.6M4 4v5h5"/>',
+ffwd:'<path d="M3 5l9 7-9 7zM12 5l9 7-9 7z"/>',
+energy:'<path d="M7 3h10l-2 7h4L9 21l2-8H7z"/>',
+heart:'<path d="M12 20s-8-4.6-8-10.2A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 8 2.8C20 15.4 12 20 12 20z"/>',
+cash:'<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="3"/>',
+pen:'<path d="M4 20l4-1 11-11-3-3L5 16z"/>',
+rebound:'<path d="M12 3v4M5 12a7 7 0 0 0 14 0M8 7l4-4 4 4"/>',
+iq:'<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.8.8 1 1.5 1 2.5h6c0-1 .2-1.7 1-2.5A6 6 0 0 0 12 3z"/>',
+run:'<circle cx="15" cy="4.5" r="2"/><path d="M9 21l2.5-5L9 13l3-5 4 3 3 1M11.5 16L15 18l1 3"/>',
+fire:'<path d="M12 3c1 4 5 5 5 10a5 5 0 0 1-10 0c0-2.5 1.5-4 2.5-5 .5 2 1.5 3 2.5 3 0-3-1-5 0-8z"/>',
+hand:'<path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V11M11 10V4a1.5 1.5 0 0 1 3 0v7M14 10.5V6a1.5 1.5 0 0 1 3 0v8a7 7 0 0 1-7 7 6 6 0 0 1-5-3l-2.5-4.5a1.5 1.5 0 0 1 2.5-1.6L8 14"/>',
+flag:'<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>',
+mic:'<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
+eye:'<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+menu:'<path d="M4 6h16M4 12h16M4 18h16"/>',
+rot:'<rect x="6" y="3" width="12" height="18" rx="2.5"/><path d="M10.5 18h3"/>',balance:'<path d="M12 3v18M5 21h14M4 9l4-4 4 4M12 5l4 4 4-4M2 13a2 2 0 0 0 4 0L4 9zM18 13a2 2 0 0 0 4 0l-2-4z"/>'};
+function Ic({ n, sw = 1.9, style }) {
+  return <svg className="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={style} dangerouslySetInnerHTML={{ __html: PR_IC[n] || "" }} />;
+}
+const PR_AIC = { shooting: "target", playmaking: "pass", defense: "shield", rebounding: "rebound", athleticism: "run", iq: "iq" };
+const PR_STYLE_IC = { slasher: "bolt", "3d": "target", playmaker: "pass", sharpshooter: "bow", anchor: "shield", twoway: "swap" };
+const PR_STYLE_LBL = { "3d": "3&D", anchor: "Post Anchor", twoway: "Two-Way" };
+const prReduced = () => typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const prSign = (v) => (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v);
+const prLc = (s) => String(s || "").charAt(0).toLowerCase() + String(s || "").slice(1);
+
+function PrLogo({ k, src, s = 44, round = false, cls = "", title }) {
+  const url = src || (k && LOGO[k]);
+  if (!url) return null;
+  const light = k && LOGO_LIGHT.has(k);
+  return <span className={"lg " + (light ? "lt " : "") + (round ? "rd " : "") + cls} style={{ "--s": s + "px" }} title={title}><img src={url} alt="" draggable={false} /></span>;
+}
+function PrFlag({ state, code, w }) {
+  const src = state ? (stateFlagFor(state) || (FLAG_IMAGES && FLAG_IMAGES[state])) : code ? (MD_FLAGS[code] || (FLAG_IMAGES && FLAG_IMAGES[code])) : null;
+  if (!src) return null;
+  return <img className="flag" src={src} alt="" style={w ? { width: w, height: w / 2 } : undefined} />;
+}
+/* A team's badge in the prototype style: club logo, flag, or initials. */
+function PrTeamLogo({ team, s = 32 }) {
+  if (!team) return null;
+  const k = team.logo && LOGO[team.logo] ? team.logo : logoKeyFor(team.name);
+  if (k) return <PrLogo k={k} s={s} title={team.name} />;
+  const flag = team.flag ? ((FLAG_IMAGES && FLAG_IMAGES[team.flag]) || MD_FLAGS[team.flag]) : stateFlagFor(team.name);
+  if (flag) return <span className="lg" style={{ "--s": s + "px" }} title={team.name}><img src={flag} alt="" style={{ width: "86%", height: "58%", objectFit: "cover", borderRadius: 3 }} /></span>;
+  return <span className="lg" style={{ "--s": s + "px" }} title={team.name}><span className="ini">{(team.short || team.name || "?").slice(0, 3).toUpperCase()}</span></span>;
+}
+function Tg({ cls = "", children, style, onClick, disabled }) {
+  if (onClick) return <button className={"tg " + cls} style={style} onClick={onClick} disabled={disabled}>{children}</button>;
+  return <span className={"tg " + cls} style={style}>{children}</span>;
+}
+function PrSrc({ color, children }) { return <div className="src"><i style={color ? { background: color } : undefined} />{children}</div>; }
+function PrHead({ lbl, title, desc, right }) {
+  return (
+    <div className="ev-head" data-a="">
+      <div>
+        {lbl && <div className="lbl" style={{ color: "var(--or2)", display: "flex", alignItems: "center", gap: 8 }}>{lbl}</div>}
+        <h2>{title}</h2>
+        {desc && <p style={{ color: "var(--mu)", margin: "6px 0 0", maxWidth: "80ch" }}>{desc}</p>}
+      </div>
+      {right}
+    </div>
+  );
+}
+function PrPage({ children }) { return <div className="wrap">{children}</div>; }
+function PrSline({ items }) {
+  return <div className="sline">{items.filter(Boolean).map(([l, v], i) => <div key={l + i}><b className={"num" + (String(v).length > 5 ? " tx" : "")}>{v}</b><small>{l}</small></div>)}</div>;
+}
+const prLine = (s, extra) => s ? [["PPG", s.ppg], ["RPG", s.rpg], ["APG", s.apg], ["SPG", s.spg], ["BPG", s.bpg], ["FG%", s.fgPct], ["3P%", s.threePct], ...(extra || [])].filter(x => x[1] != null) : [];
+function PrMedal({ kind = "silver", icon = "trophy", flag }) {
+  const bg = kind === "red" ? { background: "linear-gradient(160deg,#ff6b6b,#a30d0d)" } : kind === "blue" ? { background: "linear-gradient(160deg,#9fb7ff,#3a5bd0)" } : kind === "dim" ? { background: "radial-gradient(circle at 35% 30%,#4a505c,#272b33 60%,#16181d)", color: "#a3a9b4" } : undefined;
+  return <div className={"medal2 pop" + (kind === "gold" ? " gold" : "")} style={bg}>{flag ? <PrFlag code={flag} /> : <Ic n={icon} sw={1.8} />}</div>;
+}
+function PrResB({ tc, medal, lbl, title, text }) {
+  return (
+    <div className="resb" data-a="" style={{ "--tc": tc || "#ff7a1a" }}>
+      {medal}
+      <div>
+        <div className="lbl" style={{ color: "var(--or2)" }}>{lbl}</div>
+        <h2>{title}</h2>
+        {text && <p>{text}</p>}
+      </div>
+    </div>
+  );
+}
+function PrGains({ gains }) {
+  const ks = STAT_LIST.filter(k => gains && gains[k]);
+  if (!ks.length) return null;
+  return <div className="gains">{ks.map((k, i) => <div key={k} className="pop" style={{ "--i": i }}><span>{STAT_META[k].label}</span><b>+{gains[k]}</b></div>)}</div>;
+}
+function PrNext({ children = "Continue", onClick, disabled }) {
+  return <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }} data-a=""><button className="cta" onClick={onClick} disabled={disabled}>{children} <Ic n="right" /></button></div>;
+}
+/* "What this result changed": before → after, when the start of the result is known. */
+function PrImpact({ player, before }) {
+  if (!before || !player) return null;
+  const ovr = computeOverall(player.stats, player.position);
+  const rows = [["Overall", before.ovr, ovr], ["Popularity", before.popularity, player.popularity], ["Morale", before.morale, player.morale], ["Coach trust", before.coach, player.relationships.coach]]
+    .filter(r => r[1] != null && r[2] != null);
+  if (!rows.some(r => r[1] !== r[2])) return null;
+  return (
+    <section className="pn c12" data-a="">
+      <h3><Ic n="bolt" /> What this result changed</h3>
+      <div className="imp">{rows.map(r => (
+        <div key={r[0]}><small className="lbl">{r[0]}</small><div className="bf"><span>{r[1]}</span><Ic n="right" /><b>{r[2]}</b></div><div className="bar"><i style={{ "--w": Math.max(2, Math.min(100, r[2])) + "%" }} /></div></div>
+      ))}</div>
+    </section>
+  );
+}
+
+/* ---------- where you are, in words ---------- */
+function prStateTeam(p) { return shortHome(p.hometown || ""); }
+function prCrumb(p) {
+  if (!p) return "";
+  if (p.age < 18 || (p.stage === "youth")) return `Age ${p.age} · Season ${p.seasonNum || 1} · ${prStateTeam(p)} state programme`;
+  if (p.hblSeasonPending) return `Age ${p.age} · Taiwan HBL · ${p.hblTeamName || "High school"}`;
+  if (p.uba) return `Age ${p.age} · Taiwan UBA · ${p.ubaTeamName || "University"}`;
+  if (p.abroad) return `Age ${p.age} · ${p.teamName || "Overseas"}`;
+  const lg = p.league && LEAGUE[p.league] ? LEAGUE[p.league].short : null;
+  return `Season ${p.year || ""}${lg ? " · " + lg : ""}${p.teamName ? " · " + p.teamName : ""}`;
+}
+const PR_TITLES = {
+  offseason_plan: "Off-season", training: "Training", creation_build: "Build your player", event: "Career event", result: "Season result",
+  u15_result: "State selection", u15_tournament: "Tournament result", u15_shortlist: "Youth shortlist", u15_bootcamp_result: "Bukit Jalil",
+  age16_u16_result: "Age 16", age16_u17_result: "Age 16", a17_result: "Age 17", a17_shortlist: "U18 shortlist", a17_bootcamp_result: "Bukit Jalil",
+  hbl_offers: "Taiwan calling", hbl_season: "Taiwan HBL", uba_offers: "Turning pro", age18_result: "Malaysia U18", mssm_result: "MSSM",
+  national_tryout: "National team", national_result: "Harimau Malaysia", study_decision: "Books or ball", clutch_moment: "Clutch moment",
+  buzzer_beater: "Buzzer beater", midseason_checkpoint: "Midseason", overseas_offers: "Overseas offers", club_offers: "Club offers",
+  negotiate_offer: "Negotiation", trade_request: "Trade request", lifestyle_spending: "Lifestyle", career_highlights: "Highlights",
+  injury_recovery: "Recovery", season_digest: "Season digest", investments: "Investments", league: "League", pathway: "Pathway",
+  choose_identity: "Your game", name_rival: "Your rival", comp: "Matchday", md_pregame: "Matchday", md_live: "Live", md_box: "Box score",
+};
+function prTitle(screen, p) {
+  if (screen === "hub") return p && (p.age < 18 || p.stage === "youth") ? "Youth hub" : "Career hub";
+  if (screen === "club_offers" && p && !p.hadProSeason && p.age <= 19 && !p.clubId) return "Turning pro";
+  if ((screen === "comp" || screen === "md_pregame") && p && p.mdComp) return p.mdComp.label || "Matchday";
+  return PR_TITLES[screen] || "Hoops Life";
+}
+function prChips(p) {
+  if (!p) return [];
+  const ovr = computeOverall(p.stats, p.position);
+  const out = [];
+  if (p.age < 18) {
+    const tier = getStateTier(p.hometown);
+    out.push({ key: "tier", node: <><PrFlag state={p.hometown} w={22} /><b>{TIER_META[tier].name}</b></> });
+    out.push({ key: "ovr", node: <>OVR <b>{ovr}</b></>, hide: "s" });
+    out.push({ key: "cash", node: <><Ic n="cash" />No salary under 18</>, hide: "s" });
+  } else {
+    out.push({ key: "cal", node: <><Ic n="cal" /><b>{p.year}</b></>, hide: "s" });
+    out.push({ key: "en", node: <><Ic n="energy" />Energy <b>{Math.max(0, 100 - (p.fatigue || 0))}</b></>, hide: "s" });
+    out.push({ key: "cash", node: <><Ic n="cash" /><b>{p.contractSalary > 0 ? rm(p.contractSalary) : rm(p.money || 0)}</b>{p.contractSalary > 0 ? " /mo" : ""}</> });
+  }
+  return out;
+}
+function PrTop({ screen, player }) {
+  return (
+    <header className="top">
+      <div style={{ minWidth: 0 }}>
+        <h1>{prTitle(screen, player)}</h1>
+        <div className="crumb hide-p" style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{prCrumb(player)}</div>
+      </div>
+      <span className="grow" />
+      {prChips(player).map(c => <span key={c.key} className={"chip" + (c.hide ? " hide-s hide-l" : "")}>{c.node}</span>)}
+      <span style={{ width: 40, flex: "none" }} aria-hidden="true" />
+    </header>
+  );
+}
+
+/* ---------- a finished competition, kept small for the result pages ---------- */
+function prRecap(comp, p) {
+  try {
+    const me = comp.myTeam;
+    const T = (id) => ({ id, name: (comp.teams[id] || {}).name || id, short: (comp.teams[id] || {}).short, logo: (comp.teams[id] || {}).logo, flag: (comp.teams[id] || {}).flag });
+    const teams = {};
+    const add = (id) => { if (id && !teams[id]) teams[id] = T(id); };
+    const mine = comp.games.filter(g => g.res && (g.h === me || g.a === me));
+    const myGames = mine.map(g => {
+      const home = g.h === me, opp = home ? g.a : g.h;
+      add(opp);
+      const us = g.res.s[home ? 0 : 1], them = g.res.s[home ? 1 : 0];
+      const my = g.res.my && !g.res.my.dnp ? { pts: g.res.my.pts, reb: g.res.my.reb, ast: g.res.my.ast } : null;
+      return { ph: g.ph, opp, us, them, won: us > them, my };
+    });
+    add(me);
+    let group = null;
+    if (comp.groups) {
+      const g = comp.groups.find(x => x.teams.includes(me));
+      if (g) { g.teams.forEach(add); group = { id: g.id, rows: mdTable(comp, g.teams, ["grp"]).map(r => ({ id: r.id, w: r.w, l: r.l, d: r.pf - r.pa })) }; }
+    }
+    let qual = null;
+    if (comp.format === "fiba") {
+      const ids = Array.from(new Set(comp.games.filter(g => g.ph === "qual").flatMap(g => [g.h, g.a])));
+      if (ids.length) { ids.forEach(add); qual = mdTable(comp, ids, ["qual"]).map(r => ({ id: r.id, w: r.w, l: r.l, d: r.pf - r.pa })); }
+    }
+    const ko = (comp.ko || []).map(s => {
+      add(s.a); add(s.b);
+      let sa = s.wa, sb = s.wb;
+      if (s.games && s.games.length === 1) { const g = comp.games[s.games[0]]; if (g && g.res) { sa = g.h === s.a ? g.res.s[0] : g.res.s[1]; sb = g.h === s.a ? g.res.s[1] : g.res.s[0]; } }
+      return { round: s.round, a: s.a, b: s.b, sa, sb, bo: s.bo, winner: s.winner };
+    });
+    add(comp.champion);
+    const placing = comp.type === "league" ? null : mdMyPlacing(comp);
+    const line = mdLine(comp.stats[MD_ME]);
+    return { kind: comp.kind, type: comp.type, format: comp.format, label: comp.label, year: comp.year, logo: comp.logo, myTeam: me, champion: comp.champion || null, teams, myGames, group, qual, ko, placing, line };
+  } catch (e) { return null; }
+}
+/* "Selangor went 3–1 in the group, beat Perak and Kuala Lumpur, then lost the final to Johor 58–55." */
+function prStory(r) {
+  if (!r) return null;
+  const nm = (id) => (r.teams[id] || {}).name || id;
+  const grp = r.myGames.filter(g => g.ph === "grp" || g.ph === "qual");
+  const ko = r.myGames.filter(g => g.ph !== "grp" && g.ph !== "qual" && g.ph !== "rs");
+  const parts = [];
+  if (grp.length) { const w = grp.filter(g => g.won).length; parts.push(`went ${w}–${grp.length - w} in the ${grp[0].ph === "qual" ? "qualifiers" : "group"}`); }
+  const wins = ko.filter(g => g.won), last = ko[ko.length - 1];
+  const RD = { qf: "quarter-final", sf: "semi-final", f: "final", "3rd": "third-place game", xq: "crossover" };
+  if (wins.length && (!last || !last.won || wins.length > 1)) {
+    const beat = (last && last.won ? wins.slice(0, -1) : wins).map(g => nm(g.opp));
+    if (beat.length) parts.push(`beat ${beat.join(" and ")}`);
+  }
+  if (last) parts.push(last.won ? `${parts.length ? "then " : ""}won the ${RD[last.ph] || "decider"} against ${nm(last.opp)} ${last.us}–${last.them}` : `${parts.length ? "then " : ""}lost the ${RD[last.ph] || "decider"} to ${nm(last.opp)} ${last.them}–${last.us}`);
+  if (!parts.length) return null;
+  const who = nm(r.myTeam);
+  const s = parts.length > 1 ? parts.slice(0, -1).join(", ") + ", " + parts[parts.length - 1] : parts[0];
+  return `${who} ${s}.`;
+}
+function PrMyGames({ recap }) {
+  if (!recap || !recap.myGames.length) return null;
+  const nm = (id) => recap.teams[id] || { name: id };
+  return (
+    <section className="pn c12" data-a="">
+      <h3><Ic n="ball" /> Your games<small>{recap.myGames.length} game{recap.myGames.length === 1 ? "" : "s"}</small></h3>
+      <div className="glog">{recap.myGames.map((g, i) => (
+        <div key={i} className="gl">
+          <small>{MD_PHASE[g.ph] || "Game"}</small>
+          <div className="tm5"><PrTeamLogo team={nm(g.opp)} s={22} /><span>vs {nm(g.opp).name}</span></div>
+          <b className={g.won ? "up" : "dn"}>{g.won ? "W" : "L"} {g.us}–{g.them}</b>
+          {g.my ? <span className="ln4"><b>{g.my.pts}</b> pts <b>{g.my.reb}</b> reb <b>{g.my.ast}</b> ast</span> : <span className="ln4">Did not play</span>}
+        </div>
+      ))}</div>
+    </section>
+  );
+}
+function PrMiniTable({ rows, teams, me, cut, note }) {
+  return (
+    <table className="mini-t">
+      <thead><tr><th>#</th><th>Team</th><th>W–L</th><th>{note ? "" : "Diff"}</th></tr></thead>
+      <tbody>{rows.map((r, i) => (
+        <tr key={r.id} className={r.id === me ? "mine" : ""}>
+          <td className="num">{i + 1}</td>
+          <td><span className="tcell"><PrTeamLogo team={teams[r.id] || { name: r.id }} s={22} /><b>{(teams[r.id] || {}).name || r.id}</b></span></td>
+          <td className="num">{r.w}–{r.l}</td>
+          <td className={"num " + (note ? "" : r.d > 0 ? "up" : r.d < 0 ? "dn" : "")}>{note ? (cut && i < cut ? <Tg style={{ height: 20, color: "#7fe0ad" }}>{note}</Tg> : null) : `${r.d > 0 ? "+" : ""}${r.d}`}</td>
+        </tr>
+      ))}</tbody>
+    </table>
+  );
+}
+
+/* ---------- the MBL, simulated every year ---------- */
+function prClubsMeta(kind) {
+  const list = kind === "mbl" ? MD_MBL_CLUBS.map(id => getClub(id)).filter(Boolean) : DLEAGUE_CLUBS;
+  const m = {};
+  list.forEach(c => { m[c.id] = { name: c.name, short: c.short || c.name }; });
+  return m;
+}
+/* A finished league, kept small: table, leaders, results, playoffs. */
+function prLeagueSummary(comp) {
+  const teams = {};
+  Object.keys(comp.teams).forEach(id => { const t = comp.teams[id]; teams[id] = { id, name: t.name, short: t.short, logo: t.logo }; });
+  const table = mdTable(comp, Object.keys(comp.teams), ["rs"]).map(r => ({ id: r.id, gp: r.gp, w: r.w, l: r.l, pf: r.pf, pa: r.pa }));
+  const lead = {};
+  ["ppg", "rpg", "apg", "spg", "bpg"].forEach(k => { lead[k] = mdLeaders(comp, k, 10).map(x => ({ id: x.id, n: x.me ? "__ME__" : x.name, t: x.team, v: x.value, ppg: x.line.ppg, rpg: x.line.rpg, apg: x.line.apg, me: x.me })); });
+  const looks = {};
+  lead.ppg.concat(lead.rpg, lead.apg).forEach(x => { if (!looks[x.id] && !x.me) { try { looks[x.id] = mdPersonLook(comp, x.t, x.id, null); } catch (e) { /* no look */ } } });
+  const results = comp.games.filter(g => g.res).map(g => ({ d: g.d, ph: g.ph, h: g.h, a: g.a, s: g.res.s }));
+  const ko = (comp.ko || []).map(s => ({ round: s.round, a: s.a, b: s.b, wa: s.wa, wb: s.wb, bo: s.bo, winner: s.winner }));
+  const done = comp.games.filter(g => g.res).length, all = comp.games.length;
+  return { kind: comp.kind, year: comp.year, label: comp.label, teams, table, lead, looks, results, ko, champion: comp.champion || null, myTeam: comp.myTeam || null, done: !!comp.done, played: done, total: all };
+}
+const PR_BG = {};
+function prBgSeason(year) {
+  if (PR_BG[year]) return PR_BG[year];
+  try {
+    const world = mdWorldAt(null, year, MD_NAMES);
+    const p = { name: "bg", position: "SG", stats: {}, seasonNum: 0 };
+    const comp = mdNewLeague({ kind: "mbl", year, p, world, names: MD_NAMES, clubsMeta: prClubsMeta("mbl"), myClub: null, myRole: "Bench" });
+    let guard = 0;
+    while (!comp.done && guard++ < 900) mdSimUntilMine(comp, p, true);
+    PR_BG[year] = prLeagueSummary(comp);
+  } catch (e) { PR_BG[year] = null; }
+  return PR_BG[year];
+}
+/* Every league you can look at this year: the live one you're in, your last one, and the simulated MBL. */
+function prLeaguesFor(p) {
+  const out = [];
+  if (!p) return out;
+  const live = p.mdComp && p.mdComp.type === "league" ? prLeagueSummary(p.mdComp) : null;
+  const last = p.mdLeagueLast || null;
+  const mine = live || last;
+  if (mine) out.push({ id: "mine", label: `${mine.kind === "mbl" ? "MBL" : LEAGUE[mine.kind] ? LEAGUE[mine.kind].short : mine.label} ${mine.year}${live ? "" : " · final"}`, s: mine, mine: true });
+  const club = p.league === "mbl" ? p.clubId : null;
+  if (p.league !== "mbl") { const bg = prBgSeason(p.year); if (bg) out.push({ id: "bg", label: `MBL ${p.year}`, s: { ...bg, myTeam: club } }); }
+  else if (!mine) { const bg = prBgSeason(p.year - 1); if (bg) out.push({ id: "bg", label: `MBL ${p.year - 1}`, s: { ...bg, myTeam: club } }); }
+  return out;
+}
+/* =====================================================================
+   SHELL — prototype side menu, top bar and phone tabs
+===================================================================== */
+const PR_NAV_IC = { hub: "home", league: "table", pathway: "route", lifestyle_spending: "cash", career_highlights: "star" };
+function Shell({ show, screen, player, onNav, children }) {
+  const lay = useLayoutMode();
+  const [rotSeen, setRotSeen] = useState(() => { try { return window.localStorage.getItem("hl_rot_seen") === "1"; } catch (e) { return true; } });
+  useEffect(() => { try { window.scrollTo(0, 0); } catch (e) { /* ignore */ } }, [screen]);
+  if (!show || !player) return <div data-l={lay} className="rd-root pr">{children}</div>;
+  const free = RD_FREE.has(screen);
+  const adult = player.age >= 18;
+  const items = [["hub", "Hub", true], ["league", "League", true], ["pathway", "Pathway", true], ["lifestyle_spending", "Lifestyle", adult], ["career_highlights", "Highlights", adult]].filter(i => i[2]);
+  const look = playerLook(player);
+  const dismissRot = () => { setRotSeen(true); try { window.localStorage.setItem("hl_rot_seen", "1"); } catch (e) { /* ignore */ } };
+  const nav = (b) => items.map(([id, label]) => (
+    <button key={id} className={(b ? "" : "nav rd-nav-x ") + (screen === id ? "on" : "")} disabled={!free} onClick={() => free && onNav(id)} title={free ? label : "Finish this step first"}>
+      <Ic n={PR_NAV_IC[id]} /><span>{label}</span>
+    </button>
+  ));
+  return (
+    <div data-l={lay} className="rd-root rd-shell pr">
+      <aside className="side rd-side">
+        <div className="brand"><span className="mk"><Ic n="ball" style={{ color: "#1a0b00", width: 20, height: 20 }} /></span><b>Hoops Life <i>Climb</i></b></div>
+        {nav(false)}
+        {!free && <div className="pr-lock">Finish this step to use the menu</div>}
+        <span className="sp" />
+        <div className="me">
+          <span className="ph" style={{ background: "#1d2230", overflow: "hidden", flex: "none" }}><Sprite look={look} style={{ width: 40, height: 42 }} /></span>
+          <div style={{ minWidth: 0 }}><b style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{player.name}</b><small style={{ display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{player.teamName || shortHome(player.hometown || "")}</small></div>
+        </div>
+      </aside>
+      <main className="rd-main">
+        <PrTop screen={screen} player={player} />
+        {children}
+      </main>
+      <nav className="bnav rd-bottom">{nav(true)}</nav>
+      {lay === "phone" && !rotSeen && (
+        <div className="rd-rotate" role="status">
+          <Ic n="rot" />
+          <span style={{ flex: 1 }}>Turn your phone sideways for the wide layout.</span>
+          <button className="ghost sm" onClick={dismissRot}>OK</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* =====================================================================
+   HUB — youth and pro, from the prototype
+===================================================================== */
+function prIsYouth(p) { return p.age < 18 || p.stage === "youth"; }
+function prTeamColors(p) {
+  const kit = kitForPlayer(p) || {};
+  let tc = kit.jersey || "#ff7a1a";
+  if (lum(tc) < 45) tc = [kit.panel, kit.trim].find(c => c && lum(c) >= 45 && lum(c) <= 235) || "#ff7a1a";
+  if (lum(tc) > 235) tc = kit.panel && lum(kit.panel) < 235 ? kit.panel : "#9aa4b2";
+  return [tc, sh(tc, 0.16)];
+}
+function prLastLine(p) {
+  const h = (p.history || []).slice().reverse().find(x => x.stats && x.stats.ppg != null && !x.national);
+  return h ? h.stats : null;
+}
+function prField(p, title, logo) {
+  return { title, logo, teams: HOMETOWNS.map(h => ({ name: shortHome(h), state: h, me: h === p.hometown })) };
+}
+/* What the hub points at next: the headline of the coming year. */
+function prUpNext(p) {
+  const st = prStateTeam(p);
+  const tier = getStateTier(p.hometown);
+  const rival = p.rival ? { k: "chance", b: `Your rival: ${p.rival.name}`, s: "Picked the same year as you. Your peak OVR is compared every season, all the way to retirement." } : null;
+  const every = { k: "you", b: "Every season: plan, train, react", s: "Your off-season plan sets your development points; events can swing attributes, fatigue and relationships." };
+  if (prIsYouth(p) && p.age <= 15) {
+    const alumni = (p.achievements || []).includes("bukit_jalil_alumnus");
+    return alumni ? {
+      logo: "c_fiba", title: "U16 national team", sub: "FIBA U16 Asia Cup · SEABA qualifiers first",
+      meta: [["flag", <>Selection: <b>70%</b> for Bukit Jalil alumni</>], ["grid", "5-team SEABA qualifiers · top 3 go to the Asia Cup"], ["star", `Same year: the National U17 Championship with ${st}`]],
+      steps: [["Age 16 call-up", "U16 squad or the U17 jumpclass"], ["U16 Asia Cup", "SEABA qualifiers, then the Asia Cup"]],
+      decides: [{ k: "chance", b: "Make the U16 squad", s: "Bukit Jalil alumni get a 70% shot at the 12-man Malaysia U16 squad. Miss it and you still roll for the U17 jumpclass." }, every, rival].filter(Boolean),
+      field: prField(p, "U17 Nationals field", "c_u17"),
+    } : {
+      logo: "c_u17", title: "U17 jump class", sub: "National U17 Championship, playing up a year",
+      meta: [["flag", <>A <b>30%</b> chance {st} picks you to play up</>], ["grid", "Otherwise state level, plus MSSM"], ["star", "Bukit Jalil camp alumni go to the U16 national team instead"]],
+      steps: [["Age 16 call-up", "U17 jumpclass (30%) or state level"], ["MSSM", "School championship"]],
+      decides: [{ k: "chance", b: "The U17 jumpclass roll", s: `Without the Bukit Jalil camp, ${st} picks about 3 in 10 sixteen-year-olds to play up at the U17 Nationals.` }, every, rival].filter(Boolean),
+      field: prField(p, "U17 Nationals field", "c_u17"),
+    };
+  }
+  if (prIsYouth(p) && p.age === 16) {
+    const pct = Math.round((A17_SELECTION_CHANCE[tier] || 0.8) * 100);
+    return {
+      logo: "c_u17", title: "U17 Nationals", sub: "National U17 Championship · age 17",
+      meta: [["flag", <>Selection: <b>{pct}%</b> for a {TIER_META[tier].name} state</>], ["grid", "16 state teams · four groups, then knockouts"], ["star", "Shine and the U18 pool and Taiwan HBL scouts come calling"]],
+      steps: [["U17 Nationals", `Play for ${st}`], ["Summer calls", "U18 pool or a Taiwan offer"]],
+      decides: [{ k: "chance", b: `Get picked for ${st}`, s: `${TIER_META[tier].name} states take about ${pct}% of their age group to the U17 Nationals.` }, { k: "chance", b: "Taiwan HBL scouts", s: "A strong U17 run, awards and a high OVR can bring three HBL high schools calling." }, every].filter(Boolean),
+      field: prField(p, "U17 Nationals field", "c_u17"),
+    };
+  }
+  if (prIsYouth(p) || (p.age === 17)) {
+    if (p.hblSeasonPending) return {
+      flag: "TPE", title: "Taiwan HBL season", sub: `${p.hblTeamName || "High school"} · one season as a starter`,
+      meta: [["ball", "16–20 games, always a starter"], ["flag", "Automatic U18 national team spot"], ["star", "Then UBA scholarships, or turn pro at home"]],
+      steps: [["HBL season", p.hblTeamName || "Taiwan"], ["Turning pro", "UBA scholarship or club offers"]],
+      decides: [{ k: "chance", b: "Earn a UBA scholarship", s: "A good HBL season brings up to three Taiwan university offers, four years each." }, every, rival].filter(Boolean),
+      field: prField(p, "MSSM field", "c_maba"),
+    };
+    return {
+      logo: "c_maba", title: "MSSM and first offers", sub: "School championship at 18, then club offers",
+      meta: [["flag", p.u18Eligible ? "U18 national team: FIBA U18 Asia Cup qualifiers" : "U18 national team only via the Bukit Jalil camp"], ["grid", "MSSM · 16 state teams, groups then knockouts"], ["star", "First pro or D-League offers at 18 · MBL from OVR 65"]],
+      steps: [["Age 18", p.u18Eligible ? "MSSM and the U18 team" : "MSSM school championship"], ["Turning pro", "D-League or MBL offers"]],
+      decides: [{ k: "you", b: "Your first club", s: "At 18 the offers arrive. MBL clubs look at OVR 65 and up; everyone else starts in the D-League." }, every, rival].filter(Boolean),
+      field: prField(p, "MSSM field", "c_maba"),
+    };
+  }
+  return null;
+}
+/* The coming season's first game, from the same schedule the season will use. */
+function prOpener(p) {
+  try {
+    if (!p.clubId || !p.league || p.abroad || p.uba || p.hblSeasonPending || !LEAGUE[p.league]) return null;
+    const world = mdWorldAt(p.mdWorld ? JSON.parse(JSON.stringify(p.mdWorld)) : null, p.year, MD_NAMES);
+    const comp = mdNewLeague({ kind: p.league, year: p.year, p, world, names: MD_NAMES, clubsMeta: prClubsMeta(p.league), myClub: p.clubId, myRole: p.starterStatus || "Bench" });
+    const mine = comp.games.filter(g => g.h === p.clubId || g.a === p.clubId);
+    if (!mine.length) return null;
+    const g = mine[0];
+    return { home: comp.teams[g.h], away: comp.teams[g.a], d: g.d, venue: comp.teams[g.h].venue, n: mine.length, kind: p.league };
+  } catch (e) { return null; }
+}
+function prWire(p, summary, leagues) {
+  const items = [];
+  const L = leagues && (leagues.find(l => l.mine) || leagues[0]);
+  if (L && L.s) {
+    const s = L.s, nm = id => (s.teams[id] || {}).name || id;
+    const lg = s.kind === "mbl" ? "MBL" : (LEAGUE[s.kind] || {}).short || "league";
+    if (s.done && s.champion) items.push({ logo: s.teams[s.champion] && s.teams[s.champion].logo, b: nm(s.champion), t: `won the ${s.year} ${lg} title` });
+    if (s.table[0] && s.table[0].gp) items.push({ logo: s.teams[s.table[0].id] && s.teams[s.table[0].id].logo, b: nm(s.table[0].id), t: `${s.done ? "finished top of" : "top"} the ${lg} at ${s.table[0].w}–${s.table[0].l}` });
+    const top = s.lead.ppg[0];
+    if (top) items.push({ logo: s.teams[top.t] && s.teams[top.t].logo, b: top.me ? p.name : top.n, t: `${s.done ? "led" : "leads"} the ${lg} at ${top.v} points a game` });
+  }
+  const r = p.mdLast;
+  if (r && r.champion) items.push({ logo: r.logo, b: (r.teams[r.champion] || {}).name || r.champion, t: `won the ${r.year} ${r.label}` });
+  try { (buildHubTickerLines(p, summary) || []).forEach(t => items.push({ logo: "c_maba", t: String(t) })); } catch (e) { /* none */ }
+  if (!items.length) items.push({ logo: "c_maba", t: "A new season starts here. Every result from now on is yours." });
+  return items;
+}
+function PrTicker({ label, items }) {
+  const row = (k) => items.map((x, i) => <span key={k + i}>{x.logo && LOGO[x.logo] ? <PrLogo k={x.logo} s={22} /> : null}{x.b && <b>{x.b}</b>} {x.t}</span>);
+  return (
+    <div className="c12 ticker" data-a="">
+      <span className="tl"><Ic n="mic" /> {label}</span>
+      <div className="tw"><div className="tm">{row("a")}{row("b")}</div></div>
+    </div>
+  );
+}
+function PrHero({ player, overall }) {
+  const p = player;
+  const youth = prIsYouth(p);
+  const [tc, td] = prTeamColors(p);
+  const style = p.playingStyle ? getPlayingStyle(p.playingStyle) : null;
+  const tier = getStateTier(p.hometown);
+  const last = prLastLine(p);
+  const ms = Math.ceil((overall + 1) / 5) * 5;
+  const msPct = Math.max(4, Math.min(96, (overall - (ms - 5)) / 5 * 100));
+  const crest = !youth && p.teamName ? logoKeyFor(p.teamName) : null;
+  const goals = youth
+    ? [[`Goal · ${p.age <= 15 ? "an age-16 national call" : p.age === 16 ? "a deep U17 run" : "a first pro contract"}`, Math.min(95, Math.max(6, (overall - 30) * 2.2)), "#ff7a1a"], ["Goal · national youth pool", Math.min(95, Math.max(4, p.popularity)), "#e2b65a"], [`Next OVR milestone · ${ms}`, msPct, "#4aa8ff"]]
+    : [[`Season goal · ${p.starterStatus === "Starter" ? "All-League team" : "a bigger role"}`, Math.min(95, Math.max(6, p.popularity)), "#ff7a1a"], [p.contractYearsLeft > 0 ? `Contract · ${p.contractYearsLeft} year${p.contractYearsLeft === 1 ? "" : "s"} left` : "Contract · open", p.contractYearsLeft > 0 ? Math.min(95, 100 / (p.contractYearsLeft + 1)) : 8, "#e2b65a"], [`Next OVR milestone · ${ms}`, msPct, "#4aa8ff"]];
+  const kpis = youth || !last
+    ? [[p.height, "CM"], [p.wingspan != null ? p.wingspan : "—", "SPAN"], [p.weight != null ? p.weight : "—", "KG"], [p.popularity, "POP"], [Math.max(0, (p.seasonNum || 1) - 1), "SEASONS"]]
+    : [[last.ppg, "PPG"], [last.rpg, "RPG"], [last.apg, "APG"], [last.threePct != null ? last.threePct : "—", "3P%"], [p.height, "CM"]];
+  return (
+    <section className="pn hero c8 t12 l12" data-a="" style={{ "--tc": tc, "--td": td }}>
+      <div className="pic">
+        <span className="big">{p.jersey}</span>
+        <span className="pr-fig"><Sprite look={playerLook(p)} full ball /></span>
+      </div>
+      <div className="inf">
+        <div className="row">
+          {!p.abroad && <PrFlag state={p.hometown} />}
+          <Tg cls="or">#{p.jersey} · {p.position}</Tg>
+          {style && <Tg><Ic n={PR_STYLE_IC[style.id] || "star"} /> {PR_STYLE_LBL[style.id] || style.label}</Tg>}
+          <Tg>Age {p.age} · Season {p.seasonNum || 1}</Tg>
+          {p.highlyTalented && <Tg cls="or"><Ic n="crown" /> Prodigy</Tg>}
+        </div>
+        <h2 className="nm">{p.name}</h2>
+        <div className="ovr-b">
+          <span className="o glint"><span><small>OVR</small><b className="num">{overall}</b></span></span>
+          <div className="clubline">
+            {youth ? <PrLogo k={p.age <= 15 ? "c_maba" : "c_u17"} s={52} /> : crest ? <PrLogo k={crest} s={52} /> : <PrTeamLogo team={{ name: p.teamName || "Free agent" }} s={52} />}
+            <div>
+              <b>{youth ? `${prStateTeam(p)} · state programme` : (p.teamName || "Free agent")}</b>
+              <small style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                {youth ? <><PrFlag state={p.hometown} w={20} /> {TIER_META[tier].name} · {TIER_META[tier].tag}</>
+                  : <>{p.league && LEAGUE[p.league] ? <PrLogo k={p.league === "mbl" ? "c_mbl" : "c_dleague"} s={18} /> : null}{p.league && LEAGUE[p.league] ? LEAGUE[p.league].name : p.uba ? "Taiwan UBA" : p.abroad ? "Overseas" : ""}{p.starterStatus ? ` · ${p.starterStatus}` : ""}</>}
+              </small>
+            </div>
+          </div>
+        </div>
+        <div className="goals">
+          {goals.map(([l, v, c]) => <div key={l}><span>{l}</span><div className="bar"><i style={{ "--w": v + "%", "--bc": c }} /></div></div>)}
+          <span className="sim">SIM</span>
+        </div>
+        <div className="kpis">{kpis.map(([v, l]) => <div key={l}><b className="num">{v}</b><small>{l}</small></div>)}</div>
+      </div>
+    </section>
+  );
+}
+function PrHubTabs({ player, overall }) {
+  const p = player;
+  const [tab, setTab] = useState("att");
+  const TABS = [["att", "Attributes"], ["well", prIsYouth(p) ? "Relationships" : "Wellbeing"], ["rival", "Rival", !!p.rival], ["career", "Career"]].filter(t => t[2] !== false);
+  const active = TABS.some(t => t[0] === tab) ? tab : "att";
+  const locker = p.stage === "pro" && !p.abroad && !!p.clubId;
+  return (
+    <section className="pn c4" data-a="">
+      <div className="tabs" role="tablist">{TABS.map(([k, l]) => <button key={k} className={active === k ? "on" : ""} onClick={() => setTab(k)}>{l}</button>)}</div>
+      {active === "att" && STAT_LIST.map((k, i) => (
+        <div key={k} className="stat" style={{ "--i": i }}><Ic n={PR_AIC[k]} /><span>{STAT_META[k].label}</span><div className="bar"><i style={{ "--w": p.stats[k] + "%" }} /></div><b className="num">{p.stats[k]}</b></div>
+      ))}
+      {active === "well" && <>
+        {[[locker ? "Coach trust" : "Coach", p.relationships.coach, "#e2b65a"], ["Family", p.relationships.family, "#34c37a"], [locker ? "Chemistry" : "Teammates", p.relationships.team, "#4aa8ff"], ["Morale", p.morale, "#4aa8ff"], ["Popularity", p.popularity, "#ff9a4d"], ["Fatigue", p.fatigue, "#f05252"]].map(([k, v, c]) => (
+          <div key={k} className="meter"><span>{k}</span><div className="bar"><i style={{ "--w": v + "%", "--bc": c }} /></div><b>{v}</b></div>
+        ))}
+        <PrSrc color="var(--in)">{p.age < 18 ? "No salary under 18. Family and school cover the costs." : `${rm(p.money)} in the bank${p.contractSalary > 0 ? ` · ${rm(p.contractSalary)}/mo, ${p.contractYearsLeft} yr left` : ""}`}</PrSrc>
+      </>}
+      {active === "rival" && p.rival && (() => {
+        const r = p.rival;
+        const ro = computeOverall(r.stats, r.position);
+        const rows = [["Overall", overall, ro], ["Peak OVR", p.peakOverall || overall, r.peakOverall || ro], ["Nat'l caps", p.nationalCaps || 0, r.caps || 0]];
+        return <>
+          <div className="rival">
+            <span className="ini-b" style={{ background: "linear-gradient(150deg,#1fa37a,#0d5c44)", width: 56, height: 56 }}>{r.name.split(" ").map(x => x[0]).slice(0, 2).join("")}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <b style={{ fontSize: 15 }}>{r.name}</b>
+              <div style={{ color: "var(--di)", fontSize: 12, display: "flex", gap: 6, alignItems: "center" }}><PrFlag state={r.hometown} w={20} /> {r.retired ? "Retired" : (r.clubName || shortHome(r.hometown || ""))} · {r.position} · OVR {ro}</div>
+            </div>
+            <span className="sim">SIM</span>
+          </div>
+          <div className="sline" style={{ marginTop: 12 }}>{rows.map(([l, a, b]) => <div key={l}><b className="num"><span style={{ color: a >= b ? "var(--or2)" : "var(--mu)" }}>{a}</span><span style={{ color: "var(--di)", fontSize: 16 }}> – </span><span style={{ color: b > a ? "var(--or2)" : "var(--mu)" }}>{b}</span></b><small>{l}</small></div>)}</div>
+          <p style={{ color: "var(--mu)", fontSize: 13, margin: "12px 0 0" }}>Your peak OVR is compared every season, all the way to retirement.</p>
+        </>;
+      })()}
+      {active === "career" && <>
+        {(p.achievements || []).length > 0 && <div className="ticks" style={{ marginBottom: 12 }}>{p.achievements.slice(-8).map(a => ACHIEVEMENT_META[a] ? <Tg key={a} cls="or">{ACHIEVEMENT_META[a].label}</Tg> : null)}</div>}
+        {(p.history || []).length > 0 ? <div className="pr-ledger"><CareerLedger history={p.history} maxHeight={300} /></div> : <p style={{ color: "var(--di)", margin: 0, fontSize: 13 }}>Your career timeline starts with your first season.</p>}
+      </>}
+    </section>
+  );
+}
+function PrLeagueMini({ L, onOpenLeague }) {
+  if (!L || !L.s) return null;
+  const s = L.s;
+  return (
+    <section className="pn c4" data-a="">
+      <h3><PrLogo k={s.kind === "mbl" ? "c_mbl" : "c_dleague"} s={26} /> {L.label}{onOpenLeague && <a onClick={onOpenLeague}>Full table</a>}</h3>
+      <table className="mini-t">
+        <thead><tr><th>#</th><th>Team</th><th>W–L</th><th>Diff</th></tr></thead>
+        <tbody>{s.table.slice(0, 7).map((r, i) => (
+          <tr key={r.id} className={r.id === s.myTeam ? "mine" : ""}><td className="num">{i + 1}</td><td><span className="tcell"><PrTeamLogo team={s.teams[r.id]} s={22} /><b>{(s.teams[r.id] || {}).name}</b></span></td><td className="num">{r.w}–{r.l}</td><td className={"num " + (r.pf - r.pa > 0 ? "up" : r.pf - r.pa < 0 ? "dn" : "")}>{r.pf - r.pa > 0 ? "+" : ""}{r.pf - r.pa}</td></tr>
+        ))}</tbody>
+      </table>
+      <PrSrc color="var(--in)">{L.mine ? "Your league, simulated game by game" : "Simulated season · real clubs and rosters"}</PrSrc>
+    </section>
+  );
+}
+function PrLeaders({ L, player, onOpenLeague }) {
+  if (!L || !L.s) return null;
+  const s = L.s;
+  return (
+    <section className="pn c4" data-a="">
+      <h3><Ic n="fire" /> Scoring leaders{onOpenLeague && <a onClick={onOpenLeague}>All leaders</a>}</h3>
+      {s.lead.ppg.slice(0, 4).map((x, i) => (
+        <div key={x.id} className="pr-ldr">
+          <span className="rk num">{i + 1}</span>
+          <span className="fc"><Sprite look={x.me ? playerLook(player) : (s.looks[x.id] || DEFLOOK)} /></span>
+          <span style={{ minWidth: 0 }}><b>{x.me ? player.name : x.n}</b><small><PrTeamLogo team={s.teams[x.t]} s={16} /> {(s.teams[x.t] || {}).short || (s.teams[x.t] || {}).name}</small></span>
+          <span className="v"><b className="num">{x.v}</b><small>PPG</small></span>
+        </div>
+      ))}
+    </section>
+  );
+}
+function Hub({ player, onPlaySeason, onRetireConsider, onManageInvestments, onRequestTrade, onOpenLifestyle, onOpenCareerHighlights, onOpenLeague, onOpenPathway, banner, summary }) {
+  const p = player;
+  const overall = computeOverall(p.stats, p.position);
+  const youth = prIsYouth(p);
+  const leagues = useMemo(() => prLeaguesFor(p), [p.year, p.league, p.mdLeagueLast, p.mdComp]);
+  const nx = useMemo(() => youth ? prUpNext(p) : null, [p]);
+  const opener = useMemo(() => youth ? null : prOpener(p), [p.year, p.clubId, p.league, p.seasonNum]);
+  const wire = useMemo(() => prWire(p, summary, leagues), [p, summary, leagues]);
+  const sn = p.seasonNum || 1;
+  const lgShort = p.league && LEAGUE[p.league] ? (p.league === "mbl" ? "MBL" : LEAGUE[p.league].short) : null;
+  const road = [["Off-season plan", youth ? "Summer league, camp or rest" : "Summer league, camp, rest or a tour", "nx"], ["Training", "Spend development points", ""], ["Career event", "A risky or safe call", ""]]
+    .concat(youth && nx ? nx.steps.map(x => [x[0], x[1], ""]) : lgShort ? [[`${lgShort} regular season`, opener ? `${opener.n} games · play or sim each one` : "Play or sim each game", ""], ["Playoffs", p.league === "mbl" ? "Top 4 · best-of-3 semis, best-of-5 final" : "Top 8 · single-game knockouts", ""]]
+      : p.uba ? [["UBA season", p.ubaTeamName || "Taiwan", ""], ["Next year", "Stay or turn pro", ""]] : [["The season", p.teamName || "Your season", ""], ["Next year", "Offers and decisions", ""]]);
+  const showInvest = p.age >= 18 && p.contractSalary > 0;
+  const showTrade = p.clubId && !p.abroad && (p.seasonsAtClub || 0) >= 1;
+  const acts = !youth ? [
+    showInvest && ["cash", "Investments", investmentPct(p) > 0 ? `${Object.keys(INVESTMENTS).filter(k => p.investments && p.investments[k]).length} active` : "Not started", onManageInvestments],
+    ["heart", "Lifestyle", p.homeTier ? HOME_TIERS.find(t => t.id === p.homeTier).label : "No home yet", onOpenLifestyle],
+    showTrade && ["swap", "Request a trade", p.tradeRequestCooldown > 0 ? `${p.tradeRequestCooldown} season${p.tradeRequestCooldown === 1 ? "" : "s"} until you can ask` : `${p.seasonsAtClub} season${p.seasonsAtClub === 1 ? "" : "s"} at ${p.teamName}`, p.tradeRequestCooldown > 0 ? null : onRequestTrade],
+    ["star", "Career highlights", (p.careerHighlights || []).length ? `${p.careerHighlights.length} standout game${p.careerHighlights.length === 1 ? "" : "s"}` : "No standout games yet", onOpenCareerHighlights],
+    p.age >= 30 && ["x", "Retire", "End your professional career", onRetireConsider],
+  ].filter(Boolean) : [];
+  const L0 = leagues.find(l => l.mine) || leagues[0];
+  return (
+    <PrPage>
+      <div className="g">
+        <PrTicker label={youth ? "Youth wire" : `${lgShort || "League"} wire`} items={wire} />
+        <PrHero player={p} overall={overall} />
+        {youth && nx && (
+          <section className="pn next c4" data-a="">
+            <h3><Ic n="trophy" /> Up next<small>Age {p.age + 1}</small></h3>
+            <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+              {nx.logo ? <PrLogo k={nx.logo} s={78} cls="pop" /> : <span className="lg pop" style={{ "--s": "78px" }}><PrFlag code={nx.flag} w={52} /></span>}
+              <div><b style={{ font: "800 24px/1 var(--cd)", textTransform: "uppercase", display: "block" }}>{nx.title}</b><small style={{ color: "var(--mu)" }}>{nx.sub}</small></div>
+            </div>
+            <div className="meta">{nx.meta.map(([ic, t], i) => <span key={i}><Ic n={ic} />{t}</span>)}</div>
+            <button className="cta" style={{ width: "100%" }} onClick={onPlaySeason}>Play season {sn} <Ic n="play" /></button>
+            <PrSrc>Odds from the game's own rules</PrSrc>
+          </section>
+        )}
+        {!youth && (
+          <section className="pn next c4" data-a="">
+            <h3><Ic n="cal" /> {opener ? "Next game" : "Next season"}<small>{opener ? `Game 1 of ${opener.n}` : `Season ${sn}`}</small></h3>
+            {opener ? <>
+              <div className="pr-vs">
+                <div><PrTeamLogo team={opener.home} s={72} /><b>{opener.home.short || opener.home.name}</b></div>
+                <span className="num">VS</span>
+                <div><PrTeamLogo team={opener.away} s={72} /><b>{opener.away.short || opener.away.name}</b></div>
+              </div>
+              <div className="meta"><span><Ic n="clock" />{mdFmtDate(opener.d)}</span>{opener.venue && <span><Ic n="pin" />{opener.venue}</span>}</div>
+            </> : <>
+              <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+                <PrTeamLogo team={{ name: p.teamName || "Free agent" }} s={64} />
+                <div><b style={{ font: "800 22px/1 var(--cd)", textTransform: "uppercase", display: "block" }}>{p.teamName || "Free agent"}</b><small style={{ color: "var(--mu)" }}>{p.uba ? "Taiwan UBA" : p.abroad ? "Overseas" : "Season " + sn}</small></div>
+              </div>
+              <div className="meta"><span><Ic n="flag" />{p.starterStatus || p.ubaRole || "Squad player"}</span></div>
+            </>}
+            <button className="cta" style={{ width: "100%" }} onClick={onPlaySeason}>{opener ? "Start the season" : `Play season ${sn}`} <Ic n="play" /></button>
+            {opener && <PrSrc>Fixture from the simulated {lgShort} schedule</PrSrc>}
+          </section>
+        )}
+        {banner && (
+          <div className="alert c12" data-a="" style={{ cursor: "default" }}>
+            <span className="ini-b" style={{ background: "var(--or)", color: "#1a0b00" }}><Ic n="bolt" /></span>
+            <span style={{ flex: 1 }}><b>News</b><small>{banner}</small></span>
+          </div>
+        )}
+        <section className="pn c12" data-a="">
+          <h3><Ic n="route" /> Your season {sn}, step by step{onOpenPathway && <a onClick={onOpenPathway}>See the whole pathway</a>}</h3>
+          <div className="road">{road.map((r, i) => (
+            <button key={i} className={"rs " + r[2]} onClick={i === 0 ? onPlaySeason : undefined} style={i === 0 ? undefined : { cursor: "default" }}>
+              <span className="n">{i + 1}</span><span><b>{r[0]}</b><small>{r[1]}</small></span>
+            </button>
+          ))}</div>
+        </section>
+        <PrHubTabs player={p} overall={overall} />
+        {youth && nx && (
+          <section className="pn c4" data-a="">
+            <h3><Ic n="eye" /> What this year decides</h3>
+            {nx.decides.map((d, i) => <div key={i} className="dec"><span className={"k " + d.k}><Ic n={d.k === "you" ? "hand" : "target"} /></span><div><b>{d.b}</b><small>{d.s}</small></div></div>)}
+          </section>
+        )}
+        {youth && nx && (
+          <section className="pn c4" data-a="">
+            <h3><PrLogo k={nx.field.logo} s={26} /> {nx.field.title}<small>16 states</small></h3>
+            <div className="field20">{nx.field.teams.map(t => <span key={t.state} className={t.me ? "me2" : ""}><PrFlag state={t.state} />{t.name}</span>)}</div>
+            <PrSrc>One team per state · groups, then knockouts</PrSrc>
+          </section>
+        )}
+        {!youth && <PrLeagueMini L={L0} onOpenLeague={onOpenLeague} />}
+        {!youth && <PrLeaders L={L0} player={p} onOpenLeague={onOpenLeague} />}
+        {acts.length > 0 && (
+          <section className="pn c12" data-a="">
+            <h3><Ic n="cash" /> Career & money<small>{rm(p.money)} in the bank</small></h3>
+            <div className="road" style={{ gridTemplateColumns: `repeat(${Math.min(5, acts.length)},minmax(0,1fr))` }}>{acts.map(([ic, b, sm, fn]) => (
+              <button key={b} className="rs" onClick={fn || undefined} disabled={!fn} style={fn ? undefined : { opacity: .55, cursor: "not-allowed" }}>
+                <span className="n"><Ic n={ic} /></span><span><b>{b}</b><small>{sm}</small></span>
+              </button>
+            ))}</div>
+          </section>
+        )}
+      </div>
+      <PrNext onClick={onPlaySeason}>{youth ? `Play season ${sn}` : opener ? "Start the season" : `Play season ${sn}`}</PrNext>
+    </PrPage>
+  );
+}
+/* =====================================================================
+   DECISION PAGES — off-season, training, events and the other calls
+===================================================================== */
+function prEffects(c) {
+  const out = [];
+  if (!c) return out;
+  if (c.stats) Object.entries(c.stats).forEach(([k, v]) => { if (v) out.push([`${STAT_META[k] ? STAT_META[k].label : k} ${prSign(v)}`, v > 0]); });
+  const rel = { coach: "Coach", team: "Team", family: "Family" };
+  if (c.relationships) Object.entries(c.relationships).forEach(([k, v]) => { if (v) out.push([`${rel[k] || k} ${prSign(v)}`, v > 0]); });
+  if (c.popularity) out.push([`Popularity ${prSign(c.popularity)}`, c.popularity > 0]);
+  if (c.morale) out.push([`Morale ${prSign(c.morale)}`, c.morale > 0]);
+  if (c.fatigue) out.push([`Fatigue ${prSign(c.fatigue)}`, c.fatigue < 0]);
+  if (c.money) out.push([c.money > 0 ? `+${rm(c.money)}` : `−${rm(-c.money)}`, c.money > 0]);
+  return out;
+}
+const PR_TIER = { success: ["Success", "ok"], failure: ["Setback", "wa"], critical: ["Critical", "bd"] };
+function PrSceneArt({ name, player, ph }) {
+  const o = useMemo(() => player ? { me: playerLook(player), kit: kitForPlayer(player), mates: teamMates(player), home: player.homeTier, ride: player.vehicleTier } : { me: DEFLOOK }, [player]);
+  return <PxScene name={name} o={o} ph={ph || 0} className="pxs" />;
+}
+function prSeasonLbl(p, what) { return `${p.age < 18 ? `Age ${p.age} · Season ${p.seasonNum || 1}` : `Season ${p.year} · Age ${p.age}`} · ${what}`; }
+function prNextStop(p) {
+  if (p.age < 18) { const nx = prUpNext(p); return nx ? `the ${nx.title}` : "next year"; }
+  return p.league && LEAGUE[p.league] ? `the ${p.league === "mbl" ? "MBL" : LEAGUE[p.league].short} season` : "the season";
+}
+
+/* ---------- off-season plan ---------- */
+function OffseasonPlanScreen({ player, onChoose }) {
+  const p = player;
+  const [pick, setPick] = useState(null);
+  const canCommercial = p.age >= 18 && !p.hblSeasonPending && !p.uba;
+  const tier = TIER_META[getStateTier(p.hometown)];
+  const sponsored = tier.name === "Tier 1" ? `Sponsored by ${prStateTeam(p)}'s elite programme. Two weeks with international coaches.` : "Family and school pitch in. Two weeks with international coaches.";
+  const PLANS = [
+    { id: "summer", label: "Summer League", scene: "summer", tag: "Risky", desc: "Showcase in front of overseas scouts in Taipei.", fx: [["Popularity", "+6", 1], ["Scout visibility", "Up", 1], ["Fatigue", "+10", 0]], pts: 0 },
+    { id: "camp", label: "Overseas Camp", scene: "camp", tag: canCommercial ? "Costs RM 4,000" : "Sponsored", desc: canCommercial ? "An intensive camp abroad, working with international coaches." : sponsored, fx: [["Development points", "+2", 1], ["Coach trust", "+5", 1], canCommercial ? ["Cost", rm(4000), 0] : ["Cost", "Sponsored", 1]], pts: 2 },
+    { id: "rest", label: "Rest & Recover", scene: "rest", tag: "Safe", desc: "Shut it down, sleep, reset the body.", fx: [["Fatigue", "−25", 1], ["Injury risk next season", "−30%", 1], ["Development points", "−2", 0]], pts: -2 },
+  ];
+  if (canCommercial) PLANS.push({ id: "tour", label: "Commercial Tour", scene: "press", tag: "Risky", desc: "Sponsor appearances up and down the country. Good money, less time with the squad.", fx: [["Money", `+${rm(8000)}`, 1], ["Popularity", "+10", 1], ["Team chemistry", "−4", 0]], pts: 0 });
+  let base = 6;
+  try { base = computeSeasonPoints(p, p.lastPerfBonus || 0); } catch (e) { /* keep default */ }
+  const sel = PLANS.find(x => x.id === pick);
+  const pts = Math.max(1, base + (sel ? sel.pts : 0));
+  return (
+    <PrPage>
+      <PrHead lbl={prSeasonLbl(p, "Off-season")} title="How do you spend the off-season?"
+        desc={`This sets how many development points you get before ${prNextStop(p)}.${p.age < 18 ? " Under 18, the camp abroad is sponsored by your state programme." : ""}`}
+        right={<span className="chip"><Ic n="energy" />Fatigue <b>{p.fatigue}</b></span>} />
+      <div className="choices" style={PLANS.length > 3 ? { gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))" } : undefined}>
+        {PLANS.map((c, i) => (
+          <button key={c.id} className={"ch " + (pick === c.id ? "on" : "")} data-a="" style={{ "--i": i }} onClick={() => setPick(c.id)}>
+            <div className="art"><PrSceneArt name={c.scene} player={p} ph={i * 9} /><span className="tg risk" style={{ background: "rgba(0,0,0,.5)" }}>{c.tag}</span></div>
+            <div className="bd">
+              <b className="t">{c.label}</b>
+              <p>{c.desc}</p>
+              <div className="fx">{c.fx.map(f => <div key={f[0]}><span>{f[0]}</span><b className={f[2] ? "up" : "dn"}>{f[1]}</b></div>)}</div>
+            </div>
+          </button>
+        ))}
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginTop: 18, flexWrap: "wrap" }} data-a="">
+        <small style={{ color: "var(--di)" }}>Development points this season: <b style={{ color: "var(--ink)" }}>{pts}</b>{p.age >= 18 ? " · scout visibility only matters once you already qualify for overseas interest" : ""}</small>
+        <button className="cta" disabled={!pick} onClick={() => pick && onChoose(pick)}>Confirm and train <Ic n="right" /></button>
+      </div>
+    </PrPage>
+  );
+}
+
+/* ---------- training / creation build ---------- */
+function AttributeBuilder({ player, points, onConfirm, creation = false }) {
+  const p = player;
+  const [alloc, setAlloc] = useState({});
+  const cap = attrAgeCap(p.age, p.stats);
+  const cur = (k) => p.stats[k] + (alloc[k] || 0);
+  const spent = STAT_LIST.reduce((t, k) => { let s = 0; for (let v = p.stats[k]; v < cur(k); v++) s += attrPointCost(v, k, p.position); return t + s; }, 0);
+  const left = points - spent;
+  const projected = {};
+  STAT_LIST.forEach(k => { projected[k] = cur(k); });
+  const projOvr = computeOverall(projected, p.position);
+  const gained = STAT_LIST.reduce((t, k) => t + (alloc[k] || 0), 0);
+  const fat = creation ? p.fatigue : Math.max(0, Math.min(100, p.fatigue + (gained > 0 ? Math.min(14, 4 + gained) : -20)));
+  const inc = (k) => { const c = attrPointCost(cur(k), k, p.position); if (cur(k) < cap && left >= c) setAlloc(a => ({ ...a, [k]: (a[k] || 0) + 1 })); };
+  const dec = (k) => { if ((alloc[k] || 0) > 0) setAlloc(a => ({ ...a, [k]: a[k] - 1 })); };
+  const plan = { summer: "Summer League", camp: "Overseas Camp", rest: "Rest & Recover", tour: "Commercial Tour" }[p.offseasonPlan];
+  return (
+    <PrPage>
+      <PrHead lbl={creation ? "New career · Your 15-year-old" : prSeasonLbl(p, "Training")} title={creation ? "Build your attributes" : "Season development"}
+        desc={creation ? "Shape your player before the National U15 selection trials. The state coaches judge you on exactly these numbers." : "Spend this season's points. Each point costs more fatigue; spending none banks the time for recovery and morale."} />
+      <div className="g">
+        <section className="pn c8 l12" data-a="">
+          <div style={{ display: "grid", gap: 8 }}>
+            {STAT_LIST.map(k => {
+              const v = cur(k), c = attrPointCost(v, k, p.position), g = alloc[k] || 0, atCap = v >= cap;
+              return (
+                <div key={k} className="att tr2">
+                  <b>{STAT_META[k].label}<small className="pr-cost">{atCap ? `At age cap ${cap}` : `Next +1 costs ${c}`}</small></b>
+                  <div className="tr"><i style={{ width: p.stats[k] + "%" }} /><i className="add" style={{ left: p.stats[k] + "%", width: g + "%" }} /><u style={{ left: cap + "%" }} /></div>
+                  <span className="v num">{v}</span>
+                  <button className="pm" aria-label={`Lower ${STAT_META[k].label}`} disabled={!g} onClick={() => dec(k)}>&minus;</button>
+                  <button className="pm add" aria-label={`Raise ${STAT_META[k].label}`} disabled={atCap || left < c} onClick={() => inc(k)}>+</button>
+                </div>
+              );
+            })}
+          </div>
+          <PrSrc color="var(--gd)">Gold tick: the age-{p.age} growth cap ({cap})</PrSrc>
+        </section>
+        <section className="pn c4 l12" data-a="">
+          <h3><Ic n="bolt" /> {creation ? "Your build" : "This season"}</h3>
+          <div className="pts" style={{ marginBottom: 12 }}>
+            <div><div className="lbl">Points left</div><small style={{ color: "var(--mu)" }}>{creation ? "Spend them before the trials" : plan ? `${plan} plan` : "No plan picked"}</small></div>
+            <b className="num">{left}</b>
+          </div>
+          <div className="meter"><span>OVR</span><div className="bar"><i style={{ "--w": projOvr + "%", "--bc": "#ff7a1a" }} /></div><b>{projOvr}</b></div>
+          {!creation && <div className="meter"><span>Fatigue</span><div className="bar"><i style={{ "--w": fat + "%", "--bc": "#f05252" }} /></div><b>{fat}</b></div>}
+          <p style={{ color: "var(--mu)", fontSize: 13, margin: "12px 0" }}>
+            {creation ? (left > 0 ? `${left} point${left > 1 ? "s" : ""} left to spend.` : "All points spent. Ready for the trials.")
+              : gained ? `Spending ${gained} point${gained > 1 ? "s" : ""}: fatigue ${p.fatigue} → ${fat}.${left > 0 ? ` ${left} unspent point${left > 1 ? "s" : ""} won't carry over.` : ""}` : "Spend nothing to bank the season: fatigue −20, morale +5."}
+          </p>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="ghost" onClick={() => setAlloc({})} disabled={!gained}>Reset</button>
+            <button className="cta" style={{ flex: 1 }} onClick={() => onConfirm(alloc)}>{creation ? "Begin career" : "Confirm training"} <Ic n="check" /></button>
+          </div>
+        </section>
+      </div>
+    </PrPage>
+  );
+}
+
+/* ---------- one option with its odds, the prototype's event card ---------- */
+function PrEvo({ icon, emoji, label, tag, tagOr, odds, fx, note, onClick, disabled, dim, needle, i }) {
+  return (
+    <button className={"evo " + (dim ? "dim" : "")} data-a="" style={{ "--i": i || 0 }} onClick={onClick} disabled={disabled}>
+      <div className="eh"><span className="ic2">{emoji ? <span style={{ fontSize: 20 }}>{emoji}</span> : <Ic n={icon || "target"} />}</span><b>{label}</b>{tag && <Tg cls={tagOr ? "or" : ""}>{tag}</Tg>}</div>
+      {odds && <>
+        <div className="odds">{odds.map((o, k) => <i key={k} className={o.tone} style={{ width: o.pct + "%" }} />)}{needle != null && <em className="needle" style={{ "--x": needle + "%" }} />}</div>
+        <div className="ol" style={odds.length < 3 ? { gridTemplateColumns: `repeat(${odds.length},minmax(0,1fr))` } : undefined}>{odds.map((o, k) => <div key={k}><span className={"dot " + o.tone} /><b>{o.pct}%</b> {o.label}{o.fx && <small>{o.fx}</small>}</div>)}</div>
+      </>}
+      {fx && fx.length > 0 && <div className="ticks">{fx.map(([t, pos], k) => <Tg key={k} cls={pos ? "pos" : "neg"}>{t}</Tg>)}</div>}
+      {note && <small style={{ color: "var(--mu)", fontSize: 12.5 }}>{note}</small>}
+    </button>
+  );
+}
+function PrEventPage({ lbl, title, desc, scene, player, right, children }) {
+  return (
+    <PrPage>
+      <PrHead lbl={lbl} title={title} right={right} />
+      <div className="g">
+        <section className="pn c5 l12" data-a="" style={{ padding: 0 }}>
+          <div className="evart"><PrSceneArt name={scene} player={player} /></div>
+          {desc && <p style={{ padding: "16px 18px", margin: 0, color: "var(--mu)" }}>{desc}</p>}
+        </section>
+        <section className="c7 l12" style={{ display: "flex", flexDirection: "column", gap: 12 }}>{children}</section>
+      </div>
+    </PrPage>
+  );
+}
+
+/* ---------- career event: pick, watch the needle, see what happened ---------- */
+function EventScreen({ event, player, onChoose }) {
+  const [res, setRes] = useState(null);
+  const p = player;
+  const scene = EVENT_SCENE_PX[event.scene] || "street";
+  const choose = (c, i) => {
+    if (res) return;
+    if (c.outcomes) {
+      const r = Math.random();
+      let acc = 0, hit = c.outcomes[c.outcomes.length - 1], pos = 99;
+      for (const o of c.outcomes) { if (r < acc + o.chance) { hit = o; pos = r * 100; break; } acc += o.chance; }
+      setRes({ i, c, hit, pos, show: prReduced() });
+      if (!prReduced()) setTimeout(() => setRes(x => x && x.i === i ? { ...x, show: true } : x), 1500);
+    } else setRes({ i, c, hit: null, show: true });
+  };
+  const go = () => { if (!res) return; onChoose(res.hit ? { ...res.c, outcomes: [{ ...res.hit, chance: 1 }] } : res.c); };
+  const tone = res && res.hit ? PR_TIER[res.hit.tier] || ["Result", "ok"] : ["Done", "ok"];
+  return (
+    <PrEventPage lbl={p ? prSeasonLbl(p, "Career event") : "Career event"} title={event.title} desc={event.desc} scene={scene} player={p}
+      right={p && p.relationships ? <span className="chip"><Ic n="user" />Coach <b>{p.relationships.coach}</b></span> : null}>
+      {event.choices.map((c, i) => {
+        const odds = c.outcomes ? c.outcomes.map(o => ({ label: (PR_TIER[o.tier] || ["Result"])[0], pct: Math.round(o.chance * 100), tone: (PR_TIER[o.tier] || [0, "ok"])[1], fx: prEffects(o).map(x => x[0]).join(" · ") })) : null;
+        return <PrEvo key={i} i={i} emoji={renderChoiceIcon(c.icon)} label={c.label} tag={c.risk ? (c.risk === "risky" ? "Risky" : "Safe") : null} tagOr={c.risk === "risky"}
+          odds={odds} fx={odds ? null : prEffects(c)} onClick={() => choose(c, i)} disabled={!!res} dim={res && res.i !== i} needle={res && res.i === i && res.hit ? res.pos : null} />;
+      })}
+      {res && res.show && (
+        <div className={"pn evres " + tone[1]} data-a="">
+          <Tg><Ic n={tone[1] === "ok" ? "check" : "x"} /> {tone[0]}</Tg>
+          <p>{(res.hit || res.c).result}</p>
+          <div className="ticks">{prEffects(res.hit || res.c).map(([t, pos], k) => <Tg key={k} cls={pos ? "pos" : "neg"}>{t}</Tg>)}</div>
+          <div style={{ display: "flex", gap: 10, marginTop: 12 }}><button className="cta" onClick={go}>{p && p.league && p.stage === "pro" && !p.abroad ? "On to the season" : "Continue"} <Ic n="right" /></button></div>
+        </div>
+      )}
+    </PrEventPage>
+  );
+}
+
+/* ---------- injury recovery ---------- */
+function InjuryRecoveryScreen({ pending, onChoose }) {
+  return (
+    <PrEventPage lbl={`Injury · ${pending.missed} games missed`} title="Recovery plan" scene="medical"
+      desc="The physio lays out how to handle the rest of the recovery. One gets you back to full speed sooner. One protects you properly.">
+      <PrEvo i={0} emoji={renderChoiceIcon("flame")} label="Rush back" tag="Risky" tagOr odds={[{ label: "Back at full speed", pct: 65, tone: "ok" }, { label: "Permanent damage", pct: 35, tone: "bd" }]} onClick={() => onChoose("rush")} />
+      <PrEvo i={1} emoji={renderChoiceIcon("stretch")} label="Full rehab" tag="Safe" fx={[["Fully sound, no damage", true], ["Slow start next season", false]]} onClick={() => onChoose("full")} />
+      {pending.hasScience && <PrEvo i={2} emoji={renderChoiceIcon("scalpel")} label="Guided rehab · sports science" tag="Investment" tagOr fx={[["Back to full speed", true], ["Fully sound, no damage", true]]} onClick={() => onChoose("guided")} />}
+    </PrEventPage>
+  );
+}
+
+/* ---------- career creation: identity and rival ---------- */
+function ChooseIdentityScreen({ player, onChoose }) {
+  const [pick, setPick] = useState(null);
+  return (
+    <PrPage>
+      <PrHead lbl="New career · Your game" title="Choose your identity" desc="How do you want to be known? This shapes how your game shows up on the stat sheet, not how good you are. Permanent for this career." />
+      <div className="choices" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))" }}>
+        {PLAYING_STYLES.map((st, i) => {
+          const fits = st.bestFit.includes(player.position);
+          return (
+            <button key={st.id} className={"ch " + (pick === st.id ? "on" : "")} data-a="" style={{ "--i": i }} onClick={() => setPick(st.id)}>
+              <div className="bd">
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}><span className="ic2"><Ic n={PR_STYLE_IC[st.id] || "star"} /></span>{fits && <Tg cls="or">Fits a {player.position}</Tg>}</div>
+                <b className="t">{st.label}</b>
+                <p>{st.tagline}</p>
+                <div className="ticks">{st.bestFit.map(pos => <Tg key={pos} cls={pos === player.position ? "or" : ""}>{pos}</Tg>)}</div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      <PrNext disabled={!pick} onClick={() => pick && onChoose(pick)}>Lock in your game</PrNext>
+    </PrPage>
+  );
+}
+function NameRivalScreen({ player, onConfirm }) {
+  const [name, setName] = useState("");
+  const [position, setPosition] = useState(player.position);
+  return (
+    <PrPage>
+      <PrHead lbl="New career · Your rival" title="Every story needs a rival" desc="Someone your age, selected the same week you were. Base them on a real friend, a name you like, or leave it blank and let one find you." />
+      <div className="g">
+        <section className="pn c7 l12" data-a="">
+          <h3><Ic n="user" /> Rival's name</h3>
+          <input className="pr-in" value={name} onChange={e => setName(e.target.value.slice(0, 24))} placeholder="e.g. Farid Zulkarnain" />
+          <h3 style={{ marginTop: 16 }}><Ic n="grid" /> Position</h3>
+          <div className="ticks">{POSITIONS.map(x => <Tg key={x.id} cls={position === x.id ? "or" : ""} onClick={() => setPosition(x.id)}>{x.id}</Tg>)}</div>
+        </section>
+        <section className="pn c5 l12" data-a="">
+          <h3><Ic n="eye" /> How a rival works</h3>
+          <div className="dec"><span className="k chance"><Ic n="target" /></span><div><b>Same age, same path</b><small>They come through the youth system at the same time as you.</small></div></div>
+          <div className="dec"><span className="k you"><Ic n="hand" /></span><div><b>Compared every season</b><small>Peak OVR and national caps, all the way to retirement.</small></div></div>
+        </section>
+      </div>
+      <PrNext onClick={() => onConfirm(name, position)}>{name.trim() ? `Lock in ${name.trim().split(" ")[0]}` : "Continue"}</PrNext>
+    </PrPage>
+  );
+}
+
+/* ---------- a clutch moment ---------- */
+function ClutchMomentScreen({ pending, onChoose }) {
+  if (!pending) return null;
+  const event = CLUTCH_EVENTS.find(e => e.id === pending.clutchEventId) || CLUTCH_EVENTS[0];
+  return (
+    <PrEventPage lbl={<><Ic n="fire" /> Clutch moment</>} title={event.title} desc={event.desc} scene="arena">
+      {event.choices.map((c, i) => <PrEvo key={c.id} i={i} emoji={renderChoiceIcon(c.icon)} label={c.label} odds={[{ label: "Success", pct: Math.round(c.successChance * 100), tone: "ok" }, { label: "Miss", pct: 100 - Math.round(c.successChance * 100), tone: "bd" }]} onClick={() => onChoose(c)} />)}
+    </PrEventPage>
+  );
+}
+
+/* ---------- midseason ---------- */
+function MidseasonCheckpointScreen({ player, onChoose }) {
+  return (
+    <PrEventPage lbl={`Midseason · ${player.teamName}`} title={"“Coach, can we talk about my role?”"} scene="office" player={player}
+      desc="You're outplaying your role. The coach has ten minutes before shootaround."
+      right={<span className="chip">Role <b>{player.starterStatus}</b> · OVR <b>{computeOverall(player.stats, player.position)}</b></span>}>
+      <PrEvo i={0} emoji={renderChoiceIcon("handshake")} label="Make your case" tag="Push for minutes" tagOr odds={[{ label: "Earns more minutes", pct: 62, tone: "ok" }, { label: "Reads as impatient", pct: 38, tone: "bd" }]} onClick={() => onChoose("press")} />
+      <PrEvo i={1} emoji={renderChoiceIcon("star")} label="Stay patient" tag="Trust the process" fx={[["Coach trust up", true], ["Role unchanged", false]]} onClick={() => onChoose("patient")} />
+    </PrEventPage>
+  );
+}
+function LockerRoomScreen({ player, subScenario, onChoose }) {
+  const meta = LOCKER_ROOM_META[subScenario] || LOCKER_ROOM_META.blame;
+  const A = meta.choiceA, B = meta.choiceB;
+  return (
+    <PrEventPage lbl={`${meta.kicker} · ${player.teamName}`} title={meta.title} desc={meta.desc} scene="locker" player={player}>
+      <PrEvo i={0} emoji={renderChoiceIcon("handshake")} label={A.label} tag={A.tagline} tagOr odds={A.winPct != null ? [{ label: "Goes well", pct: A.winPct, tone: "ok" }, { label: "Backfires", pct: 100 - A.winPct, tone: "bd" }] : null} note={A.winPct == null ? "A deliberate change, not a gamble." : null} onClick={() => onChoose(A.id)} />
+      <PrEvo i={1} emoji={renderChoiceIcon("star")} label={B.label} tag={B.tagline} note="The lower-risk option." onClick={() => onChoose(B.id)} />
+    </PrEventPage>
+  );
+}
+function InjuryScareScreen({ player, onChoose }) {
+  return (
+    <PrEventPage lbl={`Midseason · ${player.teamName}`} title="That didn't feel right" scene="medical" player={player}
+      desc="Something tweaked coming down off a rebound. Nothing's torn, but the body's been running hot all season, and it's telling you something.">
+      <PrEvo i={0} emoji={renderChoiceIcon("dumbbell")} label="Push through" tag="Keep playing" tagOr fx={[["Second-half injury risk up", false]]} onClick={() => onChoose("push")} />
+      <PrEvo i={1} emoji={renderChoiceIcon("shieldCheck")} label="Sit out a few games" tag="Let it settle" fx={[["Second-half injury risk down", true]]} onClick={() => onChoose("rest")} />
+    </PrEventPage>
+  );
+}
+function TradeBuzzScreen({ player, onChoose }) {
+  return (
+    <PrEventPage lbl={`Midseason · ${player.teamName}`} title="Other clubs are asking" scene="press" player={player}
+      desc="Nothing official. Just scouts at shootaround, a GM's name in the wrong group chat. The kind of thing that gets back to you eventually.">
+      <PrEvo i={0} emoji={renderChoiceIcon("star")} label="Let it motivate you" tag="Everyone's watching" tagOr fx={[["Popularity up", true], ["Morale up", true]]} onClick={() => onChoose("motivate")} />
+      <PrEvo i={1} emoji={renderChoiceIcon("handshake")} label="Stay focused" tag="Trust the room" fx={[["Coach trust up", true], ["Team chemistry up", true]]} onClick={() => onChoose("focus")} />
+    </PrEventPage>
+  );
+}
+
+/* ---------- national team, study, negotiation, trade ---------- */
+function NationalTryoutScreen({ player, tryout, onAttend, onDecline }) {
+  const ev = tryout.event;
+  const title = ev.type === "sea_games" ? "SEA Games" : ev.type === "qualifier" ? `Asia Cup Qualifiers · Phase ${ev.phase}` : "FIBA Asia Cup";
+  const high = tryout.rating > 80;
+  return (
+    <PrPage>
+      <PrHead lbl={<><PrLogo k="c_harimau" s={22} /> National team call · {ev.year}</>} title="Tryout invitation"
+        desc={`Basketball Malaysia has invited you to trials for the ${title}. Representing your country is a huge honour, but the national camp is demanding and eats into your off-season.`} />
+      <div className="dual">
+        <article className="dc" data-a="">
+          <PrSceneArt name="bukitjalil" player={player} />
+          <div className="dh go"><Ic n="shield" /><b>Attend the tryout</b></div>
+          <ul><li className="pos">A shot at the {title} squad</li><li className="pos">Caps, popularity and morale if you're picked</li><li className="neg">The camp eats into your off-season</li></ul>
+          <div className="unl"><Ic n="right" /><span>{high ? <>You're one of the country's best. <b>The coaches would be foolish to leave you out.</b></> : tryout.wonAwardThisSeason ? <>Your season's hardware got their attention, but <b>a squad spot still has to be earned</b>.</> : <>You'll have to <b>earn your place</b> against the other invitees.</>}</span></div>
+          <button className="cta" onClick={onAttend}>Attend tryout</button>
+        </article>
+        <article className="dc" data-a="">
+          <PrSceneArt name="home" player={player} />
+          <div className="dh stay"><Ic n="heart" /><b>Skip this time</b></div>
+          <ul><li className="pos">A full off-season of rest</li><li className="neg">No national team this window</li></ul>
+          <div className="unl"><Ic n="right" /><span>The next window opens <b>next season</b>.</span></div>
+          <button className="ghost" onClick={onDecline}>Skip this time</button>
+        </article>
+      </div>
+    </PrPage>
+  );
+}
+function StudyDecisionScreen({ onStudy, onFocus }) {
+  return (
+    <PrPage>
+      <PrHead lbl="Age 19 · Life decision" title="Continue study or not?" desc="A university has offered you a place. Balancing a degree with basketball is possible, but it means stepping back from the pro pathway for a few years." />
+      <div className="dual">
+        <article className="dc" data-a="">
+          <PrSceneArt name="home" />
+          <div className="dh go"><Ic n="iq" /><b>Continue study</b></div>
+          <ul><li className="pos">Faster Basketball IQ growth</li><li className="pos">Lighter fatigue</li><li className="neg">Semi-pro clubs only until 23</li></ul>
+          <button className="cta" onClick={onStudy}>Continue study</button>
+        </article>
+        <article className="dc" data-a="">
+          <PrSceneArt name="gym" />
+          <div className="dh stay"><Ic n="ball" /><b>Focus on basketball</b></div>
+          <ul><li className="pos">Stay on the pro path</li><li className="pos">No restrictions on offers</li></ul>
+          <button className="ghost" onClick={onFocus}>Focus on basketball</button>
+        </article>
+      </div>
+    </PrPage>
+  );
+}
+function NegotiateOfferScreen({ player, club, terms, onCommit }) {
+  const [ask, setAsk] = useState(null);
+  const score = negotiationLeverage(player, club);
+  const tier = negotiationTier(score);
+  const canRole = !!nextRoleTier(terms.role);
+  const mo = negotiationOdds(score, "money");
+  const ro = canRole ? negotiationOdds(score, "role") : null;
+  const odds = (o) => { const w = Math.round(o.winChance * 100), k = Math.round(o.walkChance * 100); return [{ label: "They meet your ask", pct: w, tone: "ok" }, { label: "They hold at their offer", pct: Math.max(0, 100 - w - k), tone: "wa" }, { label: "They walk away", pct: k, tone: "bd" }]; };
+  const META = { money: { label: "Push for money", icon: "dollarUp", tag: `Same ${terms.years || 2}-year ${terms.role} deal`, o: mo }, role: canRole ? { label: "Push for role", icon: "star", tag: `${terms.role} → ${nextRoleTier(terms.role)}`, o: ro } : null };
+  const key = club.id && LOGO[club.id] ? club.id : logoKeyFor(club.name);
+  return (
+    <PrEventPage lbl={<>{key ? <PrLogo k={key} s={22} /> : null} {club.name} · Negotiation</>} title={ask ? `${META[ask].label}?` : "What do you push for?"} scene="office" player={player}
+      desc={ask ? "One ask at a time. Pushing for everything at once reads as greedy and hurts your odds on both." : `Their opening offer: ${rm(terms.salary)}/mo, a ${terms.years || 2}-year ${terms.firstOption ? "first option" : terms.role} deal.`}
+      right={<span className="chip">Leverage <b style={{ color: tier === "high" ? "#7fe0ad" : tier === "medium" ? "var(--or2)" : "#ff9a9a", textTransform: "capitalize" }}>{tier}</b></span>}>
+      {!ask && <>
+        <PrEvo i={0} emoji={renderChoiceIcon("dollarUp")} label={META.money.label} tag={META.money.tag} tagOr odds={odds(mo)} onClick={() => setAsk("money")} />
+        {META.role && <PrEvo i={1} emoji={renderChoiceIcon("star")} label={META.role.label} tag={META.role.tag} tagOr odds={odds(ro)} onClick={() => setAsk("role")} />}
+      </>}
+      {ask && <>
+        {ask === "role" && <p style={{ color: "var(--mu)", margin: 0, fontSize: 13 }}>A role jump asks more of them than a bigger paycheck does. Someone else loses minutes for you to gain them: lower odds, same leverage underneath.</p>}
+        <PrEvo i={0} emoji={renderChoiceIcon(META[ask].icon)} label={`Commit: ${META[ask].label.toLowerCase()}`} tag="Commit to the ask" tagOr odds={odds(META[ask].o)} onClick={() => onCommit(ask)} />
+        <button className="ghost" style={{ alignSelf: "flex-start" }} onClick={() => setAsk(null)}><Ic n="left" /> Choose a different ask</button>
+      </>}
+    </PrEventPage>
+  );
+}
+function TradeRequestScreen({ player, club, onCommit }) {
+  const cases = TRADE_REQUEST_REASONS.map(r => ({ ...r, strength: tradeRequestCase(player, club, r.id) }));
+  const avg = cases.reduce((a, c) => a + c.strength, 0) / cases.length;
+  const tier = avg < 0.30 ? "low" : avg < 0.45 ? "medium" : "high";
+  return (
+    <PrEventPage lbl={`${club.name} · Trade request`} title="Why do you want out?" scene="office" player={player}
+      desc={"The reason isn't flavour: it changes your case. A weak ask can still be granted, just not on your terms, and a bad one can cost you more than a “no”. A denial locks out another request for 2 seasons."}
+      right={<span className="chip">Your standing <b style={{ textTransform: "capitalize" }}>{tier}</b></span>}>
+      {cases.map((c, i) => <PrEvo key={c.id} i={i} emoji={renderChoiceIcon(c.icon)} label={c.label} tag={c.tagline(player)} odds={[{ label: "Granted", pct: Math.round(c.strength * 100), tone: "ok" }, { label: "Denied", pct: 100 - Math.round(c.strength * 100), tone: "bd" }]} onClick={() => onCommit(c.id)} />)}
+    </PrEventPage>
+  );
+}
+/* =====================================================================
+   RESULT PAGES — tournaments, camps, seasons
+===================================================================== */
+const PR_MEDAL = { champion: "gold", gold: "gold", runner_up: "silver", silver: "silver", third: "bronze", bronze: "bronze" };
+function prMedalFor(id, label) {
+  const l = String(label || "").toLowerCase();
+  const k = PR_MEDAL[id] || (/champion|gold/.test(l) ? "gold" : /runner-up|silver|second place|final/.test(l) && !/second runner/.test(l) ? "silver" : /bronze|third|second runner/.test(l) ? "bronze" : "dim");
+  return k;
+}
+function PrMedalK({ k, flag, icon }) {
+  if (k === "bronze") return <div className="medal2 pop" style={{ background: "radial-gradient(circle at 35% 30%,#f6d2ae,#c07a42 48%,#6b3f1c)", color: "#2e1708" }}>{flag ? <PrFlag code={flag} /> : <Ic n={icon || "trophy"} sw={1.8} />}</div>;
+  return <PrMedal kind={k === "dim" ? "dim" : k} flag={flag} icon={icon} />;
+}
+function prRecapFor(p, kind) {
+  const r = p.mdRecaps && p.mdRecaps[kind];
+  return r && (r.year === p.year || r.year === p.year - 1) ? r : null;
+}
+/* One tournament result page, shaped like the prototype's. */
+function PrResult({ player, tc, medal, lbl, title, text, statTitle, statSmall, stats, awards, awardNote, gains, gainsTitle, side, recap, before, extra, cta = "Continue", onContinue }) {
+  return (
+    <PrPage>
+      <PrResB tc={tc} medal={medal} lbl={lbl} title={title} text={text} />
+      <div className="g" style={{ marginTop: 16 }}>
+        {(stats && stats.length > 0 || awards || gains) && <section className={"pn " + (side ? "c7" : "c12") + " l12"} data-a="">
+          <h3><Ic n="ball" /> {statTitle || "Your tournament"}<small>{statSmall || "SIM"}</small></h3>
+          {stats && stats.length > 0 && <PrSline items={stats} />}
+          {awards && <>
+            <h3 style={{ marginTop: 16 }}><Ic n="star" /> Awards</h3>
+            {awards.length ? <div className="ticks">{awards.map((a, i) => <Tg key={i} cls={a.gold ? "or" : ""}>{a.gold && <Ic n="trophy" />} {a.label}</Tg>)}</div> : <p style={{ color: "var(--di)", margin: 0, fontSize: 13 }}>No individual awards this time.</p>}
+          </>}
+          {awardNote && <p style={{ color: "var(--mu)", fontSize: 13, margin: "10px 0 0" }}>{awardNote}</p>}
+          {gains && Object.keys(gains).some(k => gains[k]) && <><h3 style={{ marginTop: 16 }}><Ic n="bolt" /> {gainsTitle || "Development"}</h3><PrGains gains={gains} /></>}
+        </section>}
+        {side}
+        {recap && recap.qual && (
+          <section className="pn c5 l12" data-a="">
+            <h3><PrLogo k="c_fiba" s={24} /> SEABA qualifiers<small>Top 3 go to the Asia Cup</small></h3>
+            <PrMiniTable rows={recap.qual} teams={recap.teams} me={recap.myTeam} cut={3} note="Qualified" />
+            <PrSrc color="var(--in)">Opponents and results simulated</PrSrc>
+          </section>
+        )}
+        {recap && recap.group && !recap.qual && (
+          <section className="pn c5 l12" data-a="">
+            <h3><Ic n="table" /> Group {recap.group.id}<small>{recap.format === "sea" ? "Top 2 to the semis" : "Top 2 advance"}</small></h3>
+            <PrMiniTable rows={recap.group.rows} teams={recap.teams} me={recap.myTeam} />
+          </section>
+        )}
+        {recap && recap.ko && recap.ko.length > 0 && (
+          <section className={"pn " + (recap.group || recap.qual ? "c7" : "c12") + " l12"} data-a="">
+            <h3><Ic n="trophy" /> Knockouts{recap.champion && <small>Champions: {(recap.teams[recap.champion] || {}).name}</small>}</h3>
+            <div className="pr-ko">{recap.ko.map((s, i) => {
+              const mine = s.a === recap.myTeam || s.b === recap.myTeam;
+              return (
+                <div key={i} className={"mt " + (mine ? "pr-mine" : "")}>
+                  <small>{s.round}{s.bo > 1 ? ` · best of ${s.bo}` : ""}</small>
+                  {[[s.a, s.sa], [s.b, s.sb]].map(([id, sc]) => <div key={id} className={(id === recap.myTeam ? "me3 " : "") + (s.winner === id ? "w" : "")}><PrTeamLogo team={recap.teams[id] || { name: id }} s={20} /><span>{(recap.teams[id] || {}).name || id}</span><b>{sc != null ? sc : ""}</b></div>)}
+                </div>
+              );
+            })}</div>
+          </section>
+        )}
+        {recap && <PrMyGames recap={recap} />}
+        <PrImpact player={player} before={before || (recap && recap.before)} />
+        {extra}
+      </div>
+      {onContinue && <PrNext onClick={onContinue}>{cta}</PrNext>}
+    </PrPage>
+  );
+}
+const prAwardsOf = (ids, META) => (ids || []).map(id => ({ label: META && META[id] ? META[id].label : id, gold: /scorer|mvp|player of|most valuable|top/i.test(META && META[id] ? META[id].label : id) }));
+const prStateTc = (p) => (stateKit(p.hometown) || {}).jersey || "#ff7a1a";
+
+function U15SelectionScreen({ player, selected, onContinue }) {
+  const p = player;
+  if (!selected) return (
+    <PrResult player={p} tc="#3a404c" medal={<PrMedalK k="dim" icon="user" />} lbl={<><PrFlag state={p.hometown} w={22} /> {prStateTeam(p)} selection trials</>} title="Not this time"
+      text={`The ${prStateTeam(p)} U15 squad list goes up without your name on it. It stings, but plenty of careers have started from exactly this spot. Time to get back in the gym.`}
+      statTitle="Your trial" statSmall="Age 15" stats={[["OVR", computeOverall(p.stats, p.position)], ["POP", p.popularity], ["Tier", TIER_META[getStateTier(p.hometown)].name.replace("Tier ", "")]]}
+      side={p.rival ? <section className="pn c5 l12" data-a=""><h3><Ic n="user" /> Also selected this year</h3><div className="rival"><span className="ini-b" style={{ background: "linear-gradient(150deg,#1fa37a,#0d5c44)", width: 52, height: 52 }}>{p.rival.name.split(" ").map(x => x[0]).slice(0, 2).join("")}</span><div><b>{p.rival.name}</b><div style={{ color: "var(--di)", fontSize: 12 }}>{p.rival.position} · {shortHome(p.rival.hometown || "")}</div></div><span className="sim" style={{ marginLeft: "auto" }}>SIM</span></div></section> : null}
+      cta="Continue to youth hub" onContinue={onContinue} />
+  );
+  return (
+    <div className="wrap pr-sel">
+      <div className="pr-sel-in" data-a="">
+        <div className="pr-sel-k"><PrLogo k="c_maba" s={36} /><Tg><PrFlag state={p.hometown} w={22} /> {prStateTeam(p)} selection trials</Tg></div>
+        <div className="pr-sel-tr"><Ic n="trophy" sw={1.4} /></div>
+        <h1 className="pr-sel-t">Selected</h1>
+        <p>Out of everyone who tried out, you made {prStateTeam(p)}'s squad for the MABA–MILO Lum Mun Chak Cup, the National U15 Championship. Your name is on the noticeboard. This is where it starts.</p>
+        {p.rival && <div className="pr-sel-rv"><span className="ini-b" style={{ background: "linear-gradient(150deg,#1fa37a,#0d5c44)" }}>{p.rival.name.split(" ").map(x => x[0]).slice(0, 2).join("")}</span><span style={{ flex: 1, minWidth: 0 }}><small>Also selected this year · your rival</small><b>{p.rival.name}</b><small>{p.rival.position} · {shortHome(p.rival.hometown || "")}</small></span><span className="sim">SIM</span></div>}
+        <div className="pr-sel-path">{[["c_maba", "U15 Nationals"], ["c_u17", "U17 Nationals"], ["c_dleague", "D-League"], ["c_mbl", "MBL"], ["c_harimau", "Harimau"]].map(([k, l], i) => <React.Fragment key={k}>{i > 0 && <i />}<span className={i === 0 ? "on" : ""}><PrLogo k={k} s={48} round />{l}</span></React.Fragment>)}</div>
+        <button className="cta" onClick={onContinue}>On to the U15 Nationals <Ic n="right" /></button>
+      </div>
+    </div>
+  );
+}
+function U15TournamentScreen({ player, onContinue }) {
+  const p = player, s = p.u15Stats || {};
+  const meta = U15_TEAM_RESULT_META[p.u15TeamResult] || { label: "Tournament complete" };
+  const recap = prRecapFor(p, "u15");
+  const awards = prAwardsOf(p.u15Awards, U15_AWARD_META);
+  const games = recap ? recap.myGames.length : null;
+  return (
+    <PrResult player={p} tc={prStateTc(p)} medal={<PrMedalK k={prMedalFor(p.u15TeamResult, meta.label)} />}
+      lbl={<><PrLogo k="c_maba" s={22} /> Lum Mun Chak Cup · Final result</>} title={meta.label}
+      text={prStory(recap) || `${prStateTeam(p)}'s campaign at the National U15 Championship, and your stat line.`}
+      statSmall={games ? `${games} games · SIM` : "SIM"} stats={prLine(s)} awards={awards}
+      side={p.nationalShortlisted ? (
+        <section className="pn c5 l12 letter" data-a="">
+          <Tg style={{ color: "#f3d79b", borderColor: "rgba(226,182,90,.4)", background: "rgba(226,182,90,.12)" }}><Ic n="flag" /> National Youth Shortlist</Tg>
+          <h2>You made the pool</h2>
+          <p>Basketball Malaysia's scouts were watching. Out of everyone who played, you are one of about 50 players nationwide invited into the national youth pool.</p>
+          <button className="cta" onClick={onContinue}>Open the invitation <Ic n="right" /></button>
+        </section>
+      ) : (
+        <section className="pn c5 l12" data-a="">
+          <h3><Ic n="flag" /> National youth shortlist</h3>
+          <p style={{ color: "var(--mu)", margin: 0 }}>About 50 players a year are invited into the national youth pool. Not this year, but the scouts keep watching at the U17s.</p>
+        </section>
+      )}
+      recap={recap} cta={p.nationalShortlisted ? "Open the invitation" : "Continue to youth hub"} onContinue={onContinue} />
+  );
+}
+function A17TournamentScreen({ player, onContinue }) {
+  const p = player, s = p.a17Stats;
+  if (!s) return (
+    <PrResult player={p} tc="#3a404c" medal={<PrMedalK k="dim" icon="user" />} lbl={<><PrLogo k="c_u17" s={22} /> Age 17 · National U17 Championship</>} title="Not selected"
+      text={`The ${prStateTeam(p)} U17 squad list goes up without your name on it this year. Keep grinding: there's still a whole career ahead.`} stats={[]} statTitle="This year" cta="Continue" onContinue={onContinue} />
+  );
+  const meta = A17_TEAM_RESULT_META[p.a17TeamResult] || { label: "Tournament complete" };
+  const recap = prRecapFor(p, "u17");
+  return (
+    <PrResult player={p} tc={prStateTc(p)} medal={<PrMedalK k={prMedalFor(p.a17TeamResult, meta.label)} />}
+      lbl={<><PrLogo k="c_u17" s={22} /> Age 17 · National U17 Championship</>} title={meta.label}
+      text={prStory(recap) || `Selected as a ${prStateTeam(p)} state representative at the 17 & Below National Championship.`}
+      statSmall={recap ? `${recap.myGames.length} games · SIM` : "SIM"} stats={prLine(s)} awards={prAwardsOf(p.a17Awards, A17_AWARD_META)}
+      side={<section className="pn c5 l12" data-a=""><h3><Ic n="flag" /> What comes next</h3>
+        <div className="dec"><span className="k you"><Ic n="hand" /></span><div><b>U18 national pool</b><small>{p.a17Shortlisted ? "You made the U18 shortlist: a Bukit Jalil camp invite is next." : "No U18 shortlist call this year."}</small></div></div>
+        <div className="dec"><span className="k chance"><Ic n="target" /></span><div><b>Taiwan HBL scouts</b><small>{p.pendingHblOffer ? "Three HBL high schools want you as a student-athlete." : "No HBL offers this year."}</small></div></div>
+      </section>}
+      recap={recap} onContinue={onContinue} />
+  );
+}
+function U16ResultScreen({ player, onContinue }) {
+  const p = player, s = p.age16Stats || {};
+  const recap = prRecapFor(p, "u16");
+  const nat = prRecapFor(p, "u17");
+  const honours = [{ label: "U16 National Team", gold: false }, ...(p.age16Qualified ? [{ label: "FIBA U16 Asia Cup", gold: false }] : []), ...(p.age16TOT ? [{ label: "Team of the Tournament", gold: true }] : []), ...(s.nbaTalent ? [{ label: "Standout performer", gold: true }] : [])];
+  return (
+    <PrResult player={p} tc="#cc0000" medal={<PrMedalK k={p.age16Qualified ? "red" : "dim"} flag="MAS" />}
+      lbl={<><PrLogo k="c_fiba" s={22} /> Age 16 · Malaysia U16</>} title={p.age16ResultLabel || "Representing Malaysia"}
+      text={prStory(recap) || (p.age16Qualified ? "Bukit Jalil paid off: Malaysia got through the 5-team qualifiers and into the Asia Cup proper." : "Bukit Jalil paid off with a U16 call-up, but Malaysia couldn't get out of the 5-team qualifying group this cycle.")}
+      statTitle={p.age16Qualified ? "FIBA U16 Asia Cup" : "SEABA qualifiers"} statSmall={recap ? `${recap.myGames.length} games · SIM` : "SIM"} stats={prLine(s)} awards={honours} gains={p.age16Gains}
+      recap={recap}
+      extra={p.age16NatU17Stats ? (
+        <section className="pn c12" data-a="">
+          <h3><Ic n="cal" /> Same year at home</h3>
+          <div className="yr2">
+            <div><PrLogo k="c_u17" s={44} /><span><b>National U17 Championship</b><small>Played for {prStateTeam(p)} as a 16-year-old · {p.age16NatU17Stats.ppg} PPG</small></span><Tg>{p.age16NatU17ResultLabel}</Tg></div>
+            {nat && nat.champion && <div><PrTeamLogo team={nat.teams[nat.champion]} s={44} /><span><b>{(nat.teams[nat.champion] || {}).name}</b><small>Won the U17 title</small></span><Tg cls="or">Champions</Tg></div>}
+          </div>
+        </section>
+      ) : null}
+      cta="Continue to age 17" onContinue={onContinue} />
+  );
+}
+function U17ResultScreen({ player, onContinue }) {
+  const p = player, s = p.age16Stats || {};
+  const recap = prRecapFor(p, "u17");
+  return (
+    <PrResult player={p} tc="#3060e0" medal={<PrMedalK k={prMedalFor(null, p.age16ResultLabel) === "dim" ? "blue" : prMedalFor(null, p.age16ResultLabel)} icon="bolt" />}
+      lbl={<><PrLogo k="c_u17" s={22} /> Age 16 · U17 jumpclass</>} title={p.age16ResultLabel || "Playing up a year"}
+      text={prStory(recap) || `The 30% roll came in: ${prStateTeam(p)} picked you to play up at the National U17 Championship against 17-year-olds.`}
+      statTitle="National U17 Championship" statSmall="as a 16-year-old · SIM" stats={prLine(s)} awards={prAwardsOf(p.age16Awards, U15_AWARD_META)} gains={p.age16Gains}
+      side={<section className="pn c5 l12" data-a=""><h3><Ic n="route" /> Playing up</h3><p style={{ color: "var(--mu)", fontSize: 13, margin: 0 }}>Playing a full year up against older, stronger opponents is brutal, but the experience counts for plenty. Bukit Jalil alumni go to the U16 national team instead.</p></section>}
+      recap={recap} cta="Continue to age 17" onContinue={onContinue} />
+  );
+}
+function U18ResultScreen({ player, onContinue }) {
+  const p = player;
+  if (!p.age18Made) return (
+    <PrResult player={p} tc="#3a404c" medal={<PrMedalK k="dim" flag="MAS" />} lbl={<><PrLogo k="c_fiba" s={22} /> Age 18 · Malaysia U18</>} title="Just missed out"
+      text="You trained hard with the U18 national pool, but the coaches went another direction for the final Asia Cup Qualifiers squad. The exposure counts, and there's a whole senior career ahead." stats={[]} statTitle="This year" onContinue={onContinue} />
+  );
+  const s = p.age18Stats || {};
+  const recap = prRecapFor(p, "u18");
+  const honours = [{ label: "U18 National Team" }, ...(p.age18Qualified ? [{ label: "FIBA U18 Asia Cup" }] : []), ...(p.age18TOT ? [{ label: "Team of the Tournament", gold: true }] : []), ...(s.nbaTalent ? [{ label: "Standout performer", gold: true }] : [])];
+  return (
+    <PrResult player={p} tc="#cc0000" medal={<PrMedalK k={p.age18Qualified ? "red" : "dim"} flag="MAS" />}
+      lbl={<><PrLogo k="c_fiba" s={22} /> Age 18 · Malaysia U18</>} title={p.age18ResultLabel || "Representing Malaysia"}
+      text={prStory(recap) || (p.age18Qualified ? "Malaysia got through the 5-team qualifiers and into the 12-team Asia Cup proper." : "Malaysia couldn't get out of the 5-team qualifying group this cycle.")}
+      statTitle={p.age18Qualified ? "FIBA U18 Asia Cup" : "SEABA qualifiers"} statSmall={recap ? `${recap.myGames.length} games · SIM` : "SIM"} stats={prLine(s)} awards={honours} gains={p.age18Gains}
+      recap={recap} onContinue={onContinue} />
+  );
+}
+function MSSMResultScreen({ player, onContinue }) {
+  const p = player, s = p.mssmStats || {};
+  const recap = prRecapFor(p, "mssm");
+  return (
+    <PrResult player={p} tc={prStateTc(p)} medal={<PrMedalK k={prMedalFor(null, p.mssmResultLabel)} />}
+      lbl={<><PrLogo k="c_maba" s={22} /> MSSM · {prStateTeam(p)}</>} title={p.mssmResultLabel || "MSSM"}
+      text={prStory(recap) || (p.mssmGuaranteed ? "Your national or state squad spot this year earned you an automatic call-up to MSSM too." : `Majlis Sukan Sekolah-Sekolah Malaysia: ${prStateTeam(p)}'s run this year.`)}
+      statTitle="Your MSSM" statSmall={`${s.games || (recap ? recap.myGames.length : 0)} games · SIM`} stats={prLine(s)} awards={prAwardsOf(p.mssmAwards, MSSM_AWARD_META)}
+      recap={recap} onContinue={onContinue} />
+  );
+}
+function NationalResultScreen({ event, player, onContinue }) {
+  const s = event.stats || {};
+  const p = player;
+  const sea = event.type === "sea_games";
+  const recap = p && sea ? prRecapFor(p, "sea") : null;
+  return (
+    <PrResult player={p} tc="#cc0000" medal={<PrMedalK k={sea ? prMedalFor(null, event.label) : "red"} flag={sea && prMedalFor(null, event.label) !== "dim" ? null : "MAS"} icon={sea ? "trophy" : null} />}
+      lbl={<><PrLogo k="c_harimau" s={22} /> Malaysia national team{s.role ? ` · ${s.role}` : ""}</>} title={event.label}
+      text={prStory(recap) || (sea ? "Eight Southeast Asian nations, one podium." : event.type === "qualifier" ? "Every game in the qualifiers matters: the top teams advance to the Asia Cup." : "The FIBA Asia Cup: Asia's best on the biggest stage.")}
+      statTitle={sea ? "Your SEA Games" : "Your tournament"} stats={prLine(s)} awards={s.standout ? [{ label: "Standout performer", gold: true }] : null}
+      recap={recap} onContinue={onContinue} />
+  );
+}
+function HblSeasonScreen({ player, onContinue }) {
+  const p = player, s = p.hblStats;
+  if (!s) return null;
+  const meta = A17_TEAM_RESULT_META[p.hblTeamResult] || { label: "Season complete" };
+  return (
+    <PrResult player={p} tc="#3a8bd5" medal={<PrMedalK k={prMedalFor(p.hblTeamResult, meta.label)} flag={prMedalFor(p.hblTeamResult, meta.label) === "dim" ? "TPE" : null} />}
+      lbl={<><PrFlag code="TPE" w={22} /> Taiwan HBL · {p.hblTeamName}</>} title={meta.label}
+      text={`Your import year at ${p.hblTeamName}${p.hblGames ? `: ${p.hblGames} games as a starter.` : "."}`}
+      statTitle="Your HBL season" statSmall={p.hblGames ? `${p.hblGames} games · SIM` : "SIM"} stats={prLine(s)} awards={prAwardsOf(p.hblAwards, A17_AWARD_META)} gains={p.hblGains}
+      onContinue={onContinue} />
+  );
+}
+function PrCampResult({ player, onContinue, who }) {
+  const p = player;
+  return (
+    <PrResult player={p} tc="#e2b65a" medal={<PrMedalK k="gold" icon="shield" />} lbl={<><PrLogo k="c_harimau" s={22} /> Bukit Jalil Sports School</>} title="Three months later"
+      text={`${who} of elite training alongside the country's best young talent is behind you.`} statTitle="Camp" statSmall="3 months" stats={[["OVR", computeOverall(p.stats, p.position)], ["POP", p.popularity], ["Fatigue", p.fatigue]]}
+      gains={p.bootcampGains} gainsTitle="What the camp gave you"
+      extra={<section className="pn c12" data-a="">{p.bootcampInjury ? <div className="injb"><Ic n="x" /> Injury setback: {p.bootcampInjury}</div> : <div className="injb ok"><Ic n="check" /> No injury. You rolled the 75%.</div>}</section>}
+      onContinue={onContinue} />
+  );
+}
+function U15BootcampResultScreen({ player, onContinue }) { return <PrCampResult player={player} onContinue={onContinue} who="Three months" />; }
+function A17BootcampResultScreen({ player, onContinue }) { return <PrCampResult player={player} onContinue={onContinue} who="Another three months" />; }
+
+/* ---------- shortlists: Bukit Jalil, or stay home ---------- */
+function PrCampDecision({ player, onAccept, onDecline, age, pool, goUnlock, stayUnlock, odds }) {
+  const p = player;
+  return (
+    <PrPage>
+      <PrHead lbl={`Age ${age} · ${pool} · Decision`} title="Bukit Jalil Sports School" desc={`Three months living and training with the country's best ${age === 15 ? "U15" : "young"} talent. A real step up, but intense, with a higher injury risk.`} />
+      <div className="dual">
+        <article className="dc" data-a="">
+          <PrSceneArt name="bukitjalil" player={p} />
+          <div className="dh go"><Ic n="shield" /><b>Go to Bukit Jalil</b></div>
+          <ul><li className="pos">Every attribute +2 to +6</li><li className="pos">Popularity +10 to +18 · Morale +5</li><li className="neg">Fatigue +40</li><li className="neg">25% chance of an overuse injury (−3 to −7 on one attribute)</li></ul>
+          <div className="unl"><Ic n="right" /><span>{goUnlock}</span></div>
+          <button className="cta" onClick={onAccept}>Go to Bukit Jalil</button>
+        </article>
+        <article className="dc" data-a="">
+          <PrSceneArt name="home" player={p} ph={11} />
+          <div className="dh stay"><Ic n="heart" /><b>Stay home</b></div>
+          <ul><li className="pos">Family +5</li><li className="pos">No fatigue, no injury risk</li><li className="neg">No bootcamp development</li><li className="neg">{age === 15 ? "The U16 national team stays closed" : "No U18 national team spot"}</li></ul>
+          <div className="unl"><Ic n="right" /><span>{stayUnlock}</span></div>
+          <button className="ghost" onClick={onDecline}>Stay home</button>
+        </article>
+      </div>
+      {odds && (
+        <section className="pn" data-a="" style={{ marginTop: 16 }}>
+          <h3><Ic n="target" /> What age {age + 1} looks like from each choice<small>Odds from the game's code</small></h3>
+          <div className="cmp2">{odds.map(([h, rows]) => (
+            <div key={h}><b>{h}</b>
+              <div className="odds" style={{ margin: "12px 0 10px" }}>{rows.map((r, i) => <i key={i} className={r[2] === "n" ? "" : r[2]} style={{ width: r[1] + "%", background: r[2] === "n" ? "#3a404c" : undefined }} />)}</div>
+              {rows.map((r, i) => <div key={i} className="meter" style={{ gridTemplateColumns: "minmax(0,1fr)" }}><span><span className={"dot " + r[2]} style={r[2] === "n" ? { background: "#3a404c" } : undefined} />{r[1]}% {r[0]}</span></div>)}
+            </div>
+          ))}</div>
+        </section>
+      )}
+    </PrPage>
+  );
+}
+function U15ShortlistScreen({ player, onAccept, onDecline }) {
+  const sel = Math.round((player.highlyTalented ? U16_SELECTION_CHANCE_PRODIGY : U16_SELECTION_CHANCE) * 100);
+  const jump = Math.round(U17_JUMPCLASS_CHANCE * 100);
+  const miss = 100 - sel;
+  return <PrCampDecision player={player} onAccept={onAccept} onDecline={onDecline} age={15} pool="National Youth Shortlist"
+    goUnlock={<>Unlocks next year: <b>U16 national team</b> selection ({sel}%), then the FIBA U16 Asia Cup qualifiers</>}
+    stayUnlock={<>Next year: <b>U17 jumpclass</b> trial ({jump}%), otherwise state level plus MSSM</>}
+    odds={[["If you go", [["U16 national team", sel, "ok"], ["Not picked → U17 jumpclass", Math.round(miss * jump / 100), "wa"], ["State level + MSSM", miss - Math.round(miss * jump / 100), "n"]]], ["If you stay", [["U17 jumpclass", jump, "wa"], ["State level + MSSM", 100 - jump, "n"]]]]} />;
+}
+function A17ShortlistScreen({ player, onAccept, onDecline }) {
+  return <PrCampDecision player={player} onAccept={onAccept} onDecline={onDecline} age={17} pool="U18 National Shortlist"
+    goUnlock={<>Unlocks at 18: a spot in the <b>U18 national team</b> for the FIBA U18 Asia Cup qualifiers</>}
+    stayUnlock={<>At 18: <b>MSSM</b> with {prStateTeam(player)}, then your first club offers</>} />;
+}
+
+/* ---------- the season recap ---------- */
+function PrSeasonTable({ s, title, cut }) {
+  if (!s) return null;
+  return (
+    <section className="pn c6 l12" data-a="">
+      <h3><PrLogo k={s.kind === "mbl" ? "c_mbl" : "c_dleague"} s={24} /> {title}<small>{cut ? `Top ${cut} to the playoffs` : ""}</small></h3>
+      <table className="mini-t">
+        <thead><tr><th>#</th><th>Team</th><th>W–L</th><th>Diff</th></tr></thead>
+        <tbody>{s.table.map((r, i) => (
+          <tr key={r.id} className={r.id === s.myTeam ? "mine" : ""} style={cut && i === cut - 1 ? { boxShadow: "inset 0 -2px 0 rgba(255,122,26,.35)" } : undefined}><td className="num">{i + 1}</td><td><span className="tcell"><PrTeamLogo team={s.teams[r.id]} s={22} /><b>{(s.teams[r.id] || {}).name}</b></span></td><td className="num">{r.w}–{r.l}</td><td className={"num " + (r.pf - r.pa > 0 ? "up" : r.pf - r.pa < 0 ? "dn" : "")}>{r.pf - r.pa > 0 ? "+" : ""}{r.pf - r.pa}</td></tr>
+        ))}</tbody>
+      </table>
+      {s.champion && <PrSrc>Champions: {(s.teams[s.champion] || {}).name}</PrSrc>}
+    </section>
+  );
+}
+const ResultScreen = memo(function ResultScreen({ summary, player, onContinue }) {
+  const [advancing, setAdvancing] = useState(false);
+  const handleAdvance = () => {
+    if (advancing) return;
+    setAdvancing(true);
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        try { onContinue(); } catch (e) { console.error("Season transition failed:", e); setAdvancing(false); return; }
+        setTimeout(() => setAdvancing(false), 1500);
+      }, 0);
+    });
+  };
+  const sm = summary, ls = sm.leagueStats;
+  const p = player;
+  const last = p && p.mdLeagueLast && p.mdLeagueLast.year === sm.leagueYear ? p.mdLeagueLast : null;
+  const won = sm.wonChampionship;
+  const awards = (sm.leagueAwards || []).map(a => ({ label: LEAGUE_AWARD_META[a] ? LEAGUE_AWARD_META[a].label : a, gold: ["mvp", "dpoy", "roty", "finals_mvp"].includes(a) }));
+  const tierTone = PR_TIER[sm.eventTier];
+  const tc = p ? prTeamColors(p)[0] : "#ff7a1a";
+  const lgKey = ls ? (p && p.league === "mbl" ? "c_mbl" : "c_dleague") : null;
+  return (
+    <PrPage>
+      <PrResB tc={tc} medal={<PrMedalK k={won ? "gold" : awards.some(a => a.gold) ? "gold" : ls ? "silver" : "dim"} icon={won ? "trophy" : awards.length ? "star" : "ball"} />}
+        lbl={<>{lgKey ? <PrLogo k={lgKey} s={22} /> : null} {ls ? `${sm.leagueLabel} ${sm.leagueYear || ""}` : `Season ${sm.seasonNum}`} · Season recap</>}
+        title={won ? "Champions" : `${sm.tierLabel} season`} text={sm.note} />
+      <div className="g" style={{ marginTop: 16 }}>
+        <section className="pn c7 l12" data-a="">
+          <h3><Ic n="ball" /> Your season<small>{ls ? `${sm.gamesPlayed != null ? sm.gamesPlayed + " games · " : ""}${ls.role} · SIM` : "SIM"}</small></h3>
+          {ls ? <PrSline items={prLine(ls, sm.shotProfile ? [["3PA", sm.shotProfile.tpa], ["FTA", sm.shotProfile.fta]] : [])} />
+            : <PrSline items={[["Earned", rm(sm.moneyDelta)], ["Popularity", prSign(sm.popularityDelta)], ["Coach", sm.coachTrust], ["Team", sm.teamChemistry]]} />}
+          {ls && awards.length > 0 && <><h3 style={{ marginTop: 16 }}><Ic n="star" /> Awards</h3><div className="ticks">{awards.map(a => <Tg key={a.label} cls={a.gold ? "or" : ""}>{a.gold && <Ic n="trophy" />} {a.label}</Tg>)}</div></>}
+          {ls && won && <div className="ticks" style={{ marginTop: 10 }}><Tg cls="or"><Ic n="trophy" /> Champions</Tg></div>}
+          {sm.bestGame && <div className="pr-best"><small>{sm.isCareerHigh ? "Career high" : "Season high"}</small><b className="num">{sm.bestGame.pts}</b><span>PTS</span><b className="num">{sm.bestGame.reb}</b><span>REB</span><b className="num">{sm.bestGame.ast}</b><span>AST</span></div>}
+          {sm.styleNote && <p style={{ color: "var(--mu)", fontSize: 12.5, margin: "10px 0 0", fontStyle: "italic" }}>{sm.styleNote}</p>}
+          {sm.injury && <div className="injb" style={{ marginTop: 12 }}><Ic n="x" /> {sm.injury.serious ? `Serious injury: you missed ${sm.injury.missed} games.` : `Injury setback: you missed ${sm.injury.missed} games.`}{sm.injuryRecoveryNote ? ` ${sm.injuryRecoveryNote}` : ""}</div>}
+        </section>
+        <section className="pn c5 l12" data-a="">
+          <h3><Ic n="eye" /> How the year went</h3>
+          {sm.trainingText && <div className="dec"><span className="k you"><Ic n="bolt" /></span><div><b>Training</b><small>{sm.trainingText}</small></div></div>}
+          {sm.eventText && <div className="dec"><span className={"k " + (sm.eventTier === "critical" ? "you" : "chance")}><Ic n={sm.eventTier === "critical" ? "x" : "target"} /></span><div><b>Career event {tierTone && <Tg cls={tierTone[1] === "ok" ? "pos" : "neg"} style={{ height: 20, marginLeft: 6 }}>{tierTone[0]}</Tg>}</b><small>{sm.eventText}</small></div></div>}
+          {sm.eventAchievementLabel && <div className="dec"><span className="k you"><Ic n="crown" /></span><div><b>Hidden achievement</b><small>{sm.eventAchievementLabel}</small></div></div>}
+          {ls && <div className="dec"><span className="k chance"><Ic n="cash" /></span><div><b>{rm(sm.moneyDelta)} earned · popularity {prSign(sm.popularityDelta)}</b><small>Coach trust {sm.coachTrust} · team chemistry {sm.teamChemistry}</small></div></div>}
+        </section>
+        {ls && last && <PrSeasonTable s={last} title={`${sm.leagueLabel} ${last.year} · final`} cut={last.kind === "mbl" ? 4 : 8} />}
+        {ls && last && (
+          <section className="pn c6 l12" data-a="">
+            <h3><Ic n="fire" /> Season leaders</h3>
+            {["ppg", "rpg", "apg"].map(k => {
+              const x = last.lead[k][0];
+              if (!x) return null;
+              return <div key={k} className="pr-ldr"><span className="rk num">{k.slice(0, 1).toUpperCase()}</span><span className="fc"><Sprite look={x.me && p ? playerLook(p) : (last.looks[x.id] || DEFLOOK)} /></span><span style={{ minWidth: 0 }}><b>{x.me && p ? p.name : x.n}</b><small><PrTeamLogo team={last.teams[x.t]} s={16} /> {(last.teams[x.t] || {}).name}</small></span><span className="v"><b className="num">{x.v}</b><small>{k.toUpperCase()}</small></span></div>;
+            })}
+          </section>
+        )}
+      </div>
+      <PrNext disabled={advancing} onClick={handleAdvance}>{advancing ? "Advancing…" : "Continue"}</PrNext>
+    </PrPage>
+  );
+});
+function MidseasonRecapScreen({ player, onContinue }) {
+  const half = player.pendingSecondHalf;
+  const s = half && half.leagueStats1;
+  return (
+    <PrResult player={player} tc={prTeamColors(player)[0]} medal={<PrMedalK k="silver" icon="clock" />} lbl={<>Midseason · {player.teamName}</>} title="First half in the books"
+      text={s ? `${half.gp1 || s.gp || 0} games in, playing as a ${player.starterStatus}. The second half starts now.` : "The second half starts now."}
+      statTitle="First half" stats={s ? [["PPG", s.ppg.toFixed(1)], ["RPG", s.rpg.toFixed(1)], ["APG", s.apg.toFixed(1)], ["Role", player.starterStatus], ["Coach", player.relationships.coach], ["Team", player.relationships.team]] : []}
+      cta="On to the second half" onContinue={onContinue} />
+  );
+}
+function SeasonDigestScreen({ player, onContinue }) {
+  const b = player.pendingDigest || [];
+  const first = b[0], last = b[b.length - 1];
+  const games = b.reduce((t, s) => t + (s.gamesPlayed || 0), 0);
+  const withP = b.filter(s => s.ppg != null);
+  const avg = withP.length ? withP.reduce((t, s) => t + (s.ppg || 0), 0) / withP.length : null;
+  const growth = first && last && first.ppg != null && last.ppg != null ? last.ppg - first.ppg : null;
+  const awards = b.reduce((t, s) => t + ((s.leagueAwards || []).length), 0);
+  const maxP = Math.max(...b.map(s => s.ppg || 0), 1);
+  return (
+    <PrResult player={player} tc={prTeamColors(player)[0]} medal={<PrMedalK k="silver" icon="cal" />} lbl={<>The quiet years · {player.teamName}</>} title={`Ages ${first ? first.age : "?"}–${last ? last.age : "?"}`}
+      text={`${b.length} seasons · ${last ? last.role : player.starterStatus} · ${games} games. ${awards > 0 ? `Nothing that stopped the game, but ${awards} award${awards === 1 ? "" : "s"} came out of these seasons.` : "Steady seasons: no drama, no detours."}`}
+      statTitle="Across these seasons" stats={[["PPG avg", avg != null ? avg.toFixed(1) : "—"], ["PPG growth", growth != null ? prSign(+growth.toFixed(1)) : "—"], ["Season highs", b.filter(s => s.bestGame).length], ["Awards", awards]]}
+      extra={avg != null ? <section className="pn c12" data-a=""><h3><Ic n="table" /> Points per game, season by season</h3><div className="pr-bars">{b.map((s, i) => <div key={i}><i style={{ height: Math.max(10, (s.ppg || 0) / maxP * 100) + "%" }} /><small>{s.age}</small></div>)}</div></section> : null}
+      onContinue={onContinue} />
+  );
+}
+
+/* =====================================================================
+   OFFERS — HBL schools, the age-18 crossroads, clubs, overseas
+===================================================================== */
+const prInit = (name) => String(name || "").split(/\s+/).filter(w => /^[A-Z]/.test(w)).slice(0, 2).map(w => w[0]).join("") || "?";
+function PrStamp({ text }) { return <div className="stamp"><span>{text}</span></div>; }
+function useStamp() {
+  const [st, setSt] = useState(null);
+  const fire = (key, text, fn) => { if (st) return; setSt({ key, text }); setTimeout(fn, prReduced() ? 0 : 900); };
+  return [st, fire];
+}
+function HblOffersScreen({ player, onAccept, onDecline }) {
+  const p = player;
+  const ids = p.hblOfferIds;
+  const teams = ids && ids.length ? HBL_TEAMS.filter(t => ids.includes(t.id)) : sampleN(HBL_TEAMS, HBL_OFFER_COUNT);
+  const [st, fire] = useStamp();
+  return (
+    <PrPage>
+      <PrHead lbl="Age 17 · Taiwan HBL · Decision" title="Taiwan is calling" desc="A student-athlete place in Taiwan's High School Basketball League: one season at 18, then a shot at a UBA university scholarship. Or stay home and turn pro in Malaysia." right={<PrFlag code="TPE" w={44} />} />
+      <div className="scnband" data-a=""><PrSceneArt name="taiwan" player={p} /></div>
+      <div className="offers hblo">
+        {teams.map((t, i) => (
+          <article key={t.id} className={"of " + (st && st.key === t.id ? "on" : "")} style={{ "--tc": "#3a8bd5", "--i": i }} data-a="">
+            <div className="hd"><span className="crest">{prInit(t.name)}</span><b>{t.name.length > 28 ? t.name.split(" ").slice(0, 3).join(" ") : t.name}</b><small>{t.cn} · {t.city}</small></div>
+            <div className="bd"><dl><dt>Games</dt><dd>16–20</dd><dt>Role</dt><dd>Starter (imports always start)</dd><dt>Cost</dt><dd>Scholarship</dd></dl>
+              <button className={st && st.key === t.id ? "cta" : "ghost"} disabled={!!st} onClick={() => fire(t.id, "Signed", () => onAccept(t))}>{st && st.key === t.id ? "Accepted" : `Accept ${t.name.split(" ").slice(0, 2).join(" ")}`}</button></div>
+            {st && st.key === t.id && <PrStamp text={st.text} />}
+          </article>
+        ))}
+        <article className={"of stayc " + (st && st.key === "stay" ? "on" : "")} style={{ "--tc": "#e2b65a" }} data-a="">
+          <div className="hd"><PrFlag state={p.hometown} /><b>Stay in Malaysia</b><small>Keep developing at home</small></div>
+          <div className="bd"><dl><dt>At 18</dt><dd>MSSM{p.u18Eligible ? " + U18 call-up" : ""}</dd><dt>Then</dt><dd>First club offers</dd><dt>Family</dt><dd>+6</dd></dl>
+            <button className="ghost" disabled={!!st} onClick={() => fire("stay", "Staying", onDecline)}>Turn it down</button></div>
+          {st && st.key === "stay" && <PrStamp text={st.text} />}
+        </article>
+      </div>
+      <section className="pn" data-a="" style={{ marginTop: 16 }}>
+        <h3><Ic n="eye" /> What changes</h3>
+        <div className="cmp2">
+          <div><b>Taiwan</b><ul><li>+2 to +4 on every attribute, on top of normal growth</li><li>Fatigue −25 (stamina-focused programme)</li><li>Automatic U18 national team spot</li><li>Up to 3 UBA scholarship offers at 19 (4 years)</li><li>UBA graduates have a 35% shot at a TPBL import deal</li></ul></div>
+          <div><b>Home</b><ul><li>MSSM school championship at 18</li><li>U18 national team only via the Bukit Jalil camp</li><li>First professional or D-League offers at 18</li><li>Family +6</li><li>MBL from OVR 65</li></ul></div>
+        </div>
+      </section>
+    </PrPage>
+  );
+}
+function UbaOffersScreen({ player, onAccept, onDecline }) {
+  const p = player;
+  const offers = (p.ubaOffers || []).map(o => ({ team: UBA_TEAMS.find(t => t.id === o.id), role: o.role })).filter(o => o.team);
+  const [pick, setPick] = useState(null);
+  const s = p.hblStats;
+  const meta = A17_TEAM_RESULT_META[p.hblTeamResult];
+  return (
+    <PrPage>
+      <PrHead lbl={`Age ${p.age} · Turning pro · Decision`} title="Choose your path" desc={`A season at ${p.hblTeamName || "your HBL school"} is done. Universities in Taiwan want you, and Malaysian clubs are calling. You can only take one.`} />
+      {s && <section className="pn" data-a="" style={{ marginBottom: 16 }}><h3><Ic n="flag" /> Taiwan HBL · {p.hblTeamName}<small>SIM</small></h3><PrSline items={[["Games", p.hblGames || "—"], ["PPG", s.ppg], ["RPG", s.rpg], ["APG", s.apg], ["Finish", meta ? meta.label : "—"], (p.hblAwards || []).length ? ["Award", A17_AWARD_META[p.hblAwards[0]] ? A17_AWARD_META[p.hblAwards[0]].label : p.hblAwards[0]] : null]} /></section>}
+      <div className="xr">
+        <section data-a="">
+          <PrSceneArt name="taiwan" player={p} />
+          <h3 className="xh"><Ic n="ball" /> Taiwan UBA scholarship <small>{UBA_YEARS} years · ages 19–22</small></h3>
+          {offers.map(({ team, role }) => (
+            <div key={team.id} className={"xo " + (pick === team.id ? "on" : "")}>
+              <span className="crest">{team.short}</span>
+              <span><b>{team.name}</b><small>{team.cn}</small></span>
+              <Tg>{role}</Tg>
+              <button className="ghost" disabled={!!pick} onClick={() => { setPick(team.id); setTimeout(() => onAccept(team, role), prReduced() ? 0 : 700); }}>{pick === team.id ? "Signed" : "Choose"}</button>
+            </div>
+          ))}
+        </section>
+        <section data-a="">
+          <PrSceneArt name="arena" player={p} ph={7} />
+          <h3 className="xh"><PrLogo k="c_dleague" s={28} /> Turn pro in Malaysia <small>D-League now, MBL from OVR 65</small></h3>
+          <div className="lockd"><Ic n="right" /> Malaysian clubs make their offers next: MBL clubs look at OVR 65 and up, everyone else starts in the D-League.
+            <button className="cta sm" disabled={!!pick} onClick={onDecline}>See club offers <Ic n="right" /></button></div>
+        </section>
+      </div>
+      <PrSrc color="var(--in)">Real clubs and logos from HoopStatsMY. Offers, roles and salaries are simulated. A UBA programme's real chance of starting you is hidden.</PrSrc>
+    </PrPage>
+  );
+}
+function prClubTc(club) { const k = KITS[club.id]; if (!k) return "#ff7a1a"; const c = k.jersey; return lum(c) < 45 ? (k.panel && lum(k.panel) >= 45 ? k.panel : "#7a8494") : lum(c) > 235 ? (k.panel || "#9aa4b2") : c; }
+function ClubOffersScreen({ player, offers, context, onJoin, onStay, onRetire, onNegotiate }) {
+  const p = player;
+  const H = {
+    join: ["Turning pro", "Choose your first club", "Offers are on the table. Where you sign shapes your money, your fame, your minutes and your development."],
+    transfer: ["Transfer window", "Offers are coming in", `You're at ${context.oldClubName}. Stay put, or take a new challenge elsewhere?`],
+    released: ["Released", "Time to find a new home", context.releaseReason ? RELEASE_REASON_META[context.releaseReason](context.oldClubName) : `${context.oldClubName} let you go. These clubs are willing to take you on.`],
+    bankrupt: ["Club folded", "Time to find a new home", `${context.oldClubName} folded. You're a free agent: pick your next move.`],
+    free_agent: ["Free agent", "Choose your next club", "You're without a club. These sides have a place for you."],
+  };
+  if (context.studyTrack) H.join = ["Student-athlete", "Choose a semi-pro home", "Only semi-pro clubs are on the table while you're studying: real development-league minutes until you graduate at 23."];
+  else if (context.graduated) H.join = ["Graduated", "Sign with a pro club", "You're free of the semi-pro restriction now. Pro clubs are back on the table, MBL included if your rating earns it."];
+  const h = H[context.mode] || H.join;
+  const canStay = context.mode === "transfer";
+  const canRetire = p.age >= 30 && ["transfer", "released", "bankrupt"].includes(context.mode);
+  const cur = canStay ? getClub(p.clubId) : null;
+  const stayTerms = cur ? computeClubTerms(p, cur, { firstProSigning: false }) : null;
+  const [st, fire] = useStamp();
+  const cards = [...(cur && stayTerms ? [{ club: cur, terms: stayTerms, stay: true }] : []), ...offers];
+  const maxSal = Math.max(...cards.map(c => c.terms.salary), 1);
+  const roleV = (t) => t.firstOption ? 1 : t.role === "Starter" ? 0.85 : t.role === "Rotation" ? 0.55 : 0.3;
+  const best = cards.slice().sort((a, b) => (roleV(b.terms) * 2 + b.terms.salary / maxSal) - (roleV(a.terms) * 2 + a.terms.salary / maxSal))[0];
+  const read = (c) => [["Development", roleV(c.terms) * 0.8 + (c.terms.league === "mbl" ? 0.2 : 0.1)], ["Title odds", Math.min(1, (c.club.prestige || 50) / 100)], ["Exposure", Math.min(1, (c.terms.league === "mbl" ? 0.45 : 0.2) + ((c.club.fameMult || 1) - 0.8))], ["Money", c.terms.salary / maxSal]];
+  return (
+    <PrPage>
+      <PrHead lbl={`${h[0]} · ${p.year} season`} title={h[1]} desc={h[2]} right={canRetire ? <button className="ghost" onClick={onRetire}><Ic n="x" /> Retire</button> : null} />
+      <div className="offers" style={cards.length !== 4 ? { gridTemplateColumns: `repeat(${Math.min(4, cards.length)},minmax(0,1fr))` } : undefined}>
+        {cards.map(({ club, terms, stay }, i) => {
+          const key = LOGO[club.id] ? club.id : logoKeyFor(club.name);
+          const on = st && st.key === club.id;
+          return (
+            <article key={club.id} className={"of " + (on ? "on" : "")} style={{ "--tc": prClubTc(club), "--i": i }} data-a="">
+              <div className="hd">
+                {best === cards[i] && cards.length > 1 && <Tg cls="or best">Best fit</Tg>}
+                {key ? <PrLogo k={key} s={72} /> : <span className="crest" style={{ background: `linear-gradient(160deg,${prClubTc(club)},#141820)` }}>{prInit(club.name)}</span>}
+                <b>{club.name}</b><small>{terms.firstOption ? "First option" : terms.role}</small>
+              </div>
+              <div className="bd">
+                <div className="sal num">{rm(terms.salary)} <small>/month</small></div>
+                <dl><dt>Length</dt><dd>{terms.years || 2} season{(terms.years || 2) === 1 ? "" : "s"}</dd><dt>League</dt><dd>{LEAGUE[terms.league] ? LEAGUE[terms.league].short : terms.league}</dd><dt>Role</dt><dd>{terms.firstOption ? "First option" : terms.role}</dd><dt>Club</dt><dd>{club.state || ""}{club.tier === "semipro" ? " · Semi-pro" : ""}</dd></dl>
+                <div className="ticks">{stay && <Tg>Current club</Tg>}{terms.league === "mbl" && <Tg>MBL</Tg>}</div>
+                <button className={stay ? "ghost" : "cta"} disabled={!!st} onClick={() => fire(club.id, stay ? "Staying" : "Signed", () => (stay ? onStay() : onJoin({ club, terms })))}>{stay ? `Stay at ${club.short || club.name}` : `Sign with ${club.short || club.name}`}</button>
+                {!stay && offers.length > 1 && <button className="ghost sm" disabled={!!st} onClick={() => onNegotiate(club, terms)}>Negotiate</button>}
+              </div>
+              {on && <PrStamp text={st.text} />}
+            </article>
+          );
+        })}
+      </div>
+      {cards.length > 1 && (
+        <section className="pn" data-a="" style={{ marginTop: 16 }}>
+          <h3><Ic n="eye" /> Agent's read<small>How each offer moves your career</small></h3>
+          <div className="pr-read" style={{ gridTemplateColumns: `110px repeat(${cards.length},minmax(0,1fr))` }}>
+            {["Development", "Title odds", "Exposure", "Money"].map((row, ri) => (
+              <React.Fragment key={row}><span className="rl">{row}</span>{cards.map(c => <div key={c.club.id} className="bar"><i style={{ "--w": Math.round(Math.max(0.05, Math.min(1, read(c)[ri][1])) * 100) + "%", "--bc": prClubTc(c.club) }} /></div>)}</React.Fragment>
+            ))}
+            <span />{cards.map(c => { const key = LOGO[c.club.id] ? c.club.id : logoKeyFor(c.club.name); return <span key={c.club.id} className="rl" style={{ display: "flex", gap: 6, alignItems: "center" }}>{key ? <PrLogo k={key} s={20} /> : null}{c.club.short || c.club.name}</span>; })}
+          </div>
+        </section>
+      )}
+      <PrSrc color="var(--in)">Offers, salaries and roles are simulated. Club names and logos are real (HoopStatsMY).</PrSrc>
+    </PrPage>
+  );
+}
+function OverseasOffersScreen({ player, offer, onSign, onDecline }) {
+  const [st, fire] = useStamp();
+  if (!offer) return null;
+  const { tier, teams, role, awardChance, years } = offer;
+  return (
+    <PrPage>
+      <PrHead lbl="Overseas interest" title={`${tier.label} clubs want you`} desc={`Your rating has scouts from ${tier.label === "NBA" ? "the NBA" : tier.label === "EuroLeague" ? "Europe" : "Asia's top leagues"} circling${awardChance > 0 ? `, with a ${Math.round(awardChance * 100)}% shot at a personal award each season` : ""}.`}
+        right={<button className="ghost" disabled={!!st} onClick={() => fire("stay", "Staying", onDecline)}>Stay in Malaysia</button>} />
+      <div className="offers" style={{ gridTemplateColumns: `repeat(${Math.min(4, teams.length)},minmax(0,1fr))` }}>
+        {teams.map((t, i) => (
+          <article key={t.name} className={"of " + (st && st.key === t.name ? "on" : "")} style={{ "--tc": "#3060e0", "--i": i }} data-a="">
+            <div className="hd"><span className="crest">{prInit(t.name)}</span><b>{t.name}</b><small>{t.league}{t.country ? ` · ${t.country}` : ""}</small></div>
+            <div className="bd">
+              <div className="sal num">{rm(Math.round(t.salaryPerSeason / 12))} <small>/month</small></div>
+              <dl><dt>League</dt><dd>{tier.label}</dd><dt>Role</dt><dd>{role}</dd><dt>Length</dt><dd>{years} season{years === 1 ? "" : "s"}</dd></dl>
+              <button className="cta" disabled={!!st} onClick={() => fire(t.name, "Signed", () => onSign(t))}>Sign with {t.name.split(" ").slice(0, 2).join(" ")}</button>
+            </div>
+            {st && st.key === t.name && <PrStamp text={st.text} />}
+          </article>
+        ))}
+      </div>
+    </PrPage>
+  );
+}
+/* =====================================================================
+   LEAGUE — the simulated season, never the real-world table
+===================================================================== */
+function LeagueScreen({ player, onBack }) {
+  const p = player;
+  const leagues = useMemo(() => prLeaguesFor(p), [p.year, p.league, p.mdLeagueLast, p.mdComp]);
+  const [which, setWhich] = useState(null);
+  const [tab, setTab] = useState("table");
+  const [cat, setCat] = useState("ppg");
+  const L = leagues.find(l => l.id === which) || leagues[0];
+  if (!L || !L.s) return <PrPage><PrHead title="League" desc="The simulated league table appears here once the season runs." /></PrPage>;
+  const s = L.s;
+  const nm = (id) => (s.teams[id] || {}).name || id;
+  const cut = s.kind === "mbl" ? 4 : 8;
+  const lgName = s.kind === "mbl" ? "Malaysia Basketball League" : LEAGUE[s.kind] ? LEAGUE[s.kind].name : s.label;
+  const res = s.results.slice().reverse();
+  const CATS = [["ppg", "Points"], ["rpg", "Rebounds"], ["apg", "Assists"], ["spg", "Steals"], ["bpg", "Blocks"]];
+  const lead = s.lead[cat] || [];
+  const top = lead[0];
+  return (
+    <PrPage>
+      <PrHead lbl={<><PrLogo k={s.kind === "mbl" ? "c_mbl" : "c_dleague"} s={22} /> {L.mine ? "Your league" : "Simulated season"} · {s.year}{s.done ? " · final" : ` · ${s.played} of ${s.total} games played`}</>}
+        title={lgName} desc={L.mine ? "Every game of your season, simulated possession by possession." : "Real clubs, rosters that age, transfer and change imports each year. Results are simulated by the same engine as your games."}
+        right={leagues.length > 1 ? <div className="tabs" style={{ marginBottom: 0 }}>{leagues.map(l => <button key={l.id} className={l.id === L.id ? "on" : ""} onClick={() => setWhich(l.id)}>{l.label}</button>)}</div> : null} />
+      <div className="tabs" style={{ maxWidth: 520 }}>{[["table", "Standings"], ["leaders", "Leaders"], ["games", "Results"], ["po", "Playoffs"]].map(([id, l]) => <button key={id} className={tab === id ? "on" : ""} onClick={() => setTab(id)}>{l}</button>)}</div>
+      {tab === "table" && (
+        <section className="pn" data-a="" style={{ overflowX: "auto" }}>
+          <table className="mini-t">
+            <thead><tr><th>#</th><th>Team</th><th className="hide-p">GP</th><th>W–L</th><th className="hide-p">PF</th><th className="hide-p">PA</th><th>Diff</th></tr></thead>
+            <tbody>{s.table.map((r, i) => (
+              <tr key={r.id} className={r.id === s.myTeam ? "mine" : ""} style={i === cut - 1 ? { boxShadow: "inset 0 -2px 0 rgba(255,122,26,.35)" } : undefined}>
+                <td className="num">{i + 1}</td><td><span className="tcell"><PrTeamLogo team={s.teams[r.id]} s={24} /><b>{nm(r.id)}</b>{s.champion === r.id && <Tg cls="or hide-p" style={{ height: 20 }}>Champions</Tg>}</span></td>
+                <td className="num hide-p">{r.gp}</td><td className="num"><b>{r.w}–{r.l}</b></td><td className="num hide-p">{r.pf}</td><td className="num hide-p">{r.pa}</td>
+                <td className={"num " + (r.pf - r.pa > 0 ? "up" : r.pf - r.pa < 0 ? "dn" : "")}>{r.pf - r.pa > 0 ? "+" : ""}{r.pf - r.pa}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+          <PrSrc color="var(--in)">Top {cut} make the playoffs{s.kind === "mbl" ? " · best-of-3 semi-finals, best-of-5 final" : " · single-game knockouts"}</PrSrc>
+        </section>
+      )}
+      {tab === "leaders" && (
+        <div className="g">
+          {top && (
+            <section className="pn c4 l12" data-a="" style={{ padding: 0, background: "#07080a" }}>
+              <div style={{ position: "relative", aspectRatio: "4/5", background: "radial-gradient(70% 60% at 50% 40%, #2a1a0e, #07080a)" }}>
+                <Sprite look={top.me ? playerLook(p) : (s.looks[top.id] || DEFLOOK)} full ball style={{ position: "absolute", left: "50%", bottom: "6%", transform: "translateX(-50%)", width: "58%", height: "auto" }} />
+                <div style={{ position: "absolute", left: 16, top: 16 }}><div className="lbl" style={{ color: "var(--or2)" }}>League leader</div><div style={{ font: "800 28px/1 var(--cd)", textTransform: "uppercase", marginTop: 6 }}>{top.me ? p.name : top.n}</div></div>
+                <div style={{ position: "absolute", right: 16, top: 16 }}><PrTeamLogo team={s.teams[top.t]} s={40} /></div>
+                <div style={{ position: "absolute", right: 16, bottom: 16, textAlign: "right" }}><div className="num" style={{ font: "800 48px/1 var(--cd)", color: "var(--or2)" }}>{top.v}</div><div className="lbl">{CATS.find(c => c[0] === cat)[1]} per game</div></div>
+              </div>
+            </section>
+          )}
+          <section className="pn c8 l12" data-a="">
+            <div className="tabs">{CATS.map(([k, l]) => <button key={k} className={cat === k ? "on" : ""} onClick={() => setCat(k)}>{l}</button>)}</div>
+            {lead.map((x, i) => (
+              <div key={x.id} className={"pr-ldr" + (x.me ? " me" : "")}>
+                <span className="rk num">{i + 1}</span>
+                <span className="fc"><Sprite look={x.me ? playerLook(p) : (s.looks[x.id] || DEFLOOK)} /></span>
+                <span style={{ minWidth: 0 }}><b>{x.me ? p.name : x.n}</b><small><PrTeamLogo team={s.teams[x.t]} s={16} /> {nm(x.t)}</small></span>
+                <span className="v"><b className="num">{x.v}</b><small>{cat.toUpperCase()}</small></span>
+              </div>
+            ))}
+            <PrSrc color="var(--in)">Players with at least half their team's games</PrSrc>
+          </section>
+        </div>
+      )}
+      {tab === "games" && (
+        <section className="pn" data-a="">
+          {res.length === 0 && <p style={{ color: "var(--di)", margin: 0 }}>No games played yet.</p>}
+          <div className="fx-list">{res.slice(0, 40).map((g, i) => {
+            const hw = g.s[0] > g.s[1];
+            return (
+              <div key={i} className="fxr">
+                <span className="dt">{mdFmtDate(g.d).replace(/ · .*/, "")}<br />{MD_PHASE[g.ph] || ""}</span>
+                <span className="tm3 r"><PrTeamLogo team={s.teams[g.h]} s={24} />{nm(g.h)}</span>
+                <span className="scr"><span className={hw ? "w" : "l"}>{g.s[0]}</span>–<span className={hw ? "l" : "w"}>{g.s[1]}</span></span>
+                <span className="tm3"><PrTeamLogo team={s.teams[g.a]} s={24} />{nm(g.a)}</span>
+                <span className="vn">{g.h === s.myTeam || g.a === s.myTeam ? "Your game" : ""}</span>
+              </div>
+            );
+          })}</div>
+        </section>
+      )}
+      {tab === "po" && (
+        <section className="pn" data-a="">
+          {s.ko.length === 0 ? <p style={{ color: "var(--di)", margin: 0 }}>The playoffs start after the regular season. Top {cut} qualify.</p> : (
+            <div className="pr-ko">{s.ko.map((k, i) => (
+              <div key={i} className="mt">
+                <small>{k.round}{k.bo > 1 ? ` · best of ${k.bo}` : ""}</small>
+                {[[k.a, k.wa], [k.b, k.wb]].map(([id, w]) => <div key={id} className={(id === s.myTeam ? "me3 " : "") + (k.winner === id ? "w" : "")}><PrTeamLogo team={s.teams[id]} s={20} /><span>{nm(id)}</span><b>{w}</b></div>)}
+              </div>
+            ))}</div>
+          )}
+          {s.champion && <div className="champ" style={{ marginTop: 14 }}><PrTeamLogo team={s.teams[s.champion]} s={56} /><b>{nm(s.champion)}</b><small>{s.year} champions</small></div>}
+        </section>
+      )}
+    </PrPage>
+  );
+}
+
+const PR_CSS = `.pr{color-scheme:dark;--bg:#0a0b0e;--bg2:#0f1115;--p1:#14171c;--p2:#1a1e25;--p3:#222731;--ln:rgba(255,255,255,.07);--ln2:rgba(255,255,255,.12);--ink:#f3f4f6;--mu:#a3a9b4;--di:#737a86;--or:#ff7a1a;--or2:#ff9a4d;--gd:#e2b65a;--ok:#34c37a;--bd:#f05252;--in:#4aa8ff;--r1:6px;--r2:10px;--r3:14px;--r4:20px;--tc:#ff7a1a;--td:#1a1208;--cd:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;--sn:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;--ease:cubic-bezier(.2,.8,.2,1)}
+.pr .i{width:18px;height:18px;flex:none}
+.pr .tg .i,.pr .src .i{width:14px;height:14px}
+.pr .ticker .tl .i{width:16px;height:16px}
+.pr .num{font-family:var(--cd);font-variant-numeric:tabular-nums;letter-spacing:.01em}
+.pr .side{grid-row:1/3;background:var(--bg2);border-right:1px solid var(--ln);display:flex;flex-direction:column;padding:18px 12px;gap:4px;z-index:3}
+.pr .brand{display:flex;align-items:center;gap:10px;padding:2px 8px 18px}
+.pr .brand b{font:800 20px/1 var(--cd);letter-spacing:.02em;text-transform:uppercase}
+.pr .brand b i{font-style:normal;color:var(--or)}
+.pr .brand .mk{width:34px;height:34px;border-radius:9px;background:linear-gradient(140deg,#ff8c33,#e2580c);display:grid;place-items:center;flex:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.3)}
+.pr .nav{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:var(--r2);color:var(--mu);font-weight:600;font-size:14px;position:relative;transition:background .2s,color .2s}
+.pr .nav:hover{background:var(--p1);color:var(--ink)}
+.pr .nav.on{color:var(--ink);background:linear-gradient(90deg,rgba(255,122,26,.16),rgba(255,122,26,.02))}
+.pr .nav.on::before{content:"";position:absolute;left:-12px;top:9px;bottom:9px;width:3px;border-radius:3px;background:var(--or)}
+.pr .nav svg{width:19px;height:19px;flex:none}
+.pr .side .sp{flex:1}
+.pr .me{display:flex;gap:10px;align-items:center;padding:10px;border-radius:var(--r3);background:var(--p1);border:1px solid var(--ln)}
+.pr .me .ph{width:40px;height:40px;border-radius:10px}
+.pr .me b{display:block;font-size:13px}
+.pr .me small{color:var(--di);font-size:12px}
+.pr .top{display:flex;align-items:center;gap:14px;padding:12px 22px;border-bottom:1px solid var(--ln);background:rgba(10,11,14,.85);backdrop-filter:blur(10px);z-index:2}
+.pr .top h1{font:700 22px/1 var(--cd);letter-spacing:.01em;margin:0;text-transform:uppercase;white-space:nowrap}
+.pr .top .crumb{color:var(--di);font-size:12.5px;white-space:nowrap}
+.pr .top .grow{flex:1}
+.pr .chip{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 12px;border-radius:30px;background:var(--p1);border:1px solid var(--ln);font-size:12.5px;color:var(--mu);white-space:nowrap}
+.pr .chip b{color:var(--ink);font-weight:700}
+.pr .chip svg{width:15px;height:15px}
+.pr .cta{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:44px;padding:0 20px;border-radius:12px;background:linear-gradient(180deg,#ff8a2e,#f26b0c);color:#1a0b00;font-weight:800;font-size:14px;box-shadow:0 8px 24px -8px rgba(255,122,26,.7),inset 0 1px 0 rgba(255,255,255,.35);transition:transform .15s,box-shadow .2s,filter .2s;white-space:nowrap}
+.pr .cta:hover{transform:translateY(-1px);filter:brightness(1.06)}
+.pr .cta:active{transform:translateY(1px) scale(.99)}
+.pr .cta:disabled{background:var(--p3);color:var(--di);box-shadow:none;cursor:not-allowed}
+.pr .cta svg{width:17px;height:17px}
+.pr .ghost{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:44px;padding:0 18px;border-radius:12px;background:var(--p2);border:1px solid var(--ln2);font-weight:700;font-size:14px;transition:background .2s}
+.pr .ghost:hover{background:var(--p3)}
+.pr .wrap{padding:22px 22px 40px;max-width:1520px;margin:0 auto}
+.pr .bnav{display:none}
+.pr[data-l=tab]{--sbw:76px}
+.pr[data-l=land]{--sbw:64px}
+.pr[data-l=tab] .side,.pr[data-l=land] .side{padding:14px 8px;align-items:center}
+.pr[data-l=tab] .nav span,.pr[data-l=land] .nav span,.pr[data-l=tab] .brand b,.pr[data-l=land] .brand b,.pr[data-l=tab] .me div,.pr[data-l=land] .me{display:none}
+.pr[data-l=tab] .nav,.pr[data-l=land] .nav{justify-content:center;padding:11px;width:46px}
+.pr[data-l=tab] .nav.on::before,.pr[data-l=land] .nav.on::before{left:-8px}
+.pr[data-l=tab] .brand,.pr[data-l=land] .brand{padding:0 0 14px}
+.pr[data-l=land] .side{padding:8px 6px;gap:2px}
+.pr[data-l=land] .nav{padding:8px;height:40px}
+.pr[data-l=land] .top{padding:8px 14px}
+.pr[data-l=land] .top h1{font-size:18px}
+.pr[data-l=land] .wrap{padding:12px 14px 24px}
+.pr[data-l=phone] .side{display:none}
+.pr[data-l=phone] .top{padding:10px 14px;gap:8px;padding-top:max(10px,env(safe-area-inset-top))}
+.pr[data-l=phone] .top h1{font-size:19px}
+.pr[data-l=phone] .top .hide-s{display:none}
+.pr[data-l=phone] .wrap{padding:14px 14px 28px}
+.pr[data-l=phone] .bnav{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));border-top:1px solid var(--ln);background:rgba(12,13,17,.94);backdrop-filter:blur(12px);padding:6px 6px max(6px,env(safe-area-inset-bottom));z-index:3}
+.pr .bnav button{display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 0;color:var(--di);font-size:10.5px;font-weight:600;border-radius:10px;min-height:48px;justify-content:center}
+.pr .bnav button svg{width:21px;height:21px}
+.pr .bnav button.on{color:var(--or)}
+.pr[data-l=land] .hide-l,.pr[data-l=phone] .hide-p{display:none!important}
+.pr .g{display:grid;gap:16px;grid-template-columns:repeat(12,minmax(0,1fr))}
+.pr .c3{grid-column:span 3}
+.pr .c4{grid-column:span 4}
+.pr .c5{grid-column:span 5}
+.pr .c6{grid-column:span 6}
+.pr .c7{grid-column:span 7}
+.pr .c8{grid-column:span 8}
+.pr .c12{grid-column:span 12}
+.pr[data-l=tab] .g,.pr[data-l=land] .g{grid-auto-flow:dense}
+.pr[data-l=tab] .g>*{grid-column:span 6}
+.pr[data-l=tab] .g>.c12,.pr[data-l=tab] .g>.t12{grid-column:span 12}
+.pr[data-l=land] .g{gap:10px}
+.pr[data-l=land] .g>*{grid-column:span 6}
+.pr[data-l=land] .g>.c12,.pr[data-l=land] .g>.l12{grid-column:span 12}
+.pr[data-l=phone] .g{gap:12px}
+.pr[data-l=phone] .g>*{grid-column:span 12}
+.pr .pn{background:var(--p1);border:1px solid var(--ln);border-radius:var(--r4);padding:18px;position:relative;overflow:hidden}
+.pr .pn h3{margin:0 0 12px;font:700 15px/1.2 var(--sn);display:flex;align-items:center;gap:8px}
+.pr .pn h3 small{margin-left:auto;font-weight:600;color:var(--di);font-size:12px}
+.pr .pn h3 a{margin-left:auto;font-size:12.5px;font-weight:600;color:var(--or2);cursor:pointer}
+.pr .lbl{font-size:12px;color:var(--di);font-weight:600}
+.pr .src{font-size:11.5px;color:var(--di);display:flex;align-items:center;gap:6px;margin-top:10px}
+.pr .src i{width:6px;height:6px;border-radius:50%;background:var(--ok);flex:none}
+.pr .sim{display:inline-flex;align-items:center;height:18px;padding:0 6px;border-radius:5px;font:700 10px/1 var(--sn);letter-spacing:.04em;background:rgba(74,168,255,.14);color:#8cc8ff;vertical-align:middle}
+.pr .real{background:rgba(52,195,122,.14);color:#7fe0ad}
+.pr .lg{display:inline-grid;place-items:center;width:var(--s,44px);height:var(--s,44px);border-radius:28%;background:radial-gradient(circle at 50% 35%,#262b35,#171a21);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08),0 6px 14px -6px rgba(0,0,0,.6);flex:none;overflow:hidden}
+.pr .lg img{width:82%;height:82%;object-fit:contain;filter:drop-shadow(0 2px 3px rgba(0,0,0,.45))}
+.pr .lg.lt{background:radial-gradient(circle at 50% 35%,#ffffff,#e9ebef);box-shadow:inset 0 0 0 1px rgba(0,0,0,.06),0 6px 14px -6px rgba(0,0,0,.6)}
+.pr .lg.lt img{filter:none;width:90%;height:90%}
+.pr .lg.rd{border-radius:50%}
+.pr .lg .ini{font:800 calc(var(--s,44px)*.36)/1 var(--cd);color:var(--mu)}
+.pr .ph{position:relative;display:block;overflow:hidden;background:linear-gradient(170deg,color-mix(in srgb,var(--tc) 55%,#0d0f13),#0d0f13 85%);border-radius:var(--r2);flex:none}
+.pr .ph::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 55%,rgba(0,0,0,.35));pointer-events:none}
+.pr .ph img,.pr .ph svg{position:absolute;left:50%;bottom:0;height:100%;width:auto;max-width:none;transform:translateX(-50%)}
+.pr .ph.rd{border-radius:50%}
+.pr .flag{width:28px;height:14px;border-radius:2px;object-fit:cover;box-shadow:0 0 0 1px rgba(255,255,255,.12);display:inline-block;flex:none}
+.pr .bar{height:6px;border-radius:6px;background:rgba(255,255,255,.07);overflow:hidden;position:relative}
+.pr .bar i{position:absolute;inset:0 auto 0 0;width:var(--w);border-radius:6px;background:var(--bc,linear-gradient(90deg,#ff9a4d,#ff6a00));transform-origin:left;animation:pr-grow .9s var(--ease) both;animation-delay:calc(var(--i,0)*45ms + 120ms)}
+@keyframes pr-grow{from{transform:scaleX(0)}}
+.pr .stat{display:grid;grid-template-columns:22px minmax(0,1fr) 1.2fr 34px;align-items:center;gap:10px;padding:7px 0}
+.pr .stat svg{width:17px;height:17px;color:var(--di)}
+.pr .stat span{color:var(--mu);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pr .stat b{font:700 18px/1 var(--cd);text-align:right}
+.pr [data-a]{animation:pr-rise .55s var(--ease) both;animation-delay:calc(var(--i,0)*45ms)}
+@keyframes pr-rise{from{opacity:0;transform:translateY(14px)}}
+.pr .pop{animation:pr-pop .6s var(--ease) both;animation-delay:calc(var(--i,0)*45ms + 100ms)}
+@keyframes pr-pop{0%{opacity:0;transform:scale(.7)}60%{transform:scale(1.06)}100%{opacity:1;transform:scale(1)}}
+.pr .leave>*{animation:pr-leave .18s ease-in both}
+@keyframes pr-leave{to{opacity:0;transform:translateY(-8px)}}
+.pr .glint{position:relative;overflow:hidden}
+.pr .glint::before{content:"";position:absolute;top:-50%;bottom:-50%;width:40%;left:-60%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.18),transparent);transform:skewX(-18deg);animation:pr-glint 2.8s 1s ease-in-out infinite}
+@keyframes pr-glint{0%{left:-60%}35%,100%{left:130%}}
+.pr .rm *,.pr .rm *::before,.pr .rm *::after{animation:none!important;transition:none!important}
+@media (prefers-reduced-motion:reduce){.pr *,.pr *::before,.pr *::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition:none!important}}
+.pr .step{display:flex;gap:6px;align-items:center}
+.pr .step i{height:4px;flex:1;border-radius:4px;background:var(--p3);overflow:hidden;position:relative}
+.pr .step i.on::after{content:"";position:absolute;inset:0;background:var(--or);animation:pr-grow .6s var(--ease) both}
+.pr .step i.dn{background:var(--or)}
+.pr .scout{margin-top:auto;display:grid;grid-template-columns:auto minmax(0,1fr);gap:22px;align-items:end;position:relative}
+.pr .ticks{display:flex;gap:8px;flex-wrap:wrap}
+.pr .tg{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:20px;background:rgba(255,255,255,.07);border:1px solid var(--ln);font-size:12px;font-weight:600;color:var(--mu);white-space:nowrap}
+.pr .tg.or{background:rgba(255,122,26,.14);border-color:rgba(255,122,26,.35);color:#ffb27a}
+.pr .field{display:flex;flex-direction:column;gap:7px}
+.pr .field label{font-size:12.5px;font-weight:600;color:var(--mu)}
+.pr .states{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;max-height:212px;overflow:auto;padding-right:4px}
+.pr .st{display:flex;align-items:center;gap:9px;height:40px;padding:0 10px;border-radius:10px;background:var(--p1);border:1px solid var(--ln);font-size:13px;color:var(--mu);font-weight:500}
+.pr .st.on{border-color:var(--or);color:var(--ink);background:rgba(255,122,26,.1)}
+.pr .st .dt{margin-left:auto;width:7px;height:7px;border-radius:50%}
+.pr input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:28px;background:transparent;margin:0}
+.pr input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:6px;background:linear-gradient(90deg,var(--or) var(--p,50%),#2a2f39 var(--p,50%))}
+.pr input[type=range]::-moz-range-track{height:6px;border-radius:6px;background:linear-gradient(90deg,var(--or) var(--p,50%),#2a2f39 var(--p,50%))}
+.pr input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:#fff;margin-top:-8px;box-shadow:0 0 0 5px rgba(255,122,26,.3),0 3px 8px rgba(0,0,0,.5)}
+.pr input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:#fff;border:0;box-shadow:0 0 0 5px rgba(255,122,26,.3)}
+.pr input[type=range]:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 7px rgba(255,122,26,.5)}
+.pr .up{color:var(--ok)}
+.pr .dn{color:var(--bd)}
+.pr .ids{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.pr .att{display:grid;grid-template-columns:110px minmax(0,1fr) 40px 40px 40px;gap:10px;align-items:center;padding:10px 12px;border-radius:12px;background:var(--p1);border:1px solid var(--ln)}
+.pr .att b{font-size:13.5px}
+.pr .att .v{font:800 22px/1 var(--cd);text-align:center}
+.pr .pm{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;background:var(--p3);font-size:20px;font-weight:700;transition:background .15s,transform .1s}
+.pr .pm:hover{background:#2d333e}
+.pr .pm:active{transform:scale(.92)}
+.pr .pm.add{background:var(--or);color:#1a0b00}
+.pr .pm:disabled{opacity:.3;cursor:not-allowed}
+.pr .att .tr{height:8px;border-radius:8px;background:rgba(255,255,255,.07);position:relative;overflow:visible}
+.pr .att .tr i{position:absolute;left:0;top:0;bottom:0;border-radius:8px;background:linear-gradient(90deg,#3aa0ff,#ff7a1a);transition:width .35s var(--ease)}
+.pr .att .tr u{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--gd);border-radius:2px}
+.pr .pts{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-radius:14px;border:1px solid rgba(255,122,26,.4);background:linear-gradient(120deg,rgba(255,122,26,.14),rgba(255,122,26,.03))}
+.pr .pts b{font:800 36px/1 var(--cd);color:var(--or)}
+.pr[data-l=land] .att{grid-template-columns:90px minmax(0,1fr) 34px 34px 34px;padding:6px 10px}
+.pr[data-l=land] .pm{width:34px;height:34px}
+.pr[data-l=phone] .att{grid-template-columns:minmax(0,1fr) 34px 40px 40px;grid-template-areas:"n v m a" "t t t t";row-gap:8px}
+.pr[data-l=phone] .att b{grid-area:n}
+.pr[data-l=phone] .att .tr{grid-area:t}
+.pr[data-l=phone] .att .v{grid-area:v}
+.pr .sel{width:min(720px,100%);text-align:center;display:flex;flex-direction:column;align-items:center;gap:16px;position:relative}
+.pr .sel h2{font:800 clamp(56px,9vw,120px)/.85 var(--cd);text-transform:uppercase;margin:0;background:linear-gradient(180deg,#fff,#f3d79b 70%,#c58f2a);-webkit-background-clip:text;background-clip:text;color:transparent}
+.pr .trophy path{stroke-dasharray:420;stroke-dashoffset:420;animation:pr-draw 1.4s .2s var(--ease) forwards}
+@keyframes pr-draw{to{stroke-dashoffset:0}}
+.pr .rm .trophy path{stroke-dashoffset:0}
+.pr #confetti{position:absolute;inset:0;pointer-events:none;width:100%;height:100%}
+.pr .ini-b{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;font:800 17px/1 var(--cd);flex:none;color:#fff}
+.pr .path{display:flex;align-items:center;gap:0;flex-wrap:wrap;justify-content:center}
+.pr .hero{display:grid;grid-template-columns:minmax(200px,280px) minmax(0,1fr);min-height:340px;padding:0;background:linear-gradient(120deg,var(--td),#0e1014 70%);border-color:color-mix(in srgb,var(--tc) 30%,transparent)}
+.pr .hero .pic{position:relative;overflow:hidden;background:radial-gradient(260px 300px at 50% 70%,color-mix(in srgb,var(--tc) 55%,transparent),transparent 70%)}
+.pr .hero .pic .ph{position:absolute;inset:18px 0 0 0;background:none;border-radius:0}
+.pr .hero .pic .ph::after{display:none}
+.pr .hero .pic .big{position:absolute;right:8px;top:4px;font:800 150px/1 var(--cd);color:color-mix(in srgb,var(--tc) 30%,transparent)}
+.pr .hero .inf{padding:22px 22px 18px 6px;display:flex;flex-direction:column;gap:14px}
+.pr .hero .nm{font:800 clamp(34px,3.6vw,52px)/.92 var(--cd);text-transform:uppercase;margin:0}
+.pr .hero .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.pr .ovr-b{display:flex;align-items:center;gap:14px}
+.pr .ovr-b .o{width:74px;height:74px;border-radius:18px;background:linear-gradient(160deg,#ff8a2e,#d9560a);display:grid;place-items:center;text-align:center;color:#1a0b00;box-shadow:0 14px 30px -10px rgba(255,106,0,.6),inset 0 1px 0 rgba(255,255,255,.4);flex:none}
+.pr .ovr-b .o b{font:800 40px/.85 var(--cd);display:block}
+.pr .ovr-b .o small{font:800 10px/1 var(--sn);letter-spacing:.08em}
+.pr .clubline{display:flex;align-items:center;gap:10px}
+.pr .clubline b{font-size:15px}
+.pr .clubline small{display:block;color:var(--mu);font-size:12.5px}
+.pr .goals{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) auto;gap:14px;align-items:end}
+.pr .goals div{display:flex;flex-direction:column;gap:7px;font-size:12px;color:var(--mu);font-weight:500}
+.pr[data-l=phone] .goals,.pr[data-l=land] .goals{display:none}
+.pr[data-l=tab] .goals{grid-template-columns:repeat(3,minmax(0,1fr))}
+.pr[data-l=tab] .goals .sim{display:none}
+.pr .kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0;border-top:1px solid var(--ln);padding-top:14px;margin-top:auto}
+.pr .kpis div{padding:0 10px;border-left:1px solid var(--ln)}
+.pr .kpis div:first-child{border-left:0;padding-left:0}
+.pr .kpis b{display:block;font:800 26px/1 var(--cd)}
+.pr .kpis small{color:var(--di);font-size:11.5px;font-weight:600}
+.pr[data-l=phone] .hero{grid-template-columns:minmax(0,1fr);min-height:0}
+.pr[data-l=phone] .hero .pic{height:230px}
+.pr[data-l=phone] .hero .inf{padding:14px!important}
+.pr[data-l=phone] .hero .inf{padding:14px 14px 14px 4px;gap:10px}
+.pr[data-l=phone] .hero .nm{font-size:28px}
+.pr[data-l=phone] .hero .pic .big{font-size:90px}
+.pr[data-l=phone] .kpis div{padding:0 6px}
+.pr[data-l=phone] .kpis b{font-size:20px}
+.pr[data-l=phone] .ovr-b .o{width:56px;height:56px;border-radius:14px}
+.pr[data-l=phone] .ovr-b .o b{font-size:30px}
+.pr[data-l=land] .hero{min-height:230px;grid-template-columns:150px minmax(0,1fr)}
+.pr[data-l=land] .hero .nm{font-size:30px}
+.pr[data-l=land] .hero .inf{gap:8px;padding:12px}
+.pr .ticker{display:flex;align-items:center;gap:0;height:40px;border-radius:12px;background:var(--p1);border:1px solid var(--ln);overflow:hidden}
+.pr .ticker .tl{height:100%;display:flex;align-items:center;gap:8px;padding:0 14px;background:var(--or);color:#1a0b00;font:800 13px/1 var(--cd);letter-spacing:.06em;text-transform:uppercase;flex:none}
+.pr .ticker .tw{overflow:hidden;flex:1;mask-image:linear-gradient(90deg,transparent,#000 4%,#000 96%,transparent)}
+.pr .ticker .tm{display:flex;gap:36px;white-space:nowrap;animation:pr-mq 38s linear infinite;width:max-content;padding-left:20px}
+.pr .ticker .tm span{display:inline-flex;align-items:center;gap:8px;color:var(--mu);font-size:13px}
+.pr .ticker .tm span b{color:var(--ink)}
+@keyframes pr-mq{to{transform:translateX(-50%)}}
+.pr .next{background:linear-gradient(135deg,#17140c,#121418 60%)}
+.pr .vs{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:10px;text-align:center}
+.pr .vs .at{font:800 22px/1 var(--cd);color:var(--di)}
+.pr .meta{display:flex;flex-direction:column;gap:6px;margin:14px 0;font-size:12.5px;color:var(--mu)}
+.pr .meta span{display:flex;gap:8px;align-items:center}
+.pr .meta svg{width:15px;height:15px;color:var(--di);flex:none}
+.pr .tabs{display:flex;gap:4px;padding:4px;border-radius:12px;background:var(--bg2);border:1px solid var(--ln);margin-bottom:12px;overflow-x:auto}
+.pr .tabs button{flex:1;height:34px;border-radius:9px;font-size:12.5px;font-weight:700;color:var(--di);white-space:nowrap;padding:0 10px;transition:background .2s,color .2s}
+.pr .tabs button.on{background:var(--p3);color:var(--ink)}
+.pr .mini-t{width:100%;border-collapse:collapse;font-size:13px}
+.pr .mini-t th{font-size:11.5px;color:var(--di);font-weight:600;text-align:right;padding:6px 6px;border-bottom:1px solid var(--ln)}
+.pr .mini-t th:nth-child(-n+2){text-align:left}
+.pr .mini-t td{padding:8px 6px;border-bottom:1px solid var(--ln);text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pr .mini-t td:nth-child(-n+2){text-align:left}
+.pr .mini-t tr.mine td{background:rgba(226,182,90,.07)}
+.pr .mini-t tr:last-child td{border-bottom:0}
+.pr .tcell{display:flex;align-items:center;gap:10px}
+.pr .tcell b{font-weight:600;overflow:hidden;text-overflow:ellipsis}
+.pr .meter{display:grid;grid-template-columns:96px minmax(0,1fr) 38px;gap:10px;align-items:center;padding:7px 0;font-size:13px;color:var(--mu)}
+.pr .meter b{font:700 16px/1 var(--cd);text-align:right;color:var(--ink)}
+.pr .alert{display:flex;gap:12px;align-items:center;padding:12px 14px;border-radius:14px;background:linear-gradient(90deg,rgba(255,122,26,.16),rgba(255,122,26,.04));border:1px solid rgba(255,122,26,.35);cursor:pointer}
+.pr .alert b{display:block;font-size:13.5px}
+.pr .alert small{color:var(--mu);font-size:12px}
+.pr .rival{display:flex;align-items:center;gap:12px}
+.pr .ev-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:16px;flex-wrap:wrap}
+.pr .ev-head h2{font:800 clamp(30px,3vw,42px)/1 var(--cd);text-transform:uppercase;margin:4px 0 0}
+.pr .choices{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.pr .ch{border-radius:var(--r4);background:var(--p1);border:1px solid var(--ln);overflow:hidden;text-align:left;display:flex;flex-direction:column;transition:transform .3s var(--ease),border-color .25s,box-shadow .3s}
+.pr .ch:hover{transform:translateY(-4px);border-color:var(--ln2);box-shadow:0 24px 40px -24px rgba(0,0,0,.9)}
+.pr .ch.on{border-color:var(--or);box-shadow:0 0 0 3px rgba(255,122,26,.2),0 24px 40px -24px rgba(255,106,0,.5)}
+.pr .ch .art{aspect-ratio:4/3;position:relative;overflow:hidden}
+.pr .ch .art svg{position:absolute;inset:0;width:100%;height:100%}
+.pr .ch .art .risk{position:absolute;left:12px;top:12px}
+.pr .ch .bd{padding:16px;display:flex;flex-direction:column;gap:10px;flex:1}
+.pr .ch .bd b.t{font:800 24px/1 var(--cd);text-transform:uppercase}
+.pr .ch .bd p{margin:0;color:var(--mu);font-size:13px}
+.pr .fx{display:flex;flex-direction:column;gap:6px;margin-top:auto}
+.pr .fx div{display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:7px 10px;border-radius:9px;background:var(--bg2)}
+.pr .fx div b{font:700 15px/1 var(--cd)}
+.pr[data-l=phone] .choices{grid-template-columns:minmax(0,1fr)}
+.pr[data-l=phone] .ch{flex-direction:row}
+.pr[data-l=phone] .ch .art{width:38%;aspect-ratio:auto;min-height:150px;flex:none}
+.pr[data-l=phone] .ch .bd{padding:12px;gap:6px}
+.pr[data-l=phone] .ch .bd p{display:none}
+.pr[data-l=phone] .ch .bd b.t{font-size:20px}
+.pr[data-l=tab] .ch .art{aspect-ratio:16/10}
+.pr[data-l=land] .choices{gap:10px}
+.pr[data-l=land] .ch .bd{padding:10px;gap:6px}
+.pr[data-l=land] .ch .bd p{display:none}
+.pr[data-l=land] .ch .art{aspect-ratio:2/1}
+@keyframes pr-toast{from{opacity:0;transform:translate(-50%,20px)}}
+.pr .mu{position:relative;border-radius:var(--r4);overflow:hidden;padding:28px;background:#0d0f13;border:1px solid var(--ln);min-height:300px;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:20px}
+@keyframes pr-sl{from{opacity:0;transform:translateX(-60px)}}
+@keyframes pr-sr{from{opacity:0;transform:translateX(60px)}}
+.pr[data-l=phone] .mu{grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);padding:18px 12px;min-height:0;gap:8px}
+.pr[data-l=land] .mu{min-height:0;padding:14px}
+.pr .wrap:has(.live){height:100%;display:flex;flex-direction:column}
+.pr .live{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 340px;grid-template-rows:auto minmax(0,1fr) auto;gap:14px;height:100%}
+@keyframes pr-bump{30%{transform:scale(1.25);color:var(--or2)}}
+.pr .shot{transform-box:fill-box;transform-origin:center;animation:pr-shot .5s var(--ease) both}
+@keyframes pr-shot{from{transform:scale(2.4);opacity:0}}
+@keyframes pr-fin{from{opacity:0;transform:translateX(16px)}}
+@keyframes pr-fade{from{opacity:0}}
+.pr .rot{position:absolute;left:50%;top:10px;transform:translateX(-50%);z-index:20;display:flex;align-items:center;gap:10px;padding:8px 8px 8px 12px;border-radius:30px;background:rgba(26,29,36,.95);border:1px solid var(--ln2);font-size:12.5px;white-space:nowrap;box-shadow:0 10px 30px -10px rgba(0,0,0,.7);animation:pr-toast2 .5s var(--ease) both}
+@keyframes pr-toast2{from{opacity:0;transform:translate(-50%,-10px)}}
+.pr .rot svg{width:20px;height:20px;color:var(--or2);animation:pr-rotp 2.4s ease-in-out infinite}
+@keyframes pr-rotp{0%,25%{transform:rotate(0)}50%,75%{transform:rotate(-90deg)}100%{transform:rotate(0)}}
+.pr .rot button{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--p3)}
+.pr .rot button svg{width:14px;height:14px;animation:none;color:var(--mu)}
+.pr[data-l=phone] .live{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto minmax(220px,1fr);height:auto}
+.pr[data-l=phone] .wrap:has(.live){height:auto}
+.pr[data-l=land] .live{grid-template-columns:minmax(0,1fr) 250px;gap:8px}
+.pr .offers{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+.pr .of{border-radius:var(--r4);overflow:hidden;background:var(--p1);border:1px solid var(--ln);display:flex;flex-direction:column;transition:transform .3s var(--ease),border-color .25s,box-shadow .3s;position:relative}
+.pr .of:hover{transform:translateY(-4px);box-shadow:0 26px 40px -24px rgba(0,0,0,.9)}
+.pr .of.on{border-color:var(--tc);box-shadow:0 0 0 3px color-mix(in srgb,var(--tc) 35%,transparent)}
+.pr .of .hd{padding:18px;background:linear-gradient(160deg,color-mix(in srgb,var(--tc) 45%,#0d0f13),#0d0f13 80%);display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;position:relative}
+.pr .of .hd b{font:800 22px/1 var(--cd);text-transform:uppercase}
+.pr .of .hd small{color:var(--mu);font-size:12px}
+.pr .of .best{position:absolute;top:12px;right:12px}
+.pr .of .bd{padding:16px;display:flex;flex-direction:column;gap:10px;flex:1}
+.pr .of .sal{font:800 34px/1 var(--cd)}
+.pr .of .sal small{font:600 12px var(--sn);color:var(--di)}
+.pr .of dl{margin:0;display:grid;grid-template-columns:auto auto;gap:6px 10px;font-size:12.5px}
+.pr .of dt{color:var(--di)}
+.pr .of dd{margin:0;text-align:right;font-weight:600}
+.pr .of .cta,.pr .of .ghost{margin-top:auto;width:100%}
+.pr .cx{display:grid;grid-template-columns:110px repeat(4,minmax(0,1fr));gap:16px;align-items:center;font-size:13px;color:var(--mu)}
+.pr .cx.hd{color:var(--di);font-size:12px}
+.pr[data-l=phone] .cx{grid-template-columns:80px repeat(4,minmax(0,1fr));gap:8px}
+.pr .stamp{position:absolute;inset:0;display:grid;place-items:center;z-index:5;background:rgba(5,6,8,.55);animation:pr-fade .3s both}
+.pr .stamp span{font:800 52px/1 var(--cd);text-transform:uppercase;color:var(--ok);border:5px solid var(--ok);border-radius:14px;padding:6px 18px;transform:rotate(-10deg);animation:pr-stamp .5s var(--ease) both}
+@keyframes pr-stamp{from{transform:rotate(-10deg) scale(2.2);opacity:0}}
+.pr[data-l=tab] .offers{grid-template-columns:repeat(2,minmax(0,1fr))}
+.pr[data-l=land] .offers{grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.pr[data-l=land] .of .hd{padding:10px}
+.pr[data-l=land] .of .bd{padding:10px}
+.pr[data-l=land] .of .sal{font-size:24px}
+.pr[data-l=land] .of dl{display:none}
+.pr[data-l=phone] .offers{grid-template-columns:minmax(0,1fr)}
+.pr[data-l=phone] .of{display:grid;grid-template-columns:120px minmax(0,1fr)}
+.pr[data-l=phone] .of .hd{padding:12px}
+.pr[data-l=phone] .of .hd b{font-size:16px}
+.pr[data-l=phone] .of .bd{padding:12px}
+.pr[data-l=phone] .of dl{display:none}
+.pr[data-l=phone] .of .sal{font-size:26px}
+.pr .fx-list{display:flex;flex-direction:column}
+.pr .fxr{display:grid;grid-template-columns:110px minmax(0,1fr) 90px minmax(0,1fr) minmax(0,1.2fr);gap:12px;align-items:center;padding:10px 4px;border-bottom:1px solid var(--ln);font-size:13px}
+.pr .fxr .tm3{display:flex;align-items:center;gap:8px;font-weight:600}
+.pr .fxr .tm3.r{flex-direction:row-reverse;text-align:right}
+.pr .fxr .scr{text-align:center;font:800 20px/1 var(--cd);font-variant-numeric:tabular-nums}
+.pr .fxr .scr .w{color:var(--ink)}
+.pr .fxr .scr .l{color:var(--di)}
+.pr .fxr .scr small{display:block;font:600 11px var(--sn);color:var(--di)}
+.pr .fxr .dt{color:var(--di);font-size:12px}
+.pr .fxr .vn{color:var(--di);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pr[data-l=phone] .fxr,.pr[data-l=land] .fxr{grid-template-columns:minmax(0,1fr) 70px minmax(0,1fr);row-gap:4px}
+.pr[data-l=phone] .fxr .dt,.pr[data-l=land] .fxr .dt{grid-column:1/4;grid-row:1}
+.pr[data-l=phone] .fxr .vn,.pr[data-l=land] .fxr .vn{display:none}
+.pr .mvp{display:flex;flex-direction:column;gap:8px}
+.pr .road{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;counter-reset:r}
+.pr .rs{display:flex;gap:10px;align-items:flex-start;text-align:left;padding:12px;border-radius:14px;background:var(--bg2);border:1px solid var(--ln);position:relative;transition:border-color .2s,transform .2s}
+.pr .rs:hover{border-color:var(--ln2);transform:translateY(-2px)}
+.pr .rs .n{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--p3);font:800 14px/1 var(--cd);flex:none;color:var(--mu)}
+.pr .rs.nx{border-color:rgba(255,122,26,.5);background:linear-gradient(160deg,rgba(255,122,26,.14),var(--bg2))}
+.pr .rs.nx .n{background:var(--or);color:#1a0b00}
+.pr .rs.dn .n{background:var(--ok);color:#06210f}
+.pr .rs .n .i{width:15px;height:15px}
+.pr .rs b{display:block;font-size:13px}
+.pr .rs small{color:var(--di);font-size:11.5px;line-height:1.35;display:block}
+.pr[data-l=phone] .road,.pr[data-l=land] .road{grid-template-columns:minmax(0,1fr)}
+.pr[data-l=tab] .road{grid-template-columns:repeat(3,minmax(0,1fr))}
+.pr .dec{display:grid;grid-template-columns:36px minmax(0,1fr);gap:12px;padding:10px 0;border-bottom:1px solid var(--ln)}
+.pr .dec:last-child{border-bottom:0}
+.pr .dec b{display:block;font-size:13.5px}
+.pr .dec small{color:var(--mu);font-size:12.5px;line-height:1.45;display:block}
+.pr .k{width:32px;height:32px;border-radius:10px;display:grid;place-items:center;flex:none;font-style:normal}
+.pr .k .i{width:17px;height:17px}
+.pr .k.you{background:rgba(255,122,26,.16);color:var(--or2);box-shadow:inset 0 0 0 1px rgba(255,122,26,.4)}
+.pr .k.chance{background:rgba(74,168,255,.14);color:#8cc8ff;box-shadow:inset 0 0 0 1px rgba(74,168,255,.35)}
+.pr .k.ms{background:var(--p3);color:var(--mu)}
+.pr .field20{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 10px}
+.pr .field20 span{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--mu);padding:4px 6px;border-radius:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pr .field20 span.me2{background:rgba(255,122,26,.14);color:var(--ink);font-weight:600}
+.pr .field20 .flag{width:20px;height:10px}
+.pr .tcell .flag{width:24px;height:12px}
+.pr .tr2 .tr i.add{background:repeating-linear-gradient(45deg,#ffd2ad 0 4px,#ff9a4d 4px 8px);border-radius:0 8px 8px 0;transition:width .3s var(--ease)}
+.pr .tg.pos{color:#7fe0ad;border-color:rgba(52,195,122,.35);background:rgba(52,195,122,.1)}
+.pr .tg.neg{color:#ff9a9a;border-color:rgba(240,82,82,.35);background:rgba(240,82,82,.1)}
+.pr .evart{position:relative;aspect-ratio:2/1;overflow:hidden;border-radius:var(--r4) var(--r4) 0 0}
+.pr .evart svg{position:absolute;inset:0;width:100%;height:100%}
+.pr .evo{text-align:left;padding:16px;border-radius:var(--r4);background:var(--p1);border:1px solid var(--ln);display:flex;flex-direction:column;gap:12px;transition:border-color .2s,transform .2s,opacity .3s}
+.pr .evo:hover:not(:disabled){border-color:var(--or);transform:translateX(3px)}
+.pr .evo.dim{opacity:.35}
+.pr .evo:disabled{cursor:default}
+.pr .evo .eh{display:flex;align-items:center;gap:12px}
+.pr .evo .eh b{flex:1;font-size:15.5px}
+.pr .ic2{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:var(--p3);color:var(--or2)}
+.pr .odds{display:flex;height:12px;border-radius:12px;overflow:visible;position:relative;gap:2px}
+.pr .odds i{display:block;height:100%;border-radius:3px;animation:pr-grow .8s var(--ease) both}
+.pr .odds i:first-child{border-radius:12px 3px 3px 12px}
+.pr .odds i:nth-child(3){border-radius:3px 12px 12px 3px}
+.pr .odds .ok,.pr .dot.ok{background:#34c37a}
+.pr .odds .wa,.pr .dot.wa{background:#e2b65a}
+.pr .odds .bd,.pr .dot.bd{background:#f05252}
+.pr .needle{position:absolute;top:-7px;bottom:-7px;width:3px;border-radius:3px;background:#fff;box-shadow:0 0 0 2px rgba(0,0,0,.5),0 0 12px #fff;left:0;animation:pr-needle 1.3s cubic-bezier(.3,.7,.2,1) forwards}
+@keyframes pr-needle{0%{left:0}55%{left:100%}100%{left:var(--x)}}
+.pr .rm .needle{left:var(--x)}
+.pr .ol{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.pr .ol div{font-size:12.5px;color:var(--mu)}
+.pr .ol b{color:var(--ink)}
+.pr .ol small{display:block;color:var(--di);font-size:11.5px;margin-top:3px;line-height:1.35}
+.pr .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+.pr .evres{border-width:1px}
+.pr .evres.ok{border-color:rgba(52,195,122,.5);background:linear-gradient(160deg,rgba(52,195,122,.12),var(--p1) 60%)}
+.pr .evres.wa{border-color:rgba(226,182,90,.5);background:linear-gradient(160deg,rgba(226,182,90,.12),var(--p1) 60%)}
+.pr .evres.bd{border-color:rgba(240,82,82,.5);background:linear-gradient(160deg,rgba(240,82,82,.12),var(--p1) 60%)}
+.pr .evres p{margin:10px 0;font-size:15px}
+.pr[data-l=phone] .ol{grid-template-columns:minmax(0,1fr)}
+.pr .mt{border-radius:12px;background:var(--bg2);border:1px solid var(--ln);overflow:hidden;animation:pr-rise .5s var(--ease) both}
+.pr .mt>small{display:block;padding:4px 10px;color:var(--di);font-size:11px}
+.pr .mt div{display:grid;grid-template-columns:24px minmax(0,1fr) 28px;gap:8px;align-items:center;padding:7px 10px;font-size:12.5px;color:var(--mu)}
+.pr .mt div+div{border-top:1px solid var(--ln)}
+.pr .mt div span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pr .mt div b{font:700 15px/1 var(--cd);text-align:right}
+.pr .mt div.w{color:var(--ink)}
+.pr .mt div.w b{color:var(--or2)}
+.pr .mt div.me3{background:rgba(255,122,26,.1)}
+.pr .mt .flag{width:22px;height:11px}
+.pr .champ{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px;border-radius:12px;background:linear-gradient(160deg,rgba(226,182,90,.18),transparent);border:1px solid rgba(226,182,90,.4)}
+.pr .champ b{font:800 20px/1 var(--cd);text-transform:uppercase}
+.pr .champ small{color:#f3d79b;font-size:11.5px}
+.pr .glog{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.pr .gl{padding:12px;border-radius:12px;background:var(--bg2);border:1px solid var(--ln);display:flex;flex-direction:column;gap:6px}
+.pr .gl>small{color:var(--di);font-size:11px;font-weight:600}
+.pr .gl .tm5{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600}
+.pr .gl>b{font:800 22px/1 var(--cd)}
+.pr .gl .ln4{font-size:12px;color:var(--di)}
+.pr .gl .ln4 b{color:var(--ink);font-weight:700}
+.pr .resb{display:grid;grid-template-columns:auto minmax(0,1fr);gap:20px;align-items:center;padding:22px;border-radius:var(--r4);background:linear-gradient(110deg,color-mix(in srgb,var(--tc) 28%,#0d0f13),#0d0f13 70%);border:1px solid var(--ln)}
+.pr .resb h2{font:800 clamp(34px,4vw,56px)/1 var(--cd);text-transform:uppercase;margin:6px 0}
+.pr .resb p{margin:0;color:var(--mu);max-width:64ch}
+.pr .resb .lbl{display:flex;align-items:center;gap:8px}
+.pr .medal2{width:92px;height:92px;border-radius:50%;display:grid;place-items:center;background:radial-gradient(circle at 35% 30%,#f2f4f8,#aab3c0 50%,#5d6673);color:#22262d;box-shadow:0 14px 30px -10px rgba(170,180,195,.5),inset 0 2px 0 rgba(255,255,255,.6);overflow:hidden}
+.pr .medal2.gold{background:radial-gradient(circle at 35% 30%,#ffe7a8,#e2b65a 45%,#8a6420);color:#3a2808}
+.pr .medal2 .i{width:42px;height:42px}
+.pr .medal2 .flag{width:60px;height:40px;border-radius:4px}
+.pr .sline{display:grid;grid-template-columns:repeat(auto-fit,minmax(80px,1fr));gap:8px}
+.pr .sline div{padding:12px 8px;border-radius:12px;background:var(--bg2);text-align:center}
+.pr .sline b{display:block;font:800 26px/1 var(--cd)}
+.pr .sline b.tx{font-size:18px;line-height:1.1}
+.pr .sline small{font-size:11px;color:var(--di);font-weight:600}
+.pr .letter{background:linear-gradient(160deg,#2b2112,#15130e 70%);border-color:rgba(226,182,90,.35);display:flex;flex-direction:column;gap:10px;align-items:flex-start}
+.pr .letter h2{font:800 34px/1 var(--cd);text-transform:uppercase;margin:4px 0 0;color:#f3d79b}
+.pr .letter p{margin:0;color:var(--mu)}
+.pr .imp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.pr .imp>div{padding:12px;border-radius:12px;background:var(--bg2);display:flex;flex-direction:column;gap:8px}
+.pr .bf{display:flex;align-items:center;gap:8px;color:var(--di);font:700 18px/1 var(--cd)}
+.pr .bf b{font-size:26px;color:var(--ink)}
+.pr .bf .i{width:14px;height:14px}
+.pr[data-l=phone] .imp{grid-template-columns:repeat(2,minmax(0,1fr))}
+.pr .dual{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.pr .dc{border-radius:var(--r4);background:var(--p1);border:1px solid var(--ln);padding:20px;display:flex;flex-direction:column;gap:14px;transition:transform .3s var(--ease),border-color .25s}
+.pr .dc:hover{transform:translateY(-3px);border-color:var(--ln2)}
+.pr .dh{display:flex;align-items:center;gap:12px}
+.pr .dh b{font:800 28px/1 var(--cd);text-transform:uppercase}
+.pr .dh .i{width:44px;height:44px;padding:10px;border-radius:14px}
+.pr .dh.go .i{background:rgba(226,182,90,.18);color:#f3d79b}
+.pr .dh.stay .i{background:rgba(52,195,122,.14);color:#7fe0ad}
+.pr .dc ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;font-size:13.5px}
+.pr .dc li{display:flex;gap:10px;align-items:baseline}
+.pr .dc li::before{content:"+";font:800 15px/1 var(--cd);width:14px;color:var(--ok)}
+.pr .dc li.neg::before{content:"−";color:var(--bd)}
+.pr .unl{display:flex;gap:8px;align-items:flex-start;padding:12px;border-radius:12px;background:var(--bg2);font-size:13px;color:var(--mu);margin-top:auto}
+.pr .unl b{color:var(--ink)}
+.pr .unl .i{color:var(--or2);margin-top:1px}
+.pr .dc .cta,.pr .dc .ghost{width:100%}
+.pr[data-l=phone] .dual{grid-template-columns:minmax(0,1fr)}
+.pr .gains{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:14px 0}
+.pr .gains div{padding:10px;border-radius:10px;background:var(--p2);display:flex;justify-content:space-between;font-size:13px;color:var(--mu)}
+.pr .gains b{color:#7fe0ad;font:800 18px/1 var(--cd)}
+.pr .injb{display:flex;gap:10px;align-items:center;padding:10px 12px;border-radius:10px;background:rgba(240,82,82,.1);border:1px solid rgba(240,82,82,.35);font-size:13px}
+.pr .injb.ok{background:rgba(52,195,122,.1);border-color:rgba(52,195,122,.35)}
+.pr .yr2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.pr .yr2>div{display:flex;align-items:center;gap:12px;padding:12px;border-radius:12px;background:var(--bg2)}
+.pr .yr2>div>span:nth-child(2){flex:1}
+.pr .yr2 b{display:block;font-size:13.5px}
+.pr .yr2 small{color:var(--di);font-size:12px}
+.pr[data-l=phone] .yr2{grid-template-columns:minmax(0,1fr)}
+.pr .crest{width:84px;height:84px;border-radius:24px 24px 42px 42px;display:grid;place-items:center;font:800 28px/1 var(--cd);background:linear-gradient(160deg,#4a8be0,#173a73);box-shadow:inset 0 0 0 3px rgba(255,255,255,.25),0 10px 20px -8px rgba(0,0,0,.6);color:#fff}
+.pr .xo .crest{width:44px;height:44px;border-radius:12px 12px 20px 20px;font-size:14px;background:linear-gradient(160deg,#3d9b6a,#14452e)}
+.pr .stayc .hd .flag{width:84px;height:42px;border-radius:6px}
+.pr .cmp2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.pr .cmp2>div{padding:14px;border-radius:12px;background:var(--bg2)}
+.pr .cmp2 b{font:800 20px/1 var(--cd);text-transform:uppercase}
+.pr .cmp2 ul{margin:10px 0 0;padding-left:18px;color:var(--mu);font-size:13px;display:flex;flex-direction:column;gap:5px}
+.pr[data-l=phone] .cmp2{grid-template-columns:minmax(0,1fr)}
+.pr .xr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.pr .xr>section{border-radius:var(--r4);background:var(--p1);border:1px solid var(--ln);padding:16px;display:flex;flex-direction:column;gap:8px}
+.pr .xh{margin:0 0 6px;font-size:15px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.pr .xh small{color:var(--di);font-weight:600;font-size:12px}
+.pr .xo{display:grid;grid-template-columns:44px minmax(0,1fr) auto auto;gap:12px;align-items:center;padding:10px;border-radius:12px;background:var(--bg2);border:1px solid var(--ln);transition:border-color .2s}
+.pr .xo.on{border-color:var(--ok);background:rgba(52,195,122,.08)}
+.pr .xo b{display:block;font-size:13.5px}
+.pr .xo small{color:var(--di);font-size:12px}
+.pr .xo .ghost{height:38px;padding:0 14px}
+.pr .lockd{padding:16px;border-radius:12px;border:1px dashed var(--ln2);color:var(--di);font-size:13px;display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.pr[data-l=phone] .xr,.pr[data-l=land] .xr{grid-template-columns:minmax(0,1fr)}
+.pr[data-l=phone] .xo{grid-template-columns:44px minmax(0,1fr) auto}
+.pr[data-l=phone] .xo .tg{grid-column:2}
+.pr canvas.pxs{image-rendering:pixelated;image-rendering:crisp-edges}
+.pr canvas.pxs{display:block;width:100%;height:auto}
+.pr .ch .art canvas.pxs,.pr .evart canvas.pxs{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.pr .fit{display:grid;grid-template-columns:150px minmax(0,1fr);gap:14px;padding:14px;border-radius:var(--r4);background:var(--p1);border:1px solid var(--ln)}
+.pr .li{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px;border-radius:14px;background:var(--bg2);border:1px solid var(--ln);transition:border-color .2s}
+.pr .li.tr{border-color:var(--or);background:rgba(255,122,26,.08)}
+.pr .li.own{border-color:rgba(52,195,122,.5)}
+.pr .li b{display:block;font-size:13.5px}
+.pr .li small{display:block;color:var(--di);font-size:12px}
+.pr .cta.sm,.pr .ghost.sm{height:34px;padding:0 10px;font-size:12.5px;border-radius:10px}
+.pr[data-l=phone] .fit{grid-template-columns:110px minmax(0,1fr)}
+.pr[data-l=phone] .li{grid-template-columns:auto minmax(0,1fr)}
+.pr .dc .pxs{border-radius:14px;border:1px solid var(--ln)}
+.pr .scnband{border-radius:var(--r4);overflow:hidden;border:1px solid var(--ln);margin-bottom:16px;position:relative}
+.pr .scnband canvas{height:180px!important;object-fit:cover}
+.pr .xr .pxs{border-radius:12px;height:110px!important;object-fit:cover;border:1px solid var(--ln)}
+.pr #pc{position:fixed;left:16px;bottom:16px;z-index:100;display:flex;align-items:center;gap:4px;padding:5px;border-radius:16px;background:rgba(20,22,28,.92);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(14px);box-shadow:0 16px 40px -10px rgba(0,0,0,.8);font:600 12.5px var(--sn);transition:opacity .2s}
+.pr #pc button{height:36px;min-width:36px;border-radius:11px;display:grid;place-items:center;color:var(--mu);padding:0 8px}
+.pr #pc button:hover{background:rgba(255,255,255,.08);color:var(--ink)}
+.pr #pc button svg{width:17px;height:17px}
+.pr #drawer{position:fixed;left:16px;bottom:68px;z-index:101;width:min(380px,calc(100vw - 32px));max-height:min(78vh,720px);overflow:auto;border-radius:20px;background:rgba(20,22,28,.97);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(16px);box-shadow:0 30px 60px -10px rgba(0,0,0,.85);padding:16px;display:none;font-size:13px}
+.pr #drawer.open{display:block;animation:pr-pop .3s var(--ease) both}
+.pr #drawer h4{margin:4px 0 8px;font-size:11.5px;color:var(--di);font-weight:700;letter-spacing:.04em}
+.pr #drawer p{color:var(--di);font-size:12px;margin:0 0 10px;line-height:1.45}
+@media (max-width:600px){.pr #pc{left:8px;bottom:calc(72px + env(safe-area-inset-bottom))}.pr #drawer{left:8px;bottom:124px}}
+.pr{background:var(--bg);color:var(--ink);font-family:var(--sn)}
+.pr.rd-shell[data-l=desk]{padding-left:232px}
+.pr.rd-shell[data-l=tab]{padding-left:76px}
+.pr.rd-shell[data-l=land]{padding-left:64px}
+.pr .rd-side.side{position:fixed;left:0;top:0;bottom:0;z-index:40;display:none;overflow-y:auto}
+.pr[data-l=desk] .rd-side.side{display:flex;width:232px;padding:18px 12px}
+.pr[data-l=tab] .rd-side.side{display:flex;width:76px}
+.pr[data-l=land] .rd-side.side{display:flex;width:64px}
+.pr .rd-side .nav:disabled{opacity:.4;cursor:not-allowed}
+.pr .rd-side .nav{width:100%;text-align:left}
+.pr .pr-lock{font:600 11px/1.4 var(--sn);color:var(--di);padding:8px 12px}
+.pr[data-l=tab] .pr-lock,.pr[data-l=land] .pr-lock{display:none}
+.pr .top{position:sticky;top:0;z-index:30;min-height:60px}
+.pr[data-l=land] .top{min-height:52px}
+.pr[data-l=phone] .top{min-height:56px}
+.pr .top h1{overflow:hidden;text-overflow:ellipsis}
+.pr .bnav.rd-bottom{grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:0}
+.pr .bnav button:disabled{opacity:.4}
+.pr[data-l=phone].rd-shell{padding-bottom:74px}
+.pr .rd-main{min-width:0}
+.pr .hero .pic .pr-fig{position:absolute;left:50%;bottom:0;transform:translateX(-50%);height:88%;display:flex;align-items:flex-end}
+.pr .hero .pic .pr-fig canvas{height:100%;width:auto}
+.pr[data-l=phone] .hero .pic .pr-fig{height:92%}
+.pr .clubline{display:flex;align-items:center;gap:12px;min-width:0}
+.pr .clubline b{display:block;font-size:15px}
+.pr .clubline small{color:var(--mu);font-size:12.5px}
+.pr .pr-vs{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:10px;text-align:center}
+.pr .pr-vs>div{display:flex;flex-direction:column;align-items:center;gap:8px}
+.pr .pr-vs b{font-size:14px}
+.pr .pr-vs>span{font:800 22px/1 var(--cd);color:var(--di)}
+.pr .pr-ldr{display:grid;grid-template-columns:22px 44px minmax(0,1fr) auto;gap:12px;align-items:center;padding:9px 0;border-bottom:1px solid var(--ln)}
+.pr .pr-ldr:last-child{border-bottom:0}
+.pr .pr-ldr.me{background:rgba(255,122,26,.07)}
+.pr .pr-ldr .rk{font:800 18px/1 var(--cd);color:var(--di);text-align:center}
+.pr .pr-ldr .fc{width:44px;height:44px;border-radius:12px;overflow:hidden;background:linear-gradient(160deg,#2a2f3a,#14171c)}
+.pr .pr-ldr .fc canvas{width:44px;height:46px}
+.pr .pr-ldr b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pr .pr-ldr small{display:flex;align-items:center;gap:6px;color:var(--di);font-size:12px}
+.pr .pr-ldr .v{text-align:right}
+.pr .pr-ldr .v b{font:800 24px/1 var(--cd)}
+.pr .pr-ldr .v small{display:block;font-size:10px}
+.pr .pr-ledger{max-height:320px;overflow:auto}
+.pr .pr-cost{display:block;font:600 11px/1.2 var(--sn);color:var(--di);margin-top:3px}
+.pr .pr-in{width:100%;height:46px;border-radius:12px;background:var(--bg2);border:1px solid var(--ln2);padding:0 14px;color:var(--ink);font:500 15px var(--sn);outline:none}
+.pr .pr-in:focus{border-color:var(--or)}
+.pr .pr-ko{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+.pr .pr-ko .mt.pr-mine{border-color:rgba(255,122,26,.45)}
+.pr .pr-best{display:flex;align-items:baseline;gap:8px;margin-top:14px;padding:12px 14px;border-radius:12px;background:linear-gradient(120deg,rgba(255,122,26,.12),transparent);border:1px solid rgba(255,122,26,.3)}
+.pr .pr-best small{color:var(--or2);font-weight:700;font-size:12px;margin-right:auto}
+.pr .pr-best b{font:800 26px/1 var(--cd)}
+.pr .pr-best span{color:var(--di);font-size:11px;font-weight:700;margin-right:10px}
+.pr .pr-bars{display:flex;align-items:flex-end;gap:10px;height:120px}
+.pr .pr-bars div{flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:6px}
+.pr .pr-bars i{display:block;width:100%;border-radius:6px 6px 2px 2px;background:linear-gradient(180deg,#ff9a4d,#d9560a)}
+.pr .pr-bars small{color:var(--di);font-size:11px}
+.pr .pr-read{display:grid;gap:10px 14px;align-items:center}
+.pr .pr-read .rl{font-size:12.5px;color:var(--mu)}
+.pr .of .best{z-index:2}
+.pr .of .hd .lg{--s:72px}
+.pr .rd-rotate .i{color:var(--or)}
+.pr .pr-sel{min-height:calc(100vh - 60px);display:grid;place-items:center;text-align:center;background:radial-gradient(60% 50% at 50% 35%,rgba(226,182,90,.14),transparent 70%)}
+.pr .pr-sel-in{display:flex;flex-direction:column;align-items:center;gap:16px;max-width:720px}
+.pr .pr-sel-k{display:flex;align-items:center;gap:10px}
+.pr .pr-sel-tr{color:#e2b65a}
+.pr .pr-sel-tr .i{width:88px;height:88px}
+.pr .pr-sel-t{font:800 clamp(64px,10vw,140px)/.9 var(--cd);text-transform:uppercase;margin:0;background:linear-gradient(180deg,#fff6dc,#e2b65a 70%,#a87a2a);-webkit-background-clip:text;background-clip:text;color:transparent}
+.pr .pr-sel-in>p{color:var(--ink);margin:0;font-size:15px;opacity:.9}
+.pr .pr-sel-rv{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:16px;background:var(--p1);border:1px solid var(--ln);text-align:left;width:min(420px,100%)}
+.pr .pr-sel-rv small{display:block;color:var(--di);font-size:12px}
+.pr .pr-sel-rv b{display:block;font-size:16px}
+.pr .pr-sel-path{display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap;justify-content:center}
+.pr .pr-sel-path>span{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--di);width:92px}
+.pr .pr-sel-path>span.on{color:var(--ink)}
+.pr .pr-sel-path>i{width:28px;height:2px;background:var(--ln2);margin-top:24px}
+.pr[data-l=phone] .pr-sel-path>i{display:none}
+.pr[data-l=phone] .pr-ldr{grid-template-columns:18px 38px minmax(0,1fr) auto;gap:8px}
+.pr[data-l=phone] .imp{grid-template-columns:repeat(2,minmax(0,1fr))}
+.pr[data-l=land] .imp{grid-template-columns:repeat(4,minmax(0,1fr))}
+.pr[data-l=phone] .pr-read{grid-template-columns:80px repeat(var(--n,4),minmax(0,1fr))!important;font-size:11px}
+.pr[data-l=phone] .sline{grid-template-columns:repeat(3,minmax(0,1fr))}
+.pr[data-l=phone] .resb{grid-template-columns:minmax(0,1fr);text-align:left}
+.pr[data-l=phone] .resb .medal2{width:64px;height:64px}
+.pr[data-l=tab] .offers,.pr[data-l=tab] .hblo{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+.pr[data-l=phone] .offers{grid-template-columns:minmax(0,1fr)!important}
+.pr[data-l=phone] .of .hd .lg{--s:56px}
+.pr[data-l=phone] .of .crest{width:56px;height:56px;font-size:20px}
+.pr[data-l=land] .offers{grid-template-columns:repeat(4,minmax(0,1fr))!important}
+.pr[data-l=phone] .choices{grid-template-columns:minmax(0,1fr)!important}
+.pr[data-l=phone] .dc .pxs,.pr[data-l=phone] .xr .pxs{display:none}
+.pr .dc canvas.pxs,.pr .xr canvas.pxs{width:100%;height:150px;object-fit:cover}
+.pr .ch .art canvas.pxs{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.pr .scnband canvas{width:100%;display:block}
+.pr .ghost:disabled{opacity:.5;cursor:not-allowed}
+.pr .tg:is(button){cursor:pointer}
+.pr .of .bd .cta,.pr .of .bd .ghost{white-space:normal;height:auto;min-height:44px;padding:8px 12px;line-height:1.2;text-align:center}
+.pr .of .bd .ghost.sm{min-height:34px}
+.pr[data-l=land] .evart{aspect-ratio:3/1}
+.pr[data-l=land] .ch .art canvas.pxs{object-position:center 60%}
+`;
+function PrStyle() { return <style>{PR_CSS}</style>; }
 
 const ClubCrest = memo(function ClubCrest({ name, size = 44 }) {
   const logoKey = logoKeyFor(name);
@@ -8136,268 +10342,6 @@ function HubTicker({ player, summary }) {
   );
 }
 
-function Hub({ player, onPlaySeason, onRetireConsider, onManageInvestments, onRequestTrade, onOpenLifestyle, onOpenCareerHighlights, banner, summary }) {
-  const overall = computeOverall(player.stats, player.position);
-  const [tab, setTab] = useState("attrs");
-  // Same conditional-tab pattern as the season recap's League Context tabs
-  // (Standings/Leaders/Award Race) — a tab only appears once there's
-  // something to show in it, and the active tab safely falls back to the
-  // first available one if it was somehow left pointing at a hidden tab.
-  const hasLockerRoom = player.stage === "pro" && !player.abroad && !!player.clubId;
-  const TABS = [
-    ["attrs", "Attributes", true],
-    ["wellbeing", "Wellbeing", true],
-    ["rival", "Rival", !!player.rival],
-    ["career", "Career", true],
-  ].filter(t => t[2]);
-  const active = TABS.some(t => t[0] === tab) ? tab : TABS[0][0];
-  return (
-    <div className="min-h-full w-full px-4 py-6 sm:py-10" style={{ background: C.ink }}>
-      <div className="rd-hub">
-        <div className="rd-hub-l">
-        <HubHero player={player} overall={overall} />
-        {banner && (
-          <div className="mb-4 p-3 rounded-[10px] f-body text-sm flex items-center gap-2" style={{ background: "rgba(20,184,166,0.12)", border: `1px solid ${C.teal}`, color: C.teal }}>
-            <Sparkles size={14} /> {banner}
-          </div>
-        )}
-
-        <PlayerCard p={player} overall={overall} />
-        <HubTicker player={player} summary={summary} />
-        </div>
-        <div className="rd-hub-r">
-
-        {/* One card visible at a time instead of everything stacked — the
-            Hub had grown to 4-5 full cards before reaching the Continue
-            button once relationships, injuries, and the rival tracker were
-            all added on top of the original Attributes/Wellbeing grid. */}
-        <div className="flex gap-1.5 mt-4">
-          {TABS.map(([id, label]) => (
-            <button key={id} onClick={() => setTab(id)}
-              className="btn-tactile flex-1 f-mono text-[10px] uppercase tracking-wide py-2 rounded-[10px] transition"
-              style={active === id
-                ? { background: C.amber, color: C.ink, border: `1px solid ${C.amber}`, fontWeight: 800 }
-                : { background: C.ink3, color: C.chalkDim, border: `1px solid ${C.line}` }}>
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {active === "attrs" && (
-          <div className="rounded-[10px] p-4 mt-3" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-            {STAT_LIST.map(s => <StatBar key={s} statKey={s} value={player.stats[s]} />)}
-          </div>
-        )}
-
-        {active === "wellbeing" && (
-          <div className="flex flex-col gap-3 mt-3">
-            <div className="rounded-[10px] p-4" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-              <div className="space-y-2">
-                <Meter label="Morale" value={player.morale} icon={HeartPulse} color={C.chalk} />
-                <Meter label="Fatigue" value={player.fatigue} icon={Activity} color={C.chalkDim} />
-                <Meter label="Popularity" value={player.popularity} icon={Radio} color={C.chalk} />
-                <Meter label="Family" value={player.relationships.family} icon={Home} color={C.chalk} />
-              </div>
-            </div>
-            {/* Coach Trust / Team Chemistry only mean anything once there's
-                an actual locker room — a domestic pro club. They reset to
-                50/50 on every new signing, so showing them before that would
-                just be a flat, meaningless bar. */}
-            {hasLockerRoom && (
-              <div className="rounded-[10px] p-4" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-                <div className="f-display text-xs uppercase tracking-wide mb-3" style={{ color: C.chalkDim }}>Locker Room</div>
-                <div className="space-y-2">
-                  <Meter label="Coach Trust" value={player.relationships.coach} icon={Star} color={C.chalk} />
-                  <Meter label="Team Chemistry" value={player.relationships.team} icon={Users} color={C.chalk} />
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {active === "rival" && player.rival && (
-          <div className="rounded-[10px] p-4 mt-3" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-            <div className="flex items-center gap-2 mb-3">
-              <ClubCrest name={player.name} size={32} />
-              <div className="flex-1 min-w-0">
-                <div className="f-body text-xs font-semibold truncate" style={{ color: C.chalk }}>{player.name}</div>
-                <div className="f-mono text-[9px]" style={{ color: C.chalkDim }}>You</div>
-              </div>
-              <span className="f-mono text-[9px] flex-shrink-0" style={{ color: C.chalkDim }}>VS</span>
-              <div className="flex-1 min-w-0 text-right">
-                <div className="f-body text-xs font-semibold truncate" style={{ color: C.chalk }}>{player.rival.name}</div>
-                <div className="f-mono text-[9px] truncate" style={{ color: C.chalkDim }}>
-                  {player.rival.retired ? "Retired" : (player.rival.clubName || `${player.rival.hometown} · Youth`)}
-                </div>
-              </div>
-              <ClubCrest name={player.rival.name} size={32} />
-            </div>
-            {(() => {
-              const rivalOvr = computeOverall(player.rival.stats, player.rival.position);
-              const rows = [
-                { label: "Overall", mine: overall, theirs: rivalOvr },
-                { label: "Peak OVR", mine: player.peakOverall || overall, theirs: player.rival.peakOverall },
-                { label: "Nat'l Caps", mine: player.nationalCaps || 0, theirs: player.rival.caps },
-              ];
-              return (
-                <div className="grid grid-cols-3 gap-2">
-                  {rows.map(row => (
-                    <div key={row.label} className="text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        <span className="f-mono text-sm font-extrabold" style={{ color: row.mine >= row.theirs ? C.amberBright : C.chalkDim }}>{row.mine}</span>
-                        <span className="f-mono text-[9px]" style={{ color: C.chalkDim }}>–</span>
-                        <span className="f-mono text-sm font-extrabold" style={{ color: row.theirs > row.mine ? C.amberBright : C.chalkDim }}>{row.theirs}</span>
-                      </div>
-                      <div className="f-mono text-[8px] uppercase tracking-wide mt-0.5" style={{ color: C.chalkDim }}>{row.label}</div>
-                    </div>
-                  ))}
-                </div>
-              );
-            })()}
-          </div>
-        )}
-
-        {active === "career" && (
-          <div className="flex flex-col gap-3 mt-3">
-            <div className="rounded-[10px] p-4 flex items-center justify-between" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-              {player.age >= 18 ? (
-                <div className="flex items-center gap-3 flex-wrap">
-                  <div className="flex items-center gap-2">
-                    <DollarSign size={16} color={C.gold} />
-                    <span className="f-mono text-lg" style={{ color: C.chalk }}>{rm(player.money)}</span>
-                  </div>
-                  {player.contractSalary > 0 && (
-                    <span className="f-mono text-[10px] uppercase tracking-wide px-2 py-1 rounded-[10px]" style={{ background: C.ink3, color: C.teal, border: `1px solid ${C.line}` }}>
-                      {rm(player.contractSalary)}/mo · {player.contractYearsLeft}yr left
-                    </span>
-                  )}
-                </div>
-              ) : (
-                <span className="f-mono text-[11px] uppercase tracking-widest" style={{ color: C.chalkDim }}>Student Athlete</span>
-              )}
-              {player.achievements.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 justify-end">
-                  {player.achievements.map(a => <Badge key={a} icon={ACHIEVEMENT_META[a].icon}>{ACHIEVEMENT_META[a].label}</Badge>)}
-                </div>
-              )}
-            </div>
-
-            {/* Finances — Investments and Lifestyle both spend from the
-                same bank balance, so they're grouped and shown compactly
-                side by side rather than as two more full-width rows.
-                Trade Request draws from Team Chemistry and Coach Trust
-                instead, not money at all, so it stays separate under its
-                own "Standing" label, full-width, visually distinct. */}
-            {(() => {
-              const showInvestments = player.age >= 18 && player.contractSalary > 0;
-              const showLifestyle = player.age >= 18;
-              const showTrade = player.clubId && !player.abroad && (player.seasonsAtClub || 0) >= 1;
-              const financeCount = (showInvestments ? 1 : 0) + (showLifestyle ? 1 : 0);
-              if (!financeCount && !showTrade) return null;
-              return (
-                <>
-                  {financeCount > 0 && (
-                    <>
-                      <div className="f-mono text-[9px] uppercase tracking-widest" style={{ color: C.chalkDim }}>Finances</div>
-                      <div className="grid gap-2.5" style={{ gridTemplateColumns: `repeat(${financeCount}, 1fr)` }}>
-                        {showInvestments && (
-                          <button onClick={onManageInvestments}
-                            className="choice-card flex flex-col items-center text-center gap-1.5 px-3 py-4 rounded-2xl transition"
-                            style={{ background: C.ink2, border: `1px solid ${investmentPct(player) > 0 ? C.amber : C.line}` }}>
-                            <span className="text-[18px]">💼</span>
-                            <span className="f-display text-[12px]" style={{ color: C.chalk }}>Investments</span>
-                            <span className="f-body text-[9.5px]" style={{ color: C.chalkDim }}>
-                              {investmentPct(player) > 0
-                                ? `${Object.keys(INVESTMENTS).filter(k => player.investments && player.investments[k]).length} active`
-                                : "Not started"}
-                            </span>
-                          </button>
-                        )}
-                        {showLifestyle && (
-                          <button onClick={onOpenLifestyle}
-                            className="choice-card flex flex-col items-center text-center gap-1.5 px-3 py-4 rounded-2xl transition"
-                            style={{ background: C.ink2, border: `1px solid ${player.homeTier ? "rgba(16,185,129,0.4)" : C.line}` }}>
-                            <span className="text-[18px]">🏡</span>
-                            <span className="f-display text-[12px]" style={{ color: C.chalk }}>Lifestyle</span>
-                            <span className="f-body text-[9.5px]" style={{ color: player.homeTier ? "#10B981" : C.chalkDim }}>
-                              {player.homeTier ? `${HOME_TIERS.find(t => t.id === player.homeTier).label}` : "No home yet"}
-                            </span>
-                          </button>
-                        )}
-                      </div>
-                    </>
-                  )}
-
-                  {showTrade && (
-                    <>
-                      <div className="f-mono text-[9px] uppercase tracking-widest" style={{ color: C.chalkDim }}>Standing</div>
-                      <button onClick={() => (player.tradeRequestCooldown > 0 ? null : onRequestTrade())}
-                        disabled={player.tradeRequestCooldown > 0}
-                        className={player.tradeRequestCooldown > 0 ? "w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition" : "choice-card w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition"}
-                        style={{
-                          background: C.ink2,
-                          border: `1px solid ${player.tradeRequestCooldown > 0 ? C.line : "rgba(251,146,60,0.4)"}`,
-                          opacity: player.tradeRequestCooldown > 0 ? 0.55 : 1,
-                          cursor: player.tradeRequestCooldown > 0 ? "not-allowed" : "pointer",
-                        }}>
-                        <span className="text-[17px]">🚪</span>
-                        <div className="text-left flex-1 min-w-0">
-                          <div className="f-display text-[13px]" style={{ color: C.chalk }}>Request a Trade</div>
-                          <div className="f-body text-[10px] mt-0.5" style={{ color: C.chalkDim }}>
-                            {player.tradeRequestCooldown > 0
-                              ? `${player.tradeRequestCooldown} season${player.tradeRequestCooldown === 1 ? "" : "s"} until you can ask again`
-                              : `You've been at ${player.teamName} ${player.seasonsAtClub} season${player.seasonsAtClub === 1 ? "" : "s"}`}
-                          </div>
-                        </div>
-                        {!(player.tradeRequestCooldown > 0) && <ChevronRight size={15} color={C.chalkDim} />}
-                      </button>
-                    </>
-                  )}
-
-                  {player.age >= 18 && (
-                    <>
-                      <div className="f-mono text-[9px] uppercase tracking-widest" style={{ color: C.chalkDim }}>Performance</div>
-                      <button onClick={onOpenCareerHighlights}
-                        className="choice-card w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition"
-                        style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-                        <span className="text-[17px]">⭐</span>
-                        <div className="text-left flex-1 min-w-0">
-                          <div className="f-display text-[13px]" style={{ color: C.chalk }}>Career Highlights</div>
-                          <div className="f-body text-[10px] mt-0.5" style={{ color: C.chalkDim }}>
-                            {(player.careerHighlights || []).length
-                              ? `${player.careerHighlights.length} standout game${player.careerHighlights.length === 1 ? "" : "s"}`
-                              : "No standout games yet"}
-                          </div>
-                        </div>
-                        <ChevronRight size={15} color={C.chalkDim} />
-                      </button>
-                    </>
-                  )}
-                </>
-              );
-            })()}
-
-            {player.history.length > 0 && (
-              <div className="rounded-2xl p-4" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-                <div className="f-display text-xs uppercase tracking-wide mb-3 flex items-center gap-1" style={{ color: C.chalkDim }}>
-                  <Newspaper size={12} /> Career Timeline
-                </div>
-                <CareerLedger history={player.history} maxHeight={340} />
-              </div>
-            )}
-          </div>
-        )}
-
-        <div className="flex gap-3 mt-4">
-          <PrimaryButton full onClick={onPlaySeason}>Continue <ChevronRight size={14} className="inline ml-1" /></PrimaryButton>
-          {player.age >= 30 && <SecondaryButton onClick={onRetireConsider}>Retire</SecondaryButton>}
-        </div>
-      </div>
-      </div>
-    </div>
-  );
-}
-
 /* ---------------------------------------------------------
    TRAINING SCREEN
 --------------------------------------------------------- */
@@ -8631,102 +10575,6 @@ function InvestmentsScreen({ player, onConfirm, onBack }) {
             <PrimaryButton full onClick={() => onConfirm(sel)}>Confirm</PrimaryButton>
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function AttributeBuilder({ player, points, onConfirm, creation = false }) {
-  const [alloc, setAlloc] = useState({});
-  const cap = attrAgeCap(player.age, player.stats);
-  const cur = (k) => player.stats[k] + (alloc[k] || 0);
-  const spent = STAT_LIST.reduce((t, k) => {
-    let sum = 0;
-    for (let v = player.stats[k]; v < cur(k); v++) sum += attrPointCost(v, k, player.position);
-    return t + sum;
-  }, 0);
-  const left = points - spent;
-  const projected = {};
-  STAT_LIST.forEach(k => { projected[k] = cur(k); });
-  const projOvr = computeOverall(projected, player.position);
-
-  const inc = (k) => {
-    const c = attrPointCost(cur(k), k, player.position);
-    if (cur(k) < cap && left >= c) setAlloc(a => ({ ...a, [k]: (a[k] || 0) + 1 }));
-  };
-  const dec = (k) => { if ((alloc[k] || 0) > 0) setAlloc(a => ({ ...a, [k]: a[k] - 1 })); };
-
-  return (
-    <div className="min-h-full w-full flex items-start justify-center px-4 py-8" style={{ background: C.ink }}>
-      <div className="max-w-md w-full">
-        <div className="rounded-[22px] p-4 mb-3.5 flex items-center gap-3.5"
-          style={{ background: C.ink2, border: `1px solid ${C.amber}` }}>
-          <div>
-            <div className="f-display text-3xl leading-none" style={{ color: C.amberBright }}>{left}</div>
-            <div className="f-mono text-[10px] uppercase tracking-widest mt-0.5" style={{ color: C.chalkDim }}>Points to spend</div>
-            <div className="f-mono text-[10px] mt-0.5" style={{ color: C.teal }}>
-              {creation ? `Build your 15-year-old · cap ${cap}` : `Season ${player.seasonNum} · age ${player.age} · cap ${cap}`}
-            </div>
-          </div>
-          <div className="ml-auto text-right">
-            <div className="f-mono text-2xl leading-none" style={{ color: C.trophyGold }}>{projOvr}</div>
-            <div className="f-mono text-[10px] uppercase tracking-widest mt-0.5" style={{ color: C.chalkDim }}>Overall</div>
-          </div>
-        </div>
-
-        {creation && (
-          <p className="f-body text-[11.5px] mb-3 px-1" style={{ color: C.chalkDim }}>
-            Shape your player before the <span style={{ color: C.chalk }}>National U15 selection trials</span> — the
-            state coaches judge you on exactly these numbers.
-          </p>
-        )}
-        {STAT_LIST.map(k => {
-          const v = cur(k), c = attrPointCost(v, k, player.position);
-          const atCap = v >= cap, gained = alloc[k] || 0;
-          return (
-            <div key={k} className="rounded-2xl px-4 py-3 mb-2" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-              <div className="flex items-center gap-3">
-                <span className="f-display text-[13px] w-[78px] shrink-0" style={{ color: C.chalk }}>{STAT_META[k].label}</span>
-                <div className="flex-1 h-2 rounded-full relative" style={{ background: C.ink3 }}>
-                  <div className="h-full rounded-full absolute left-0 top-0"
-                    style={{ width: `${player.stats[k]}%`, background: `linear-gradient(90deg, #38BDF8, ${C.amber})` }} />
-                  {gained > 0 && (
-                    <div className="h-full absolute top-0 rounded-full"
-                      style={{ left: `${player.stats[k]}%`, width: `${gained}%`, background: C.trophyGold, opacity: 0.55 }} />
-                  )}
-                  <div className="absolute rounded-sm" style={{ left: `${cap}%`, top: -4, width: 2, height: 16, background: C.trophyGold }} />
-                </div>
-                <span className="f-mono text-[19px] w-8 text-right" style={{ color: C.chalk }}>{v}</span>
-                <button onClick={() => dec(k)} disabled={gained === 0}
-                  className="btn-tactile w-8 h-8 rounded-[10px] text-lg font-bold shrink-0 transition"
-                  style={{ background: C.ink3, border: `1px solid ${C.line}`, color: C.chalk, opacity: gained === 0 ? 0.25 : 1 }}>−</button>
-                <button onClick={() => inc(k)} disabled={atCap || left < c}
-                  className="btn-tactile w-8 h-8 rounded-[10px] text-lg font-bold shrink-0 transition"
-                  style={{ background: C.amber, border: `1px solid ${C.amber}`, color: C.ink, opacity: (atCap || left < c) ? 0.25 : 1 }}>+</button>
-              </div>
-              <div className="flex justify-between mt-1.5 pl-[90px]">
-                <span className="f-mono text-[9.5px]" style={{ color: C.chalkDim }}>
-                  Start {player.stats[k]}{gained > 0 ? ` · +${gained}` : ""}
-                </span>
-                <span className="f-mono text-[9.5px] font-bold" style={{ color: atCap ? C.trophyGold : C.amberBright }}>
-                  {atCap ? `At age cap ${cap}` : `Next +1 · ${c} pt`}
-                </span>
-              </div>
-            </div>
-          );
-        })}
-
-        <div className="grid grid-cols-3 gap-2.5 mt-4">
-          <SecondaryButton full onClick={() => setAlloc({})}>Reset</SecondaryButton>
-          <div className="col-span-2">
-            <PrimaryButton full onClick={() => onConfirm(alloc)}>{creation ? "Begin Career" : "Confirm Season"}</PrimaryButton>
-          </div>
-        </div>
-        {left > 0 && (
-          <p className="f-body text-[10.5px] text-center mt-2.5" style={{ color: C.trophyGold }}>
-            {left} point{left > 1 ? "s" : ""} unspent — {creation ? "spend them before the U15 trials." : "they don't carry over."}
-          </p>
-        )}
       </div>
     </div>
   );
@@ -8986,50 +10834,6 @@ function EventChoiceIconLegacy({ risk, scene, icon, brandLogo }) {
   );
 }
 
-function EventScreen({ event, onChoose }) {
-  return (
-    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-        <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>Season Event</div>
-        <div className="f-display text-xl font-extrabold mb-1.5" style={{ color: C.chalk }}>{event.title}</div>
-        <p className="f-body text-[13px] mb-4" style={{ color: C.chalkDim }}>{event.desc}</p>
-        <div className="grid grid-cols-2 gap-3">
-          {event.choices.map((c, i) => {
-            const pills = deriveEffectPills(c);
-            return (
-              <button key={i} onClick={() => onChoose(c)} className="choice-card text-left rounded-[22px] overflow-hidden transition"
-                style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-                <div className="text-center text-[13px] font-bold py-3" style={{ color: C.chalk }}>{c.label}</div>
-                <EventChoiceIcon risk={c.risk} scene={c.scene || event.scene} icon={c.icon} brandLogo={event.brandLogo} />
-                <div className="p-3 flex flex-col gap-2">
-                  {pills.length === 0 && (
-                    <div className="text-center f-mono text-[10px] py-2 rounded-full" style={{ background: C.ink2, color: C.chalkDim }}>Nothing changes</div>
-                  )}
-                  {pills.map((p, j) => (
-                    <div key={j} className="flex items-center justify-between px-3 py-2 rounded-full text-[12px] font-semibold"
-                      style={{ background: p.positive ? "rgba(16,185,129,0.14)" : "rgba(239,68,68,0.14)", color: p.positive ? "#10B981" : "#EF4444" }}>
-                      <span className="flex items-center gap-1.5">
-                        {p.positive ? <TrendingUp size={13} /> : <TrendingDown size={13} />}
-                        {p.label}
-                      </span>
-                      {p.pct != null && (
-                        <span className="f-mono text-[11px] font-extrabold px-2 py-0.5 rounded-full"
-                          style={{ background: p.positive ? "rgba(16,185,129,0.22)" : "rgba(239,68,68,0.22)" }}>
-                          {p.pct}%
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ---------------------------------------------------------
    INJURY RECOVERY SCREEN
    Shown after a serious in-season injury, before the season recap —
@@ -9038,288 +10842,24 @@ function EventScreen({ event, onChoose }) {
    here rather than via deriveEffectPills() since the outcomes are
    conditional/probabilistic rather than fixed stat deltas.
 --------------------------------------------------------- */
-function InjuryRecoveryScreen({ pending, onChoose }) {
-  const hasScience = pending.hasScience;
-  return (
-    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-        <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>Injury · {pending.missed} Games Missed</div>
-        <div className="f-display text-xl font-extrabold mb-1.5" style={{ color: C.chalk }}>Recovery Plan</div>
-        <p className="f-body text-[13px] mb-4" style={{ color: C.chalkDim }}>
-          The physio lays out how to handle the rest of the recovery. One gets you back to full speed sooner. One protects you properly.
-        </p>
-        <div className={`grid ${hasScience ? "grid-cols-1" : "grid-cols-2"} gap-3`}>
-          <button onClick={() => onChoose("rush")} className="choice-card text-left rounded-[22px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-            <div className="text-center text-[13px] font-bold py-3" style={{ color: C.chalk }}>Rush Back</div>
-            <EventChoiceIcon risk="risky" icon="flame" />
-            <div className="p-3 flex flex-col gap-2">
-              <div className="flex items-center justify-between px-3 py-2 rounded-full text-[12px] font-semibold" style={{ background: "rgba(16,185,129,0.14)", color: "#10B981" }}>
-                <span className="flex items-center gap-1.5"><TrendingUp size={13} /> Back to full speed</span>
-                <span className="f-mono text-[11px] font-extrabold px-2 py-0.5 rounded-full" style={{ background: "rgba(16,185,129,0.22)" }}>Now</span>
-              </div>
-              <div className="flex items-center justify-between px-3 py-2 rounded-full text-[12px] font-semibold" style={{ background: "rgba(239,68,68,0.14)", color: "#EF4444" }}>
-                <span className="flex items-center gap-1.5"><TrendingDown size={13} /> Permanent damage risk</span>
-                <span className="f-mono text-[11px] font-extrabold px-2 py-0.5 rounded-full" style={{ background: "rgba(239,68,68,0.22)" }}>35%</span>
-              </div>
-            </div>
-          </button>
-          <button onClick={() => onChoose("full")} className="choice-card text-left rounded-[22px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-            <div className="text-center text-[13px] font-bold py-3" style={{ color: C.chalk }}>Full Rehab</div>
-            <EventChoiceIcon risk="safe" icon="stretch" />
-            <div className="p-3 flex flex-col gap-2">
-              <div className="flex items-center justify-between px-3 py-2 rounded-full text-[12px] font-semibold" style={{ background: "rgba(239,68,68,0.14)", color: "#EF4444" }}>
-                <span className="flex items-center gap-1.5"><TrendingDown size={13} /> Slow start next season</span>
-                <span className="f-mono text-[11px] font-extrabold px-2 py-0.5 rounded-full" style={{ background: "rgba(239,68,68,0.22)" }}>Kept</span>
-              </div>
-              <div className="flex items-center justify-between px-3 py-2 rounded-full text-[12px] font-semibold" style={{ background: "rgba(16,185,129,0.14)", color: "#10B981" }}>
-                <span className="flex items-center gap-1.5"><TrendingUp size={13} /> Fully sound, no damage</span>
-                <span className="f-mono text-[11px] font-extrabold px-2 py-0.5 rounded-full" style={{ background: "rgba(16,185,129,0.22)" }}>100%</span>
-              </div>
-            </div>
-          </button>
-          {hasScience && (
-            <button onClick={() => onChoose("guided")} className="choice-card text-left rounded-[22px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.amber}` }}>
-              <div className="text-center text-[13px] font-bold py-3" style={{ color: C.chalk }}>Guided Rehab <span className="f-mono text-[10px]" style={{ color: C.amberBright }}>· Sports Science</span></div>
-              <EventChoiceIcon risk="safe" icon="scalpel" />
-              <div className="p-3 flex flex-col gap-2">
-                <div className="flex items-center justify-between px-3 py-2 rounded-full text-[12px] font-semibold" style={{ background: "rgba(16,185,129,0.14)", color: "#10B981" }}>
-                  <span className="flex items-center gap-1.5"><TrendingUp size={13} /> Back to full speed</span>
-                  <span className="f-mono text-[11px] font-extrabold px-2 py-0.5 rounded-full" style={{ background: "rgba(16,185,129,0.22)" }}>Now</span>
-                </div>
-                <div className="flex items-center justify-between px-3 py-2 rounded-full text-[12px] font-semibold" style={{ background: "rgba(16,185,129,0.14)", color: "#10B981" }}>
-                  <span className="flex items-center gap-1.5"><TrendingUp size={13} /> Fully sound, no damage</span>
-                  <span className="f-mono text-[11px] font-extrabold px-2 py-0.5 rounded-full" style={{ background: "rgba(16,185,129,0.22)" }}>100%</span>
-                </div>
-              </div>
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ---------------------------------------------------------
    OFF-SEASON PLAN SCREEN
    One meaningful choice in front of attribute spending, shown every
    season. Same choice-grid chrome as EventScreen/InjuryRecoveryScreen.
 --------------------------------------------------------- */
-function OffseasonPlanScreen({ player, onChoose }) {
-  // Commercial deals don't fit a minor or a scholarship athlete — the same
-  // rule handleConfirmTraining already applies to financial events. The
-  // exact inverse of this condition is also what makes Overseas Camp
-  // sponsored rather than costed below — same "who actually has income"
-  // check, reused rather than duplicated with slightly different logic.
-  const canCommercial = player.age >= 18 && !player.hblSeasonPending && !player.uba;
-  const PLANS = [
-    { id: "summer", label: "Summer League", icon: "trophyCash", risk: "risky",
-      pills: [
-        { label: "Popularity", value: "+6", positive: true },
-        { label: "Scout visibility", value: "Up", positive: true },
-        { label: "Fatigue", value: "+10", positive: false },
-      ] },
-    { id: "camp", label: "Overseas Camp", icon: "dumbbell", risk: null,
-      pills: [
-        { label: "Bonus development points", value: "+2", positive: true },
-        { label: "Coach Trust", value: "+5", positive: true },
-        canCommercial
-          ? { label: "Cost", value: rm(4000), positive: false }
-          : { label: "Cost", value: "Sponsored", positive: true },
-      ] },
-    { id: "rest", label: "Rest & Recover", icon: "bed", risk: "safe",
-      pills: [
-        { label: "Fatigue", value: "\u221225", positive: true },
-        { label: "Injury risk next season", value: "\u221230%", positive: true },
-        { label: "Development points", value: "\u22122", positive: false },
-      ] },
-  ];
-  if (canCommercial) {
-    PLANS.push({ id: "tour", label: "Commercial Tour", icon: "megaphone", risk: "risky",
-      pills: [
-        { label: "Money", value: `+${rm(8000)}`, positive: true },
-        { label: "Popularity", value: "+10", positive: true },
-        { label: "Team Chemistry", value: "\u22124", positive: false },
-      ] });
-  }
-  return (
-    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-        <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>Season {player.seasonNum} · Off-season</div>
-        <div className="f-display text-xl font-extrabold mb-1.5" style={{ color: C.chalk }}>Off-season Plan</div>
-        <p className="f-body text-[13px] mb-4" style={{ color: C.chalkDim }}>How do you spend the months before training camp?</p>
-        <div className="grid grid-cols-2 gap-3">
-          {PLANS.map(plan => (
-            <button key={plan.id} onClick={() => onChoose(plan.id)} className="choice-card text-left rounded-[22px] overflow-hidden transition"
-              style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-              <div className="text-center text-[13px] font-bold py-3" style={{ color: C.chalk }}>{plan.label}</div>
-              <EventChoiceIcon risk={plan.risk} icon={plan.icon} />
-              <div className="p-3 flex flex-col gap-2">
-                {plan.pills.map((pl, j) => (
-                  <div key={j} className="flex items-center justify-between px-3 py-2 rounded-full text-[12px] font-semibold"
-                    style={{ background: pl.positive ? "rgba(16,185,129,0.14)" : "rgba(239,68,68,0.14)", color: pl.positive ? "#10B981" : "#EF4444" }}>
-                    <span className="flex items-center gap-1.5">
-                      {pl.positive ? <TrendingUp size={13} /> : <TrendingDown size={13} />}
-                      {pl.label}
-                    </span>
-                    <span className="f-mono text-[11px] font-extrabold px-2 py-0.5 rounded-full"
-                      style={{ background: pl.positive ? "rgba(16,185,129,0.22)" : "rgba(239,68,68,0.22)" }}>
-                      {pl.value}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </button>
-          ))}
-        </div>
-        <p className="f-body text-[10px] mt-3" style={{ color: C.chalkDim }}>
-          *Scout visibility only matters once you already qualify for overseas interest.
-        </p>
-      </div>
-    </div>
-  );
-}
-
 /* ---------------------------------------------------------
    CHOOSE IDENTITY SCREEN
    Shown once, right after Body Setup. Permanent for the career.
 --------------------------------------------------------- */
-function ChooseIdentityScreen({ player, onChoose }) {
-  return (
-    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-        <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>Career Creation</div>
-        <div className="f-display text-xl font-extrabold mb-1.5" style={{ color: C.chalk }}>Choose Your Identity</div>
-        <p className="f-body text-[13px] mb-4" style={{ color: C.chalkDim }}>
-          How do you want to be known? This shapes how your game shows up on the stat sheet — not how good you are, just what kind of good. Permanent for this career.
-        </p>
-        <div className="grid grid-cols-2 gap-3">
-          {PLAYING_STYLES.map(style => {
-            const fits = style.bestFit.includes(player.position);
-            return (
-              <button key={style.id} onClick={() => onChoose(style.id)} className="choice-card text-left rounded-[22px] overflow-hidden transition"
-                style={{ background: C.ink3, border: `1px solid ${fits ? "rgba(250,204,21,0.35)" : C.line}` }}>
-                <div className="text-center text-[13px] font-bold pt-3" style={{ color: C.chalk }}>{style.label}</div>
-                <div className="text-center f-body text-[10px] pb-1" style={{ color: C.chalkDim }}>{style.tagline}</div>
-                <div className="text-center py-2" style={{ fontSize: 26 }}>{style.icon}</div>
-                <div className="px-3 pb-3 flex items-center justify-center gap-1 flex-wrap">
-                  {style.bestFit.map(pos => (
-                    <span key={pos} className="f-mono text-[8.5px] uppercase px-2 py-0.5 rounded-full"
-                      style={{
-                        background: pos === player.position ? "rgba(250,204,21,0.10)" : C.ink2,
-                        color: pos === player.position ? C.trophyGold : C.chalkDim,
-                        border: `1px solid ${pos === player.position ? "rgba(250,204,21,0.35)" : C.line}`,
-                      }}>
-                      {pos}
-                    </span>
-                  ))}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ---------------------------------------------------------
    NAME YOUR RIVAL SCREEN
    Shown once, right after Choose Your Identity. Name and position are
    player-defined — an empty name or unpicked position just falls back to
    a random one inside rollRival(), so nothing here is a hard requirement.
 --------------------------------------------------------- */
-function NameRivalScreen({ player, onConfirm }) {
-  const [name, setName] = useState("");
-  const [position, setPosition] = useState(player.position);
-  return (
-    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-        <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>Career Creation</div>
-        <div className="f-display text-xl font-extrabold mb-1.5" style={{ color: C.chalk }}>Name Your Rival</div>
-        <p className="f-body text-[13px] mb-4" style={{ color: C.chalkDim }}>
-          Someone your age, selected the same week you were. Base them on a real friend, a name you like, or leave it blank and let one find you.
-        </p>
-
-        <label className="f-mono text-[11px] uppercase tracking-widest" style={{ color: C.chalkDim }}>Rival's Name</label>
-        <input
-          value={name}
-          onChange={e => setName(e.target.value.slice(0, 24))}
-          placeholder="e.g. Farid Zulkarnain"
-          className="f-body w-full mt-1 mb-4 px-3 py-2.5 rounded-[10px] outline-none text-sm"
-          style={{ background: C.ink3, color: C.chalk, border: `1px solid ${C.line}` }}
-        />
-
-        <label className="f-mono text-[11px] uppercase tracking-widest" style={{ color: C.chalkDim }}>Position</label>
-        <div className="grid grid-cols-5 gap-2 mt-2 mb-5">
-          {POSITIONS.map(p => (
-            <button key={p.id} onClick={() => setPosition(p.id)}
-              className="choice-card text-center py-2.5 rounded-[10px] transition"
-              style={{ background: position === p.id ? C.ink3 : "transparent", border: `1px solid ${position === p.id ? C.amber : C.line}` }}>
-              <span className="f-display text-xs" style={{ color: position === p.id ? C.amberBright : C.chalk }}>{p.id}</span>
-            </button>
-          ))}
-        </div>
-
-        <PrimaryButton full onClick={() => onConfirm(name, position)}>
-          {name.trim() ? `Lock In ${name.trim().split(" ")[0]}` : "Continue"} <ChevronRight size={14} className="inline ml-1" />
-        </PrimaryButton>
-      </div>
-    </div>
-  );
-}
-
 /* ---------------------------------------------------------
    U15 NATIONAL SELECTION SCREEN
 --------------------------------------------------------- */
-function U15SelectionScreen({ player, selected, onContinue }) {
-  const tier = getStateTier(player.hometown);
-  const tm = TIER_META[tier];
-  return (
-    <div className="court-hero min-h-full w-full flex items-center justify-center px-4 py-10">
-      <div className="max-w-md w-full rounded-[32px] p-6 text-center" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-        <div className="flex items-center justify-center gap-2 mb-3">
-          <FlagIcon name={player.hometown} size={22} />
-          <span className="f-mono text-[11px] uppercase tracking-widest" style={{ color: tm.color }}>
-            {player.hometown} Selection Trials
-          </span>
-        </div>
-        {selected ? (
-          <>
-            <Trophy size={32} color={C.trophyGold} className="mx-auto mb-3" />
-            <div className="f-display text-xl uppercase" style={{ color: C.chalk }}>Selected!</div>
-            <p className="f-body text-sm mt-2" style={{ color: C.chalkDim }}>
-              Out of everyone who tried out, you've made {player.hometown}'s squad as a state representative at the
-              National U15 Championship. Your name is up on the noticeboard — this is where it starts.
-            </p>
-          </>
-        ) : (
-          <>
-            <Users size={32} color={C.chalkDim} className="mx-auto mb-3" />
-            <div className="f-display text-xl uppercase" style={{ color: C.chalk }}>Not This Time</div>
-            <p className="f-body text-sm mt-2" style={{ color: C.chalkDim }}>
-              The {player.hometown} U15 squad list goes up without your name on it. It stings — but plenty of careers
-              have started from exactly this spot. Time to get back in the gym.
-            </p>
-          </>
-        )}
-        {player.rival && (
-          <div className="mt-4 mb-1 p-3 rounded-2xl text-left flex items-center gap-3" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-            <ClubCrest name={player.rival.name} size={40} />
-            <div className="flex-1 min-w-0">
-              <div className="f-mono text-[9px] uppercase tracking-widest" style={{ color: C.chalkDim }}>Also Selected This Year</div>
-              <div className="f-display text-sm truncate" style={{ color: C.chalk }}>{player.rival.name}</div>
-              <div className="f-body text-[10.5px]" style={{ color: C.chalkDim }}>{player.rival.position} · {player.rival.hometown}</div>
-            </div>
-          </div>
-        )}
-        <PrimaryButton full onClick={onContinue}>
-          Continue <ChevronRight size={14} className="inline ml-1" />
-        </PrimaryButton>
-      </div>
-    </div>
-  );
-}
-
 /* ---------------------------------------------------------
    U15 TOURNAMENT RESULTS SCREEN
 --------------------------------------------------------- */
@@ -9332,846 +10872,33 @@ const StatCell = memo(function StatCell({ label, value }) {
   );
 })
 
-function U15TournamentScreen({ player, onContinue }) {
-  const u15 = player.u15Stats;
-  const teamMeta = U15_TEAM_RESULT_META[player.u15TeamResult];
-  const awards = player.u15Awards || [];
-  return (
-    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-        <div className="flex items-center gap-2 mb-1">
-          <Trophy size={16} color={C.trophyGold} />
-          <span className="f-display text-sm uppercase tracking-wide" style={{ color: C.gold }}>
-            National U15 Championship — Final Result
-          </span>
-        </div>
-        <div className="f-display text-lg uppercase mt-1" style={{ color: C.chalk }}>{teamMeta.label}</div>
-        <p className="f-body text-xs mb-4" style={{ color: C.chalkDim }}>
-          {player.hometown}'s campaign in the tournament, and your individual stat line.
-        </p>
-
-        <div className="grid grid-cols-4 gap-y-3 p-3 rounded-[10px] mb-3" style={{ background: C.ink3 }}>
-          <StatCell label="PPG" value={u15.ppg} />
-          <StatCell label="RPG" value={u15.rpg} />
-          <StatCell label="APG" value={u15.apg} />
-          <StatCell label="SPG" value={u15.spg} />
-          <StatCell label="BPG" value={u15.bpg} />
-          <StatCell label="FG%" value={`${u15.fgPct}%`} />
-          <StatCell label="3P%" value={`${u15.threePct}%`} />
-        </div>
-
-        <div className="mb-4">
-          <div className="f-mono text-[10px] uppercase tracking-widest mb-2" style={{ color: C.chalkDim }}>Awards</div>
-          {awards.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5">
-              {awards.map(id => <Badge key={id}>{U15_AWARD_META[id].label}</Badge>)}
-            </div>
-          ) : (
-            <p className="f-body text-xs" style={{ color: C.chalkDim }}>
-              No individual awards this time — but the tournament experience alone is worth plenty.
-            </p>
-          )}
-        </div>
-
-        <PrimaryButton full onClick={onContinue}>
-          Continue <ChevronRight size={14} className="inline ml-1" />
-        </PrimaryButton>
-      </div>
-    </div>
-  );
-}
-
 /* ---------------------------------------------------------
    NATIONAL YOUTH SHORTLIST SCREEN
 --------------------------------------------------------- */
-function U15ShortlistScreen({ player, onAccept, onDecline }) {
-  return (
-    <div className="court-hero min-h-full w-full flex items-center justify-center px-4 py-10">
-      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-        <div className="flex items-center gap-2 mb-3">
-          <Flag size={16} color={C.gold} />
-          <span className="f-mono text-[11px] uppercase tracking-widest" style={{ color: C.gold }}>National Youth Shortlist</span>
-        </div>
-        <div className="f-display text-xl uppercase" style={{ color: C.chalk }}>You Made the Pool</div>
-        <p className="f-body text-sm mt-2" style={{ color: C.chalkDim }}>
-          {player.u15Awards && player.u15Awards.length > 0
-            ? "Winning tournament hardware like that makes this an easy call for the scouts — out of everyone who played, you're one of roughly 50 players nationwide shortlisted for the national youth pool."
-            : "Basketball Malaysia's talent scouts have been watching the tournament — and out of everyone who played, you're one of roughly 50 players nationwide shortlisted for the national youth pool."}
-        </p>
-        <p className="f-body text-sm mt-3" style={{ color: C.chalkDim }}>
-          The invitation: three months living and training at Bukit Jalil Sports School with the country's best
-          U15 talent. The coaching and competition are a real step up — but it's intense, and it comes with a
-          higher chance of picking up an injury along the way.
-        </p>
-        <div className="grid grid-cols-2 gap-3 mt-5">
-          <SecondaryButton onClick={onDecline}>Stay Home</SecondaryButton>
-          <PrimaryButton onClick={onAccept}>Go to Bukit Jalil</PrimaryButton>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ---------------------------------------------------------
    BUKIT JALIL BOOTCAMP RESULT SCREEN
 --------------------------------------------------------- */
-function U15BootcampResultScreen({ player, onContinue }) {
-  const gains = player.bootcampGains || {};
-  return (
-    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-        <div className="flex items-center gap-2 mb-1">
-          <Trophy size={16} color={C.trophyGold} />
-          <span className="f-display text-sm uppercase tracking-wide" style={{ color: C.gold }}>Bukit Jalil Sports School</span>
-        </div>
-        <p className="f-body text-sm mb-4" style={{ color: C.chalkDim }}>
-          Three months of elite training alongside the country's best U15 talent is behind you.
-        </p>
-
-        <div className="mb-4">
-          <div className="f-mono text-[10px] uppercase tracking-widest mb-2" style={{ color: C.chalkDim }}>Development</div>
-          <div className="grid grid-cols-2 gap-2">
-            {STAT_LIST.map(s => (
-              <div key={s} className="flex items-center justify-between px-3 py-2 rounded-[10px]" style={{ background: C.ink3 }}>
-                <span className="f-body text-xs" style={{ color: C.chalkDim }}>{STAT_META[s].label}</span>
-                <span className="f-mono text-xs" style={{ color: C.teal }}>+{gains[s] ?? 0}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {player.bootcampInjury && (
-          <div className="mb-4 p-3 rounded-[10px]" style={{ background: "rgba(229,72,77,0.1)", border: `1px solid ${C.red}` }}>
-            <div className="f-display text-xs uppercase" style={{ color: C.red }}>Injury Setback</div>
-            <p className="f-body text-xs mt-1" style={{ color: C.chalkDim }}>{player.bootcampInjury}</p>
-          </div>
-        )}
-
-        <PrimaryButton full onClick={onContinue}>
-          Continue <ChevronRight size={14} className="inline ml-1" />
-        </PrimaryButton>
-      </div>
-    </div>
-  );
-}
-
 /* ---------------------------------------------------------
    NATIONAL U17 CHAMPIONSHIP (AGE 17) SCREENS
 --------------------------------------------------------- */
-function A17TournamentScreen({ player, onContinue }) {
-  const s = player.a17Stats;
-  const teamMeta = A17_TEAM_RESULT_META[player.a17TeamResult];
-  const awards = player.a17Awards || [];
-  if (!s) {
-    return (
-      <div className="court-hero min-h-full w-full flex items-center justify-center px-4 py-10">
-        <div className="max-w-md w-full rounded-[32px] p-6 text-center" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-          <Users size={32} color={C.chalkDim} className="mx-auto mb-3" />
-          <div className="f-display text-xl uppercase" style={{ color: C.chalk }}>Not Selected</div>
-          <p className="f-body text-sm mt-2 mb-5" style={{ color: C.chalkDim }}>
-            The {player.hometown} U17 squad list goes up without your name on it this year. Keep grinding — there's
-            still a whole career ahead.
-          </p>
-          <PrimaryButton full onClick={onContinue}>Continue <ChevronRight size={14} className="inline ml-1" /></PrimaryButton>
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-        <div className="flex items-center gap-2 mb-1">
-          <Trophy size={16} color={C.trophyGold} />
-          <span className="f-display text-sm uppercase tracking-wide" style={{ color: C.gold }}>
-            National U17 Championship — Final Result
-          </span>
-        </div>
-        <div className="f-display text-lg uppercase mt-1" style={{ color: C.chalk }}>{teamMeta.label}</div>
-        <p className="f-body text-xs mb-4" style={{ color: C.chalkDim }}>
-          {player.hometown}'s campaign in the tournament, and your individual stat line.
-        </p>
-
-        <div className="grid grid-cols-4 gap-y-3 p-3 rounded-[10px] mb-3" style={{ background: C.ink3 }}>
-          <StatCell label="PPG" value={s.ppg} />
-          <StatCell label="RPG" value={s.rpg} />
-          <StatCell label="APG" value={s.apg} />
-          <StatCell label="SPG" value={s.spg} />
-          <StatCell label="BPG" value={s.bpg} />
-          <StatCell label="FG%" value={`${s.fgPct}%`} />
-          <StatCell label="3P%" value={`${s.threePct}%`} />
-        </div>
-
-        <div className="mb-4">
-          <div className="f-mono text-[10px] uppercase tracking-widest mb-2" style={{ color: C.chalkDim }}>Awards</div>
-          {awards.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5">
-              {awards.map(id => <Badge key={id}>{A17_AWARD_META[id].label}</Badge>)}
-            </div>
-          ) : (
-            <p className="f-body text-xs" style={{ color: C.chalkDim }}>
-              No individual awards this time — but the tournament experience alone is worth plenty.
-            </p>
-          )}
-        </div>
-
-        <PrimaryButton full onClick={onContinue}>
-          Continue <ChevronRight size={14} className="inline ml-1" />
-        </PrimaryButton>
-      </div>
-    </div>
-  );
-}
-
-function A17ShortlistScreen({ player, onAccept, onDecline }) {
-  return (
-    <div className="court-hero min-h-full w-full flex items-center justify-center px-4 py-10">
-      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-        <div className="flex items-center gap-2 mb-3">
-          <Flag size={16} color={C.gold} />
-          <span className="f-mono text-[11px] uppercase tracking-widest" style={{ color: C.gold }}>U18 National Shortlist</span>
-        </div>
-        <div className="f-display text-xl uppercase" style={{ color: C.chalk }}>You Made the Pool</div>
-        <p className="f-body text-sm mt-2" style={{ color: C.chalkDim }}>
-          {player.a17Awards && player.a17Awards.length > 0
-            ? "Winning tournament hardware like that makes this an easy call for the scouts — out of everyone who played, you're one of roughly 50 players nationwide shortlisted for the U18 national pool."
-            : "Basketball Malaysia's scouts have been watching the U17s — and out of everyone who played, you're one of roughly 50 players nationwide shortlisted for the U18 national pool."}
-        </p>
-        <p className="f-body text-sm mt-3" style={{ color: C.chalkDim }}>
-          The invitation: three months living and training at Bukit Jalil Sports School with the country's best
-          talent. The coaching and competition are a real step up — but it's intense, and it comes with a higher
-          chance of picking up an injury along the way.
-        </p>
-        <div className="grid grid-cols-2 gap-3 mt-5">
-          <SecondaryButton onClick={onDecline}>Stay Home</SecondaryButton>
-          <PrimaryButton onClick={onAccept}>Go to Bukit Jalil</PrimaryButton>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function A17BootcampResultScreen({ player, onContinue }) {
-  const gains = player.bootcampGains || {};
-  return (
-    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-        <div className="flex items-center gap-2 mb-1">
-          <Trophy size={16} color={C.trophyGold} />
-          <span className="f-display text-sm uppercase tracking-wide" style={{ color: C.gold }}>Bukit Jalil Sports School</span>
-        </div>
-        <p className="f-body text-sm mb-4" style={{ color: C.chalkDim }}>
-          Another three months of elite training alongside the country's best young talent is behind you.
-        </p>
-
-        <div className="mb-4">
-          <div className="f-mono text-[10px] uppercase tracking-widest mb-2" style={{ color: C.chalkDim }}>Development</div>
-          <div className="grid grid-cols-2 gap-2">
-            {STAT_LIST.map(s => (
-              <div key={s} className="flex items-center justify-between px-3 py-2 rounded-[10px]" style={{ background: C.ink3 }}>
-                <span className="f-body text-xs" style={{ color: C.chalkDim }}>{STAT_META[s].label}</span>
-                <span className="f-mono text-xs" style={{ color: C.teal }}>+{gains[s] ?? 0}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {player.bootcampInjury && (
-          <div className="mb-4 p-3 rounded-[10px]" style={{ background: "rgba(229,72,77,0.1)", border: `1px solid ${C.red}` }}>
-            <div className="f-display text-xs uppercase" style={{ color: C.red }}>Injury Setback</div>
-            <p className="f-body text-xs mt-1" style={{ color: C.chalkDim }}>{player.bootcampInjury}</p>
-          </div>
-        )}
-
-        <PrimaryButton full onClick={onContinue}>
-          Continue <ChevronRight size={14} className="inline ml-1" />
-        </PrimaryButton>
-      </div>
-    </div>
-  );
-}
-
 /* ---------------------------------------------------------
    U16 FIBA ASIA CUP RESULT SCREEN
 --------------------------------------------------------- */
-function U16ResultScreen({ player, onContinue }) {
-  const s = player.age16Stats || {};
-  const gains = player.age16Gains || {};
-  const hasGains = Object.keys(gains).length > 0;
-  return (
-    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-        <div className="flex items-center gap-2 mb-1">
-          <Flag size={16} color={C.gold} />
-          <span className="f-display text-sm uppercase tracking-wide" style={{ color: C.gold }}>Malaysia U16 · FIBA Asia Cup Qualifiers</span>
-        </div>
-        <div className="f-display text-lg uppercase mt-1" style={{ color: C.chalk }}>{player.age16ResultLabel}</div>
-        <p className="f-body text-xs mb-3" style={{ color: C.chalkDim }}>
-          {player.age16Qualified
-            ? "Malaysia got through the 5-team qualifiers and into the 12-team Asia Cup proper — a rare, hard-won result."
-            : "Malaysia couldn't get out of the 5-team qualifying group this cycle, and didn't reach the Asia Cup."}
-        </p>
-
-        {s.nbaTalent && (
-          <div className="mb-3 p-2 rounded-[10px] text-center" style={{ background: "rgba(250,204,21,0.1)", border: `1px solid ${C.trophyGold}` }}>
-            <span className="f-mono text-[11px] uppercase tracking-widest" style={{ color: C.gold }}>★ Standout Performer ★</span>
-          </div>
-        )}
-
-        <div className="grid grid-cols-4 gap-y-3 p-3 rounded-[10px] mb-3" style={{ background: C.ink3 }}>
-          <StatCell label="PPG" value={s.ppg} />
-          <StatCell label="RPG" value={s.rpg} />
-          <StatCell label="APG" value={s.apg} />
-          <StatCell label="SPG" value={s.spg} />
-          <StatCell label="BPG" value={s.bpg} />
-          <StatCell label="FG%" value={`${s.fgPct}%`} />
-          <StatCell label="3P%" value={`${s.threePct}%`} />
-        </div>
-
-        <div className="mb-4">
-          <div className="f-mono text-[10px] uppercase tracking-widest mb-2" style={{ color: C.chalkDim }}>Honours</div>
-          <div className="flex flex-wrap gap-1.5">
-            <Badge>U16 National Team</Badge>
-            {player.age16Qualified && <Badge>FIBA U16 Asia Cup</Badge>}
-            {player.age16TOT && <Badge>Team of the Tournament</Badge>}
-          </div>
-          {!player.age16TOT && (
-            <p className="f-body text-[11px] mt-2" style={{ color: C.chalkDim }}>
-              Not named to the Team of the Tournament this time.
-            </p>
-          )}
-        </div>
-
-        {hasGains && (
-          <div className="mb-4">
-            <div className="f-mono text-[10px] uppercase tracking-widest mb-2" style={{ color: C.chalkDim }}>Development</div>
-            <div className="grid grid-cols-3 gap-1.5">
-              {STAT_LIST.filter(st => gains[st]).map(st => (
-                <div key={st} className="flex items-center justify-between px-2 py-1.5 rounded-[10px]" style={{ background: C.ink3 }}>
-                  <span className="f-body text-[10px]" style={{ color: C.chalkDim }}>{STAT_META[st].label}</span>
-                  <span className="f-mono text-[10px]" style={{ color: C.teal }}>+{gains[st]}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {player.age16NatU17Stats && (
-          <div className="mb-4 p-3 rounded-[10px]" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-            <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>Also This Year — National U17 Tournament</div>
-            <p className="f-body text-xs mb-2" style={{ color: C.chalkDim }}>
-              Different months, same year — you also suited up for {player.hometown} against genuine 17-year-olds. Finished as <span style={{ color: C.chalk }}>{player.age16NatU17ResultLabel}</span>.
-            </p>
-            <div className="grid grid-cols-7 gap-1">
-              {[["PPG", player.age16NatU17Stats.ppg], ["RPG", player.age16NatU17Stats.rpg], ["APG", player.age16NatU17Stats.apg], ["SPG", player.age16NatU17Stats.spg], ["BPG", player.age16NatU17Stats.bpg], ["FG%", player.age16NatU17Stats.fgPct], ["3P%", player.age16NatU17Stats.threePct]].map(([lbl, val]) => (
-                <div key={lbl} className="text-center">
-                  <div className="f-mono text-xs font-bold" style={{ color: C.chalk }}>{val}</div>
-                  <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>{lbl}</div>
-                </div>
-              ))}
-            </div>
-            {player.age16NatU17Awards && player.age16NatU17Awards.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mt-2.5">
-                {player.age16NatU17Awards.map(a => (
-                  <span key={a} className="f-mono text-[8.5px] px-2 py-0.5 rounded-full" style={{ background: "rgba(250,204,21,0.1)", color: C.trophyGold, border: `1px solid rgba(250,204,21,0.3)` }}>
-                    {U15_AWARD_META[a] ? U15_AWARD_META[a].label : a}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        <PrimaryButton full onClick={onContinue}>
-          Continue <ChevronRight size={14} className="inline ml-1" />
-        </PrimaryButton>
-      </div>
-    </div>
-  );
-}
-
 /* ---------------------------------------------------------
    U18 FIBA ASIA CUP RESULT SCREEN
 --------------------------------------------------------- */
-function NationalTryoutScreen({ player, tryout, onAttend, onDecline }) {
-  const ev = tryout.event;
-  const highRated = tryout.rating > 80;
-  const title = ev.type === "sea_games" ? "SEA Games"
-    : ev.type === "qualifier" ? `Asia Cup Qualifiers — Phase ${ev.phase}`
-    : "FIBA Asia Cup";
-  return (
-    <div className="court-hero min-h-full w-full flex items-center justify-center px-4 py-10">
-      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-        <div className="flex items-center gap-2 mb-3">
-          <Flag size={16} color={C.gold} />
-          <span className="f-mono text-[11px] uppercase tracking-widest" style={{ color: C.gold }}>National Team Call</span>
-        </div>
-        <div className="f-display text-xl uppercase" style={{ color: C.chalk }}>Tryout Invitation</div>
-        <p className="f-body text-sm mt-2" style={{ color: C.chalkDim }}>
-          Basketball Malaysia has invited you to trials for the <span style={{ color: C.chalk }}>{title}</span> ({ev.year}).
-          Representing your country is a huge honour — but the national camp is demanding and eats into your off-season.
-        </p>
-        <p className="f-body text-xs mt-3" style={{ color: highRated ? C.gold : C.chalkDim }}>
-          {highRated
-            ? "You're one of the country's best — the coaches would be foolish to leave you out."
-            : tryout.wonAwardThisSeason
-              ? "Your season's hardware got their attention — but a squad spot still has to be earned at trials."
-              : "You'll have to earn your place against the other invitees."}
-        </p>
-        <div className="grid grid-cols-2 gap-3 mt-5">
-          <SecondaryButton onClick={onDecline}>Skip This Time</SecondaryButton>
-          <PrimaryButton onClick={onAttend}>Attend Tryout</PrimaryButton>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ---------------------------------------------------------
    CONTINUE STUDY OR NOT? (age 19)
 --------------------------------------------------------- */
-function StudyDecisionScreen({ onStudy, onFocus }) {
-  return (
-    <div className="court-hero min-h-full w-full flex items-center justify-center px-4 py-10">
-      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-        <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>Life Decision</div>
-        <div className="f-display text-xl font-extrabold mb-1.5" style={{ color: C.chalk }}>Continue Study or Not?</div>
-        <p className="f-body text-[13px] mb-4" style={{ color: C.chalkDim }}>
-          A university has offered you a place. Balancing a degree with basketball is possible — but it means stepping back from the pro pathway for a few years.
-        </p>
-        <div className="grid grid-cols-2 gap-3">
-          <button onClick={onStudy} className="choice-card text-left rounded-[22px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-            <div className="text-center text-[13px] font-bold py-3" style={{ color: C.chalk }}>Continue Study</div>
-            <div className="aspect-[16/11] mx-3 rounded-2xl flex items-center justify-center relative overflow-hidden" style={{ background: "linear-gradient(150deg, #164E63, #0A0A0A)" }}>
-              <Brain size={34} color="#22D3EE" strokeWidth={1.6} />
-            </div>
-            <div className="p-3 flex flex-col gap-2">
-              <div className="flex items-center justify-between px-3 py-2 rounded-full text-[12px] font-semibold" style={{ background: "rgba(16,185,129,0.14)", color: "#10B981" }}>
-                <span className="flex items-center gap-1.5"><TrendingUp size={13} />Faster IQ Growth</span>
-              </div>
-              <div className="flex items-center justify-between px-3 py-2 rounded-full text-[12px] font-semibold" style={{ background: "rgba(16,185,129,0.14)", color: "#10B981" }}>
-                <span className="flex items-center gap-1.5"><TrendingUp size={13} />Lighter Fatigue</span>
-              </div>
-              <div className="flex items-center justify-between px-3 py-2 rounded-full text-[12px] font-semibold" style={{ background: "rgba(239,68,68,0.14)", color: "#EF4444" }}>
-                <span className="flex items-center gap-1.5"><TrendingDown size={13} />Semi-Pro Only Until 23</span>
-              </div>
-            </div>
-          </button>
-          <button onClick={onFocus} className="choice-card text-left rounded-[22px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-            <div className="text-center text-[13px] font-bold py-3" style={{ color: C.chalk }}>Focus on Basketball</div>
-            <div className="aspect-[16/11] mx-3 rounded-2xl flex items-center justify-center relative overflow-hidden" style={{ background: "linear-gradient(150deg, #78350F, #1C0A00)" }}>
-              <Dumbbell size={34} color={C.gold} strokeWidth={1.6} />
-            </div>
-            <div className="p-3 flex flex-col gap-2">
-              <div className="flex items-center justify-between px-3 py-2 rounded-full text-[12px] font-semibold" style={{ background: "rgba(16,185,129,0.14)", color: "#10B981" }}>
-                <span className="flex items-center gap-1.5"><TrendingUp size={13} />Stay on Pro Path</span>
-              </div>
-              <div className="flex items-center justify-between px-3 py-2 rounded-full text-[12px] font-semibold" style={{ background: "rgba(16,185,129,0.14)", color: "#10B981" }}>
-                <span className="flex items-center gap-1.5"><TrendingUp size={13} />No Restrictions</span>
-              </div>
-            </div>
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function NationalResultScreen({ event, onContinue }) {
-  const s = event.stats || {};
-  return (
-    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-        <div className="flex items-center gap-2 mb-1">
-          <Flag size={16} color={C.gold} />
-          <span className="f-display text-sm uppercase tracking-wide" style={{ color: C.gold }}>🇲🇾 Malaysia National Team</span>
-        </div>
-        <div className="f-display text-lg uppercase mt-1" style={{ color: C.chalk }}>{event.label}</div>
-        <p className="f-body text-xs mb-3" style={{ color: C.chalkDim }}>
-          {event.type === "sea_games"
-            ? "Eleven Southeast Asian nations, one podium. Malaysia are genuine contenders here — a medal is within reach."
-            : event.type === "qualifier"
-              ? "Every game in the qualifiers matters — the top four teams advance to the Asia Cup."
-              : "The FIBA Asia Cup: Asia's best on the biggest stage."}
-        </p>
-
-        {s.role && (
-          <div className="mb-3">
-            <span className="f-mono text-[9px] uppercase px-2 py-0.5 rounded-full" style={{ color: C.gold, border: `1px solid ${C.amber}` }}>
-              {s.role}
-            </span>
-          </div>
-        )}
-
-        {s.standout && (
-          <div className="mb-3 p-2 rounded-[10px] text-center" style={{ background: "rgba(250,204,21,0.1)", border: `1px solid ${C.trophyGold}` }}>
-            <span className="f-mono text-[11px] uppercase tracking-widest" style={{ color: C.gold }}>★ Standout Performer ★</span>
-          </div>
-        )}
-
-        <div className="grid grid-cols-4 gap-y-3 p-3 rounded-[10px] mb-3" style={{ background: C.ink3 }}>
-          <StatCell label="PPG" value={s.ppg} />
-          <StatCell label="RPG" value={s.rpg} />
-          <StatCell label="APG" value={s.apg} />
-          <StatCell label="SPG" value={s.spg} />
-          <StatCell label="BPG" value={s.bpg} />
-          <StatCell label="FG%" value={`${s.fgPct}%`} />
-          <StatCell label="3P%" value={`${s.threePct}%`} />
-        </div>
-
-        <PrimaryButton full onClick={onContinue}>
-          Continue <ChevronRight size={14} className="inline ml-1" />
-        </PrimaryButton>
-      </div>
-    </div>
-  );
-}
-
-function U18ResultScreen({ player, onContinue }) {
-  if (!player.age18Made) {
-    return (
-      <div className="court-hero min-h-full w-full flex items-center justify-center px-4 py-10">
-        <div className="max-w-md w-full rounded-[32px] p-6 text-center" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-          <Users size={32} color={C.chalkDim} className="mx-auto mb-3" />
-          <div className="f-display text-xl uppercase" style={{ color: C.chalk }}>Just Missed Out</div>
-          <p className="f-body text-sm mt-2 mb-5" style={{ color: C.chalkDim }}>
-            You trained hard with the U18 national pool, but the coaches went another direction for the final Asia
-            Cup Qualifiers squad. A tough break — but the exposure counts, and there's a whole senior career ahead.
-          </p>
-          <PrimaryButton full onClick={onContinue}>Continue <ChevronRight size={14} className="inline ml-1" /></PrimaryButton>
-        </div>
-      </div>
-    );
-  }
-  const s = player.age18Stats || {};
-  const gains = player.age18Gains || {};
-  const hasGains = Object.keys(gains).length > 0;
-  return (
-    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-        <div className="flex items-center gap-2 mb-1">
-          <Flag size={16} color={C.gold} />
-          <span className="f-display text-sm uppercase tracking-wide" style={{ color: C.gold }}>Malaysia U18 · FIBA Asia Cup Qualifiers</span>
-        </div>
-        <div className="f-display text-lg uppercase mt-1" style={{ color: C.chalk }}>{player.age18ResultLabel}</div>
-        <p className="f-body text-xs mb-3" style={{ color: C.chalkDim }}>
-          {player.age18Qualified
-            ? "Malaysia got through the 5-team qualifiers and into the 12-team Asia Cup proper — a rare, hard-won result."
-            : "Malaysia couldn't get out of the 5-team qualifying group this cycle, and didn't reach the Asia Cup."}
-        </p>
-
-        {s.nbaTalent && (
-          <div className="mb-3 p-2 rounded-[10px] text-center" style={{ background: "rgba(250,204,21,0.1)", border: `1px solid ${C.trophyGold}` }}>
-            <span className="f-mono text-[11px] uppercase tracking-widest" style={{ color: C.gold }}>★ Standout Performer ★</span>
-          </div>
-        )}
-
-        <div className="grid grid-cols-4 gap-y-3 p-3 rounded-[10px] mb-3" style={{ background: C.ink3 }}>
-          <StatCell label="PPG" value={s.ppg} />
-          <StatCell label="RPG" value={s.rpg} />
-          <StatCell label="APG" value={s.apg} />
-          <StatCell label="SPG" value={s.spg} />
-          <StatCell label="BPG" value={s.bpg} />
-          <StatCell label="FG%" value={`${s.fgPct}%`} />
-          <StatCell label="3P%" value={`${s.threePct}%`} />
-        </div>
-
-        <div className="mb-4">
-          <div className="f-mono text-[10px] uppercase tracking-widest mb-2" style={{ color: C.chalkDim }}>Honours</div>
-          <div className="flex flex-wrap gap-1.5">
-            <Badge>U18 National Team</Badge>
-            {player.age18Qualified && <Badge>FIBA U18 Asia Cup</Badge>}
-            {player.age18TOT && <Badge>Team of the Tournament</Badge>}
-          </div>
-          {!player.age18TOT && (
-            <p className="f-body text-[11px] mt-2" style={{ color: C.chalkDim }}>
-              Not named to the Team of the Tournament this time.
-            </p>
-          )}
-        </div>
-
-        {hasGains && (
-          <div className="mb-4">
-            <div className="f-mono text-[10px] uppercase tracking-widest mb-2" style={{ color: C.chalkDim }}>Development</div>
-            <div className="grid grid-cols-3 gap-1.5">
-              {STAT_LIST.filter(st => gains[st]).map(st => (
-                <div key={st} className="flex items-center justify-between px-2 py-1.5 rounded-[10px]" style={{ background: C.ink3 }}>
-                  <span className="f-body text-[10px]" style={{ color: C.chalkDim }}>{STAT_META[st].label}</span>
-                  <span className="f-mono text-[10px]" style={{ color: C.teal }}>+{gains[st]}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <PrimaryButton full onClick={onContinue}>
-          Continue <ChevronRight size={14} className="inline ml-1" />
-        </PrimaryButton>
-      </div>
-    </div>
-  );
-}
-
 /* ---------------------------------------------------------
    MSSM RESULT SCREEN
 --------------------------------------------------------- */
-function MSSMResultScreen({ player, onContinue }) {
-  const s = player.mssmStats || {};
-  const awards = player.mssmAwards || [];
-  return (
-    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-        <div className="flex items-center gap-2 mb-1">
-          <Trophy size={16} color={C.gold} />
-          <span className="f-display text-sm uppercase tracking-wide" style={{ color: C.gold }}>MSSM · {player.hometown}</span>
-        </div>
-        <div className="f-display text-lg uppercase mt-1" style={{ color: C.chalk }}>{player.mssmResultLabel}</div>
-        <p className="f-body text-xs mb-3" style={{ color: C.chalkDim }}>
-          {player.mssmGuaranteed
-            ? "Your national/state squad spot this year earned you an automatic call-up to MSSM too."
-            : `Majlis Sukan Sekolah-Sekolah Malaysia — ${player.hometown}'s run this year, ${s.games} games.`}
-        </p>
-
-        <div className="grid grid-cols-4 gap-y-3 p-3 rounded-[10px] mb-3" style={{ background: C.ink3 }}>
-          <StatCell label="PPG" value={s.ppg} />
-          <StatCell label="RPG" value={s.rpg} />
-          <StatCell label="APG" value={s.apg} />
-          <StatCell label="SPG" value={s.spg} />
-          <StatCell label="BPG" value={s.bpg} />
-          <StatCell label="FG%" value={`${s.fgPct}%`} />
-          <StatCell label="3P%" value={`${s.threePct}%`} />
-          <StatCell label="Games" value={s.games} />
-        </div>
-
-        <div className="mb-4">
-          <div className="f-mono text-[10px] uppercase tracking-widest mb-2" style={{ color: C.chalkDim }}>Awards</div>
-          {awards.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5">
-              {awards.map(id => <Badge key={id}>{MSSM_AWARD_META[id] ? MSSM_AWARD_META[id].label : id}</Badge>)}
-            </div>
-          ) : (
-            <p className="f-body text-xs" style={{ color: C.chalkDim }}>No individual awards this time.</p>
-          )}
-        </div>
-
-        <PrimaryButton full onClick={onContinue}>
-          Continue <ChevronRight size={14} className="inline ml-1" />
-        </PrimaryButton>
-      </div>
-    </div>
-  );
-}
-
 /* ---------------------------------------------------------
    U17 JUMPCLASS RESULT SCREEN
 --------------------------------------------------------- */
-function U17ResultScreen({ player, onContinue }) {
-  const s = player.age16Stats || {};
-  const gains = player.age16Gains || {};
-  const awards = player.age16Awards || [];
-  return (
-    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-        <div className="flex items-center gap-2 mb-1">
-          <TrendingUp size={16} color={C.teal} />
-          <span className="f-display text-sm uppercase tracking-wide" style={{ color: C.teal }}>National U17 Championship · Jumpclass</span>
-        </div>
-        <div className="f-display text-lg uppercase mt-1" style={{ color: C.chalk }}>{player.age16ResultLabel}</div>
-        <p className="f-body text-xs mb-3" style={{ color: C.chalkDim }}>
-          Playing up a full year against older, stronger opponents is brutal — but the experience is priceless.
-        </p>
-
-        <div className="grid grid-cols-4 gap-y-3 p-3 rounded-[10px] mb-3" style={{ background: C.ink3 }}>
-          <StatCell label="PPG" value={s.ppg} />
-          <StatCell label="RPG" value={s.rpg} />
-          <StatCell label="APG" value={s.apg} />
-          <StatCell label="SPG" value={s.spg} />
-          <StatCell label="BPG" value={s.bpg} />
-          <StatCell label="FG%" value={`${s.fgPct}%`} />
-          <StatCell label="3P%" value={`${s.threePct}%`} />
-        </div>
-
-        <div className="mb-4">
-          <div className="f-mono text-[10px] uppercase tracking-widest mb-2" style={{ color: C.chalkDim }}>Awards</div>
-          {awards.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5">
-              {awards.map(id => <Badge key={id}>{U15_AWARD_META[id].label}</Badge>)}
-            </div>
-          ) : (
-            <p className="f-body text-xs" style={{ color: C.chalkDim }}>
-              No individual awards — holding your own against older players is a win in itself.
-            </p>
-          )}
-        </div>
-
-        <div className="mb-4">
-          <div className="f-mono text-[10px] uppercase tracking-widest mb-2" style={{ color: C.chalkDim }}>Development</div>
-          <div className="grid grid-cols-3 gap-1.5">
-            {STAT_LIST.filter(st => gains[st]).map(st => (
-              <div key={st} className="flex items-center justify-between px-2 py-1.5 rounded-[10px]" style={{ background: C.ink3 }}>
-                <span className="f-body text-[10px]" style={{ color: C.chalkDim }}>{STAT_META[st].label}</span>
-                <span className="f-mono text-[10px]" style={{ color: C.teal }}>+{gains[st]}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <PrimaryButton full onClick={onContinue}>
-          Continue <ChevronRight size={14} className="inline ml-1" />
-        </PrimaryButton>
-      </div>
-    </div>
-  );
-}
-
 /* ---------------------------------------------------------
    CLUB OFFERS SCREEN
 --------------------------------------------------------- */
-function ClubOffersScreen({ player, offers, context, onJoin, onStay, onRetire, onNegotiate }) {
-  const headings = {
-    join: { icon: Trophy, color: C.gold, kicker: "Turning Pro", title: "Choose Your First Club",
-      sub: "Offers are on the table. Where you sign shapes your money, your fame, your minutes, and your development." },
-    transfer: { icon: Plane, color: C.teal, kicker: "Transfer Window", title: "Offers Are Coming In",
-      sub: `You're at ${context.oldClubName}. Stay put, or take a new challenge elsewhere?` },
-    released: { icon: Newspaper, color: C.red, kicker: "Released", title: "Time to Find a New Home",
-      sub: context.releaseReason
-        ? RELEASE_REASON_META[context.releaseReason](context.oldClubName)
-        : `${context.oldClubName} let you go. These clubs are willing to take you on.` },
-    bankrupt: { icon: Newspaper, color: C.red, kicker: "Club Folded", title: "Time to Find a New Home",
-      sub: `${context.oldClubName} folded. You're a free agent — pick your next move.` },
-    /* An established pro without a club. Previously every clubless path fell
-       back to "join", so a veteran returning from overseas — or caught by the
-       clubless safety net — was told they were "Turning Pro" and choosing
-       their "First Club" for the fifth time. */
-    free_agent: { icon: Newspaper, color: C.teal, kicker: "Free Agent", title: "Choose Your Next Club",
-      sub: "You're without a club. These sides have a place for you." },
-  };
-  if (context.studyTrack) {
-    headings.join = { icon: Brain, color: "#22D3EE", kicker: "Student-Athlete", title: "Choose a Semi-Pro Home",
-      sub: "Only semi-pro clubs are on the table while you're studying — real development-league minutes until you graduate at 23." };
-  } else if (context.graduated) {
-    headings.join = { icon: Award, color: C.gold, kicker: "Graduated", title: "Sign With a Pro Club",
-      sub: "You're free of the semi-pro restriction now — pro clubs are back on the table, MBL included if your rating earns it." };
-  }
-  const h = headings[context.mode] || headings.join;
-  const Icon = h.icon;
-  const canStay = context.mode === "transfer";
-  const canRetire = player.age >= 30 && ["transfer", "released", "bankrupt"].includes(context.mode);
-  const currentClub = canStay ? getClub(player.clubId) : null;
-  const stayTerms = currentClub ? computeClubTerms(player, currentClub, { firstProSigning: false }) : null;
-  return (
-    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-        <div className="flex items-center gap-2 mb-1">
-          <Icon size={16} color={h.color} />
-          <span className="f-mono text-[11px] uppercase tracking-widest" style={{ color: h.color }}>{h.kicker}</span>
-        </div>
-        <div className="f-display text-xl uppercase" style={{ color: C.chalk }}>{h.title}</div>
-        <p className="f-body text-xs mt-1 mb-4" style={{ color: C.chalkDim }}>{h.sub}</p>
-
-        {canStay && currentClub && stayTerms && (
-          <div className="mb-4 p-3 rounded-[10px]" style={{ background: "rgba(20,184,166,0.08)", border: `1px solid ${C.teal}` }}>
-            <div className="flex items-center justify-between">
-              <span className="f-display text-sm uppercase flex items-center gap-2" style={{ color: C.chalk }}>
-                <ClubCrest name={currentClub.name} size={26} /> {currentClub.name}
-              </span>
-              <span className="f-mono text-[9px] uppercase px-1.5 py-0.5 rounded-full" style={{ background: C.ink2, color: C.teal, border: `1px solid ${C.line}` }}>
-                Current Team
-              </span>
-            </div>
-            <div className="flex items-center gap-2 mt-2 p-2 rounded-[10px]" style={{ background: C.ink2 }}>
-              <div className="flex-1">
-                <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>League</div>
-                <div className="f-mono text-[11px]" style={{ color: stayTerms.league === "mbl" ? C.gold : C.teal }}>{LEAGUE[stayTerms.league].short}</div>
-              </div>
-              <div className="flex-1">
-                <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Role</div>
-                <div className="f-mono text-[11px]" style={{ color: C.chalk }}>{stayTerms.firstOption ? "1st Option" : stayTerms.role}</div>
-              </div>
-              <div className="flex-1 text-center">
-                <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Term</div>
-                <div className="f-mono text-[11px]" style={{ color: C.chalk }}>{stayTerms.years || 2}yr</div>
-              </div>
-              <div className="flex-1 text-right">
-                <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Salary</div>
-                <div className="f-mono text-[11px]" style={{ color: C.gold }}>{rm(stayTerms.salary)}/mo</div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="space-y-2.5">
-          {offers.map(({ club, terms }) => (
-            <div key={club.id} className="rounded-[10px] p-3" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <ClubCrest name={club.name} size={32} />
-                  <div className="min-w-0">
-                    <div className="f-display text-sm font-bold truncate" style={{ color: C.chalk }}>{club.name}</div>
-                    <div className="f-mono text-[10px]" style={{ color: C.chalkDim }}>{club.state} · {club.tier === "semipro" ? "Semi-Pro" : "Pro"}</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Concrete offer terms */}
-              <div className="flex items-center gap-2 mt-2.5 p-2 rounded-[10px]" style={{ background: C.ink2 }}>
-                <div className="flex-1">
-                  <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>League</div>
-                  <div className="f-mono text-[11px]" style={{ color: terms.league === "mbl" ? C.gold : C.teal }}>{LEAGUE[terms.league].short}</div>
-                </div>
-                <div className="flex-1">
-                  <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Role</div>
-                  <div className="f-mono text-[11px]" style={{ color: C.chalk }}>{terms.firstOption ? "1st Option" : terms.role}</div>
-                </div>
-                <div className="flex-1 text-center">
-                  <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Term</div>
-                  <div className="f-mono text-[11px]" style={{ color: C.chalk }}>{terms.years || 2}yr</div>
-                </div>
-                <div className="flex-1 text-right">
-                  <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Salary</div>
-                  <div className="f-mono text-[11px]" style={{ color: C.gold }}>{rm(terms.salary)}/mo</div>
-                </div>
-              </div>
-
-              <div className="flex gap-2 mt-2.5">
-                <button onClick={() => onJoin({ club, terms })}
-                  className="choice-card flex-1 f-body text-[12px] font-bold py-2 rounded-full transition"
-                  style={{ background: C.ink2, color: C.chalk, border: `1px solid ${C.line}` }}>
-                  Accept
-                </button>
-                {/* Only offered with 2+ offers on the table — walking away
-                    from your only offer would leave nothing to fall back
-                    on, so negotiation simply isn't available on the last one. */}
-                {offers.length > 1 && (
-                  <button onClick={() => onNegotiate(club, terms)}
-                    className="choice-card flex-1 f-body text-[12px] font-bold py-2 rounded-full transition"
-                    style={{ background: "rgba(251,146,60,0.12)", color: C.amberBright, border: `1px solid rgba(251,146,60,0.4)` }}>
-                    Negotiate
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {canStay && (
-          <div className="mt-3">
-            <SecondaryButton full onClick={onStay}>
-              Stay at {context.oldClubName}{stayTerms ? ` — ${rm(stayTerms.salary)}/mo` : ""}
-            </SecondaryButton>
-          </div>
-        )}
-
-        {canRetire && (
-          <button onClick={onRetire} className="choice-card w-full flex items-center justify-center gap-2 mt-3 p-3.5 rounded-[10px] transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-            <RotateCcw size={14} color={C.chalkDim} />
-            <span className="f-body text-sm font-semibold" style={{ color: C.chalkDim }}>Retire — End Your Professional Career</span>
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
 /* ---------------------------------------------------------
    NEGOTIATE OFFER SCREEN
    Two-step: pick what to push for, then commit. Reached only from an
@@ -10179,117 +10906,6 @@ function ClubOffersScreen({ player, offers, context, onJoin, onStay, onRetire, o
    from negotiationLeverage/negotiationOdds — see the block comment there
    for the simulation this was calibrated against.
 --------------------------------------------------------- */
-function NegotiateOfferScreen({ player, club, terms, onCommit }) {
-  const [ask, setAsk] = useState(null);
-  const score = negotiationLeverage(player, club);
-  const tier = negotiationTier(score);
-  const tierColor = tier === "high" ? "#10B981" : tier === "medium" ? C.amberBright : "#EF4444";
-  const canPushRole = !!nextRoleTier(terms.role);
-  const moneyOdds = negotiationOdds(score, "money");
-  const roleOdds = canPushRole ? negotiationOdds(score, "role") : null;
-
-  const ASK_META = {
-    money: { label: "Push For Money", icon: "dollarUp", tagline: `Same ${terms.years || 2}yr ${terms.role} deal`, odds: moneyOdds },
-    role: canPushRole ? { label: "Push For Role", icon: "star", tagline: `${terms.role} → ${nextRoleTier(terms.role)}`, odds: roleOdds } : null,
-  };
-  const active = ask && ASK_META[ask] ? ask : null;
-
-  return (
-    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-        <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>{club.name} · Negotiation</div>
-        <div className="f-display text-xl font-extrabold mb-1.5" style={{ color: C.chalk }}>
-          {active ? `${ASK_META[active].label}?` : "What do you push for?"}
-        </div>
-        <p className="f-body text-[13px] mb-4" style={{ color: C.chalkDim }}>
-          {active
-            ? "One ask at a time — pushing for everything at once reads as greedy and hurts your odds on both."
-            : `Their opening offer: ${rm(terms.salary)}/mo, ${terms.years || 2}-year ${terms.firstOption ? "1st Option" : terms.role} deal.`}
-        </p>
-
-        <div className="flex items-center gap-2 mb-4 px-3 py-2.5 rounded-[10px]" style={{ background: C.ink3 }}>
-          <span className="f-mono text-[9px] uppercase tracking-wide flex-shrink-0" style={{ color: C.chalkDim }}>Leverage</span>
-          <div className="flex-1 h-1.5 rounded-full overflow-hidden flex gap-0.5" style={{ background: C.ink }}>
-            {[0, 1, 2].map(i => (
-              <div key={i} className="flex-1 rounded-full" style={{ background: i < (tier === "high" ? 3 : tier === "medium" ? 2 : 1) ? tierColor : C.ink }} />
-            ))}
-          </div>
-          <span className="f-mono text-[10px] font-extrabold uppercase flex-shrink-0" style={{ color: tierColor }}>{tier}</span>
-        </div>
-
-        {!active && (
-          <div className={`grid ${ASK_META.role ? "grid-cols-2" : "grid-cols-1"} gap-3`}>
-            <button onClick={() => setAsk("money")} className="choice-card text-left rounded-[22px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-              <div className="text-center text-[13px] font-bold py-3" style={{ color: C.chalk }}>Push For Money</div>
-              <div className="text-center f-body text-[9.5px] pb-1" style={{ color: C.chalkDim }}>{ASK_META.money.tagline}</div>
-              <EventChoiceIcon icon="dollarUp" />
-              <div className="p-3 flex flex-col gap-2">
-                <div className="flex items-center justify-between px-3 py-2 rounded-full text-[10.5px] font-semibold" style={{ background: "rgba(16,185,129,0.14)", color: "#10B981" }}>
-                  <span>They meet your ask</span><span className="f-mono font-extrabold">{Math.round(moneyOdds.winChance * 100)}%</span>
-                </div>
-                <div className="flex items-center justify-between px-3 py-2 rounded-full text-[10.5px] font-semibold" style={{ background: "rgba(239,68,68,0.14)", color: "#EF4444" }}>
-                  <span>They walk away</span><span className="f-mono font-extrabold">{Math.round(moneyOdds.walkChance * 100)}%</span>
-                </div>
-              </div>
-            </button>
-            {ASK_META.role && (
-              <button onClick={() => setAsk("role")} className="choice-card text-left rounded-[22px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-                <div className="text-center text-[13px] font-bold py-3" style={{ color: C.chalk }}>Push For Role</div>
-                <div className="text-center f-body text-[9.5px] pb-1" style={{ color: C.chalkDim }}>{ASK_META.role.tagline}</div>
-                <EventChoiceIcon icon="star" />
-                <div className="p-3 flex flex-col gap-2">
-                  <div className="flex items-center justify-between px-3 py-2 rounded-full text-[10.5px] font-semibold" style={{ background: "rgba(16,185,129,0.14)", color: "#10B981" }}>
-                    <span>They meet your ask</span><span className="f-mono font-extrabold">{Math.round(roleOdds.winChance * 100)}%</span>
-                  </div>
-                  <div className="flex items-center justify-between px-3 py-2 rounded-full text-[10.5px] font-semibold" style={{ background: "rgba(239,68,68,0.14)", color: "#EF4444" }}>
-                    <span>They walk away</span><span className="f-mono font-extrabold">{Math.round(roleOdds.walkChance * 100)}%</span>
-                  </div>
-                </div>
-              </button>
-            )}
-          </div>
-        )}
-
-        {active && (
-          <>
-            {active === "role" && (
-              <p className="f-body text-[11.5px] mb-3" style={{ color: C.chalkDim }}>
-                A role jump asks more of them than a bigger paycheck does — someone else on the roster loses minutes for you to gain them. Lower odds, higher risk, same leverage underneath.
-              </p>
-            )}
-            <div className="grid grid-cols-2 gap-3">
-              <button onClick={() => onCommit(active)} className="choice-card text-left rounded-[22px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-                <div className="text-center text-[13px] font-bold py-3" style={{ color: C.chalk }}>Accept As-Is</div>
-                <div className="text-center f-body text-[9.5px] pb-1" style={{ color: C.chalkDim }}>No risk</div>
-                <EventChoiceIcon icon="handshake" />
-                <div className="p-3">
-                  <div className="text-center px-3 py-2 rounded-full text-[10px] font-semibold" style={{ background: C.ink2, color: C.teal }}>
-                    {rm(terms.salary)}/mo, locked in
-                  </div>
-                </div>
-              </button>
-              <button onClick={() => onCommit(active)} className="choice-card text-left rounded-[22px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.amber}` }}>
-                <div className="text-center text-[13px] font-bold py-3" style={{ color: C.chalk }}>{ASK_META[active].label}</div>
-                <div className="text-center f-body text-[9.5px] pb-1" style={{ color: C.chalkDim }}>Commit to the ask</div>
-                <EventChoiceIcon icon={ASK_META[active].icon} />
-                <div className="p-3 flex flex-col gap-2">
-                  <div className="flex items-center justify-between px-3 py-2 rounded-full text-[10.5px] font-semibold" style={{ background: "rgba(16,185,129,0.14)", color: "#10B981" }}>
-                    <span>They meet your ask</span><span className="f-mono font-extrabold">{Math.round(ASK_META[active].odds.winChance * 100)}%</span>
-                  </div>
-                  <div className="flex items-center justify-between px-3 py-2 rounded-full text-[10.5px] font-semibold" style={{ background: "rgba(239,68,68,0.14)", color: "#EF4444" }}>
-                    <span>They walk away</span><span className="f-mono font-extrabold">{Math.round(ASK_META[active].odds.walkChance * 100)}%</span>
-                  </div>
-                </div>
-              </button>
-            </div>
-            <button onClick={() => setAsk(null)} className="btn-tactile f-mono text-[10px] uppercase tracking-widest mt-4 transition" style={{ color: C.chalkDim }}>← Choose a different ask</button>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
 /* ---------------------------------------------------------
    TRADE REQUEST SCREEN
    Reached from the Hub's Career tab. Single-step, unlike negotiation's
@@ -10297,115 +10913,12 @@ function NegotiateOfferScreen({ player, club, terms, onCommit }) {
    here, since "which reason, then whether to go through with it" would
    be one decision split into two for no real benefit.
 --------------------------------------------------------- */
-function TradeRequestScreen({ player, club, onCommit }) {
-  const cases = TRADE_REQUEST_REASONS.map(r => ({ ...r, strength: tradeRequestCase(player, club, r.id) }));
-  const avgStrength = cases.reduce((a, c) => a + c.strength, 0) / cases.length;
-  const tier = avgStrength < 0.30 ? "low" : avgStrength < 0.45 ? "medium" : "high";
-  const tierColor = tier === "high" ? "#10B981" : tier === "medium" ? C.amberBright : "#EF4444";
-  return (
-    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-        <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>{club.name} · Trade Request</div>
-        <div className="f-display text-xl font-extrabold mb-1.5" style={{ color: C.chalk }}>Why do you want out?</div>
-        <p className="f-body text-[13px] mb-4" style={{ color: C.chalkDim }}>
-          The reason isn't flavor — it changes your case. A weak ask can still be granted, just not on your terms, and a bad one can cost you more than a "no."
-        </p>
-
-        <div className="flex items-center gap-2 mb-4 px-3 py-2.5 rounded-[10px]" style={{ background: C.ink3 }}>
-          <span className="f-mono text-[9px] uppercase tracking-wide flex-shrink-0" style={{ color: C.chalkDim }}>Your Standing</span>
-          <div className="flex-1 h-1.5 rounded-full overflow-hidden flex gap-0.5" style={{ background: C.ink }}>
-            {[0, 1, 2].map(i => (
-              <div key={i} className="flex-1 rounded-full" style={{ background: i < (tier === "high" ? 3 : tier === "medium" ? 2 : 1) ? tierColor : C.ink }} />
-            ))}
-          </div>
-          <span className="f-mono text-[10px] font-extrabold uppercase flex-shrink-0" style={{ color: tierColor }}>{tier}</span>
-        </div>
-
-        <div className="grid grid-cols-3 gap-2">
-          {cases.map(c => (
-            <button key={c.id} onClick={() => onCommit(c.id)} className="choice-card text-left rounded-[22px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-              <div className="text-center text-[11.5px] font-bold pt-2.5" style={{ color: C.chalk }}>{c.label}</div>
-              <div className="text-center f-body text-[8.5px] pb-1" style={{ color: C.chalkDim }}>{c.tagline(player)}</div>
-              <EventChoiceIcon icon={c.icon} />
-              <div className="px-2 pb-2.5">
-                <div className="flex items-center justify-center px-2 py-1.5 rounded-full text-[10px] font-extrabold" style={{ background: "rgba(16,185,129,0.14)", color: "#10B981" }}>
-                  {Math.round(c.strength * 100)}%
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
-
-        <div className="mt-4 pt-3 flex items-center gap-1.5" style={{ borderTop: `1px solid ${C.line}` }}>
-          <span className="text-[12px]">⚠️</span>
-          <p className="f-body text-[10.5px]" style={{ color: C.chalkDim }}>A denial locks out another request for 2 seasons. A weak case risks a harsh one.</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ---------------------------------------------------------
    MIDSEASON CHECKPOINT SCREEN
    Reached between the season's random Event and the Result screen when
    rollMidseasonCheckpoint picks "coach_talk" (Rival Game routes straight
    to the existing BuzzerBeaterScreen instead — nothing new needed there).
 --------------------------------------------------------- */
-function MidseasonCheckpointScreen({ player, onChoose }) {
-  return (
-    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}`, boxShadow: "0 20px 50px rgba(0,0,0,0.5)" }}>
-        <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>Midseason · {player.teamName}</div>
-        <div className="f-display text-xl font-extrabold mb-4" style={{ color: C.chalk }}>"Coach, can we talk about my role?"</div>
-
-        <div className="grid grid-cols-3 gap-2 mb-5">
-          <div className="rounded-[10px] p-2.5 text-center" style={{ background: "rgba(16,185,129,0.10)", border: "1px solid rgba(16,185,129,0.3)" }}>
-            <div className="f-display text-[12px] font-extrabold" style={{ color: "#10B981" }}>Above Role</div>
-            <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Form Read</div>
-          </div>
-          <div className="rounded-[10px] p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-            <div className="f-display text-[12px] font-extrabold" style={{ color: C.chalk }}>{player.starterStatus}</div>
-            <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Current Role</div>
-          </div>
-          <div className="rounded-[10px] p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-            <div className="f-display text-[12px] font-extrabold" style={{ color: C.chalk }}>{computeOverall(player.stats, player.position)}</div>
-            <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Overall</div>
-          </div>
-        </div>
-        <p className="f-body text-[13px] mb-4" style={{ color: C.chalkDim }}>
-          You're outplaying your role. The coach has ten minutes before shootaround.
-        </p>
-
-        <div className="grid grid-cols-2 gap-3">
-          <button onClick={() => onChoose("press")} className="choice-card text-left rounded-[22px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-            <div className="text-center text-[13px] font-bold pt-3" style={{ color: C.chalk }}>Make Your Case</div>
-            <div className="text-center f-body text-[10px] pb-2" style={{ color: C.chalkDim }}>Push for more minutes</div>
-            <EventChoiceIcon icon="handshake" />
-            <div className="p-3 flex flex-col gap-2">
-              <div className="flex items-center justify-between px-3 py-2 rounded-full text-[10.5px] font-semibold" style={{ background: "rgba(16,185,129,0.14)", color: "#10B981" }}>
-                <span>Earns more minutes</span><span className="f-mono font-extrabold">62%</span>
-              </div>
-              <div className="flex items-center justify-between px-3 py-2 rounded-full text-[10.5px] font-semibold" style={{ background: "rgba(239,68,68,0.14)", color: "#EF4444" }}>
-                <span>Reads as impatient</span><span className="f-mono font-extrabold">38%</span>
-              </div>
-            </div>
-          </button>
-          <button onClick={() => onChoose("patient")} className="choice-card text-left rounded-[22px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-            <div className="text-center text-[13px] font-bold pt-3" style={{ color: C.chalk }}>Stay Patient</div>
-            <div className="text-center f-body text-[10px] pb-2" style={{ color: C.chalkDim }}>Trust the process</div>
-            <EventChoiceIcon icon="star" />
-            <div className="p-3 flex flex-col gap-2">
-              <div className="flex items-center justify-center px-3 py-2 rounded-full text-[10.5px] font-semibold" style={{ background: C.ink2, color: C.teal }}>
-                +Coach Trust, role unchanged
-              </div>
-            </div>
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ---------------------------------------------------------
    LOCKER ROOM SCREEN
    Renders whichever of the three LOCKER_ROOM_META scenarios
@@ -10415,53 +10928,6 @@ function MidseasonCheckpointScreen({ player, onChoose }) {
    three-stat header doesn't apply here), and this way neither risks
    the other's already-tested behavior.
 --------------------------------------------------------- */
-function LockerRoomScreen({ player, subScenario, onChoose }) {
-  const meta = LOCKER_ROOM_META[subScenario] || LOCKER_ROOM_META.blame;
-  return (
-    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}`, boxShadow: "0 20px 50px rgba(0,0,0,0.5)" }}>
-        <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>{meta.kicker} · {player.teamName}</div>
-        <div className="f-display text-xl font-extrabold mb-3" style={{ color: C.chalk }}>{meta.title}</div>
-        <p className="f-body text-[13px] mb-5" style={{ color: C.chalkDim }}>{meta.desc}</p>
-
-        <div className="grid grid-cols-2 gap-3">
-          <button onClick={() => onChoose(meta.choiceA.id)} className="choice-card text-left rounded-[22px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-            <div className="text-center text-[13px] font-bold pt-3" style={{ color: C.chalk }}>{meta.choiceA.label}</div>
-            <div className="text-center f-body text-[10px] pb-2" style={{ color: C.chalkDim }}>{meta.choiceA.tagline}</div>
-            <EventChoiceIcon icon="handshake" />
-            <div className="p-3 flex flex-col gap-2">
-              {meta.choiceA.winPct != null ? (
-                <>
-                  <div className="flex items-center justify-between px-3 py-2 rounded-full text-[10.5px] font-semibold" style={{ background: "rgba(16,185,129,0.14)", color: "#10B981" }}>
-                    <span>Goes well</span><span className="f-mono font-extrabold">{meta.choiceA.winPct}%</span>
-                  </div>
-                  <div className="flex items-center justify-between px-3 py-2 rounded-full text-[10.5px] font-semibold" style={{ background: "rgba(239,68,68,0.14)", color: "#EF4444" }}>
-                    <span>Backfires</span><span className="f-mono font-extrabold">{100 - meta.choiceA.winPct}%</span>
-                  </div>
-                </>
-              ) : (
-                <div className="flex items-center justify-center px-3 py-2 rounded-full text-[10.5px] font-semibold" style={{ background: C.ink2, color: C.teal }}>
-                  A deliberate change, not a gamble
-                </div>
-              )}
-            </div>
-          </button>
-          <button onClick={() => onChoose(meta.choiceB.id)} className="choice-card text-left rounded-[22px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-            <div className="text-center text-[13px] font-bold pt-3" style={{ color: C.chalk }}>{meta.choiceB.label}</div>
-            <div className="text-center f-body text-[10px] pb-2" style={{ color: C.chalkDim }}>{meta.choiceB.tagline}</div>
-            <EventChoiceIcon icon="star" />
-            <div className="p-3 flex flex-col gap-2">
-              <div className="flex items-center justify-center px-3 py-2 rounded-full text-[10.5px] font-semibold" style={{ background: C.ink2, color: C.teal }}>
-                The lower-risk option
-              </div>
-            </div>
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ---------------------------------------------------------
    INJURY SCARE SCREEN
    Distinct from the real injury roll in simulateGamesSegment — this is a
@@ -10469,43 +10935,6 @@ function LockerRoomScreen({ player, subScenario, onChoose }) {
    choice here genuinely adjusts pendingSecondHalf.halfChance afterward
    (see handleInjuryScareChoice), not just flavor text.
 --------------------------------------------------------- */
-function InjuryScareScreen({ player, onChoose }) {
-  return (
-    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}`, boxShadow: "0 20px 50px rgba(0,0,0,0.5)" }}>
-        <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>Midseason · {player.teamName}</div>
-        <div className="f-display text-xl font-extrabold mb-3" style={{ color: C.chalk }}>That Didn't Feel Right</div>
-        <p className="f-body text-[13px] mb-5" style={{ color: C.chalkDim }}>
-          Something tweaked coming down off a rebound. Nothing's torn — but the body's been running hot all season, and it's telling you something.
-        </p>
-
-        <div className="grid grid-cols-2 gap-3">
-          <button onClick={() => onChoose("push")} className="choice-card text-left rounded-[22px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-            <div className="text-center text-[13px] font-bold pt-3" style={{ color: C.chalk }}>Push Through</div>
-            <div className="text-center f-body text-[10px] pb-2" style={{ color: C.chalkDim }}>Keep playing, work through it</div>
-            <EventChoiceIcon icon="dumbbell" />
-            <div className="p-3 flex flex-col gap-2">
-              <div className="flex items-center justify-center px-3 py-2 rounded-full text-[10.5px] font-semibold" style={{ background: "rgba(239,68,68,0.14)", color: "#EF4444" }}>
-                ⚠️ Raises second-half injury risk
-              </div>
-            </div>
-          </button>
-          <button onClick={() => onChoose("rest")} className="choice-card text-left rounded-[22px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-            <div className="text-center text-[13px] font-bold pt-3" style={{ color: C.chalk }}>Sit Out a Few Games</div>
-            <div className="text-center f-body text-[10px] pb-2" style={{ color: C.chalkDim }}>Let it settle down first</div>
-            <EventChoiceIcon icon="star" />
-            <div className="p-3 flex flex-col gap-2">
-              <div className="flex items-center justify-center px-3 py-2 rounded-full text-[10.5px] font-semibold" style={{ background: "rgba(16,185,129,0.14)", color: "#10B981" }}>
-                🛡️ Lowers second-half injury risk
-              </div>
-            </div>
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ---------------------------------------------------------
    TRADE BUZZ SCREEN
    Deliberately lighter than Locker Room/Coach Talk — outside interest
@@ -10513,43 +10942,6 @@ function InjuryScareScreen({ player, onChoose }) {
    relationship/stat effects. Not a mid-season negotiation; that's what
    the Career tab's Trade Request already covers, once a season.
 --------------------------------------------------------- */
-function TradeBuzzScreen({ player, onChoose }) {
-  return (
-    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}`, boxShadow: "0 20px 50px rgba(0,0,0,0.5)" }}>
-        <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>Midseason · {player.teamName}</div>
-        <div className="f-display text-xl font-extrabold mb-3" style={{ color: C.chalk }}>Other Clubs Are Asking</div>
-        <p className="f-body text-[13px] mb-5" style={{ color: C.chalkDim }}>
-          Nothing official — just scouts at shootaround, a GM's name in the wrong group chat. The kind of thing that gets back to you eventually.
-        </p>
-
-        <div className="grid grid-cols-2 gap-3">
-          <button onClick={() => onChoose("motivate")} className="choice-card text-left rounded-[22px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-            <div className="text-center text-[13px] font-bold pt-3" style={{ color: C.chalk }}>Let It Motivate You</div>
-            <div className="text-center f-body text-[10px] pb-2" style={{ color: C.chalkDim }}>Play like everyone's watching</div>
-            <EventChoiceIcon icon="star" />
-            <div className="p-3 flex flex-col gap-2">
-              <div className="flex items-center justify-center px-3 py-2 rounded-full text-[10.5px] font-semibold" style={{ background: "rgba(16,185,129,0.14)", color: "#10B981" }}>
-                +Popularity, +Morale
-              </div>
-            </div>
-          </button>
-          <button onClick={() => onChoose("focus")} className="choice-card text-left rounded-[22px] overflow-hidden transition" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-            <div className="text-center text-[13px] font-bold pt-3" style={{ color: C.chalk }}>Stay Focused</div>
-            <div className="text-center f-body text-[10px] pb-2" style={{ color: C.chalkDim }}>Ignore the noise, trust the room</div>
-            <EventChoiceIcon icon="handshake" />
-            <div className="p-3 flex flex-col gap-2">
-              <div className="flex items-center justify-center px-3 py-2 rounded-full text-[10.5px] font-semibold" style={{ background: C.ink2, color: C.teal }}>
-                +Coach Trust, +Team Chemistry
-              </div>
-            </div>
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ---------------------------------------------------------
    MIDSEASON RECAP SCREEN
    The guaranteed checkpoint fallback — shown when none of Rival Game /
@@ -10558,61 +10950,6 @@ function TradeBuzzScreen({ player, onChoose }) {
    skipping straight to the second half. Shows genuine first-half stats
    (leagueStats1/gp1 from pendingSecondHalf), not a placeholder.
 --------------------------------------------------------- */
-function MidseasonRecapScreen({ player, onContinue }) {
-  const half = player.pendingSecondHalf;
-  const stats = half && half.leagueStats1;
-  return (
-    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}`, boxShadow: "0 20px 50px rgba(0,0,0,0.5)" }}>
-        <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.chalkDim }}>Midseason · {player.teamName}</div>
-        <div className="f-display text-xl font-extrabold mb-4" style={{ color: C.chalk }}>First Half in the Books</div>
-
-        {stats && (
-          <div className="grid grid-cols-3 gap-2 mb-2.5">
-            <div className="rounded-[10px] p-3 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-              <div className="f-display text-[16px] font-extrabold" style={{ color: C.gold }}>{stats.ppg.toFixed(1)}</div>
-              <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>PPG</div>
-            </div>
-            <div className="rounded-[10px] p-3 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-              <div className="f-display text-[16px] font-extrabold" style={{ color: C.chalk }}>{stats.rpg.toFixed(1)}</div>
-              <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>RPG</div>
-            </div>
-            <div className="rounded-[10px] p-3 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-              <div className="f-display text-[16px] font-extrabold" style={{ color: C.chalk }}>{stats.apg.toFixed(1)}</div>
-              <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>APG</div>
-            </div>
-          </div>
-        )}
-
-        {/* Same role/relationship snapshot the Result screen shows at
-            season's end — genuinely relevant here too, since Role and
-            Coach Trust specifically are what determine whether Coach Talk
-            or Locker Room even fire at the checkpoint in the first place. */}
-        <div className="grid grid-cols-3 gap-2 mb-5">
-          <div className="rounded-[10px] p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-            <div className="f-display text-[13px] font-extrabold" style={{ color: C.amberBright }}>{player.starterStatus}</div>
-            <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Role</div>
-          </div>
-          <div className="rounded-[10px] p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-            <div className="f-display text-[13px] font-extrabold" style={{ color: C.chalk }}>{player.relationships.coach}</div>
-            <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Coach Trust</div>
-          </div>
-          <div className="rounded-[10px] p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-            <div className="f-display text-[13px] font-extrabold" style={{ color: C.chalk }}>{player.relationships.team}</div>
-            <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Team Chemistry</div>
-          </div>
-        </div>
-
-        <p className="f-body text-[13px] mb-5" style={{ color: C.chalkDim }}>
-          {half ? `${half.gp1} games in, playing ${half.roleAtFirstHalf}.` : "The first half is done."} Second half starts now.
-        </p>
-
-        <PrimaryButton full onClick={onContinue}>Continue <ChevronRight size={14} className="inline ml-1" /></PrimaryButton>
-      </div>
-    </div>
-  );
-}
-
 /* ---------------------------------------------------------
    SEASON DIGEST SCREEN
    Highlight Career mode — shown once three consecutive "recap" seasons
@@ -10623,64 +10960,6 @@ function MidseasonRecapScreen({ player, onContinue }) {
    Any real checkpoint (Coach Talk, Locker Room, Rival Game, Injury
    Scare, Trade Buzz) always still gets its own screen, in both modes.
 --------------------------------------------------------- */
-function SeasonDigestScreen({ player, onContinue }) {
-  const bundle = player.pendingDigest || [];
-  const first = bundle[0], last = bundle[bundle.length - 1];
-  const totalGames = bundle.reduce((sum, s) => sum + (s.gamesPlayed || 0), 0);
-  const avgPpg = bundle.filter(s => s.ppg != null).length
-    ? bundle.reduce((sum, s) => sum + (s.ppg || 0), 0) / bundle.filter(s => s.ppg != null).length
-    : null;
-  const ppgGrowth = (first && last && first.ppg != null && last.ppg != null) ? (last.ppg - first.ppg) : null;
-  const totalAwards = bundle.reduce((sum, s) => sum + ((s.leagueAwards || []).length), 0);
-  const bestGames = bundle.filter(s => s.bestGame).length;
-  const maxHeight = Math.max(...bundle.map(s => s.ppg || 0), 1);
-
-  return (
-    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-        <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.amberBright }}>The Quiet Years · {player.teamName}</div>
-        <div className="f-display text-xl font-extrabold mb-1" style={{ color: C.chalk }}>Ages {first ? first.age : "?"}–{last ? last.age : "?"}</div>
-        <p className="f-body text-[11.5px] mb-4" style={{ color: C.chalkDim }}>
-          {bundle.length} seasons · {last ? last.role : player.starterStatus} · {totalGames} games played
-        </p>
-
-        {avgPpg != null && (
-          <div className="flex items-end gap-2 mb-4" style={{ height: 48 }}>
-            {bundle.map((s, i) => (
-              <div key={i} className="flex-1 rounded-t" style={{ background: C.amber, opacity: 0.85, height: `${Math.max(12, (s.ppg || 0) / maxHeight * 100)}%` }} />
-            ))}
-          </div>
-        )}
-
-        <div className="grid grid-cols-3 gap-2 mb-4">
-          <div className="rounded-[10px] p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-            <div className="f-display text-[14px] font-extrabold" style={{ color: C.chalk }}>{avgPpg != null ? avgPpg.toFixed(1) : "—"}</div>
-            <div className="f-mono text-[7.5px] uppercase" style={{ color: C.chalkDim }}>PPG · Avg</div>
-          </div>
-          <div className="rounded-[10px] p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-            <div className="f-display text-[14px] font-extrabold" style={{ color: ppgGrowth > 0 ? "#10B981" : C.chalk }}>
-              {ppgGrowth != null ? `${ppgGrowth > 0 ? "+" : ""}${ppgGrowth.toFixed(1)}` : "—"}
-            </div>
-            <div className="f-mono text-[7.5px] uppercase" style={{ color: C.chalkDim }}>PPG Growth</div>
-          </div>
-          <div className="rounded-[10px] p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-            <div className="f-display text-[14px] font-extrabold" style={{ color: C.chalk }}>{bestGames}</div>
-            <div className="f-mono text-[7.5px] uppercase" style={{ color: C.chalkDim }}>Season Highs</div>
-          </div>
-        </div>
-
-        <p className="f-body text-[12px] mb-5" style={{ color: C.chalkDim }}>
-          {totalAwards > 0
-            ? `Nothing that stopped the game, but ${totalAwards} award${totalAwards === 1 ? "" : "s"} came out of these seasons regardless.`
-            : "Steady, uneventful seasons — no drama, no detours."}
-        </p>
-
-        <PrimaryButton full onClick={onContinue}>Continue <ChevronRight size={14} className="inline ml-1" /></PrimaryButton>
-      </div>
-    </div>
-  );
-}
-
 /* ---------------------------------------------------------
    CAREER HIGHLIGHTS SCREEN
    generateSeasonBestGame already produces a real standout line every
@@ -10976,35 +11255,6 @@ function LifestyleSpendingScreen({ player, onBuyHome, onBuyVehicle, onBuyGear, o
 /* ---------------------------------------------------------
    CLUTCH MOMENT SCREEN
 --------------------------------------------------------- */
-function ClutchMomentScreen({ pending, onChoose }) {
-  if (!pending) return null;
-  const event = CLUTCH_EVENTS.find(e => e.id === pending.clutchEventId) || CLUTCH_EVENTS[0];
-  return (
-    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.trophyGold}` }}>
-        <div className="f-mono text-[10px] uppercase tracking-widest mb-1.5" style={{ color: C.trophyGold }}>⚡ Clutch Moment</div>
-        <div className="f-display text-xl font-extrabold mb-1.5" style={{ color: C.chalk }}>{event.title}</div>
-        <p className="f-body text-[13px] mb-4" style={{ color: C.chalkDim }}>{event.desc}</p>
-        <div className="grid grid-cols-2 gap-3">
-          {event.choices.map((c, i) => (
-            <button key={c.id} onClick={() => onChoose(c)} className="choice-card text-left rounded-[22px] overflow-hidden transition"
-              style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-              <div className="text-center text-[13px] font-bold py-3 px-2" style={{ color: C.chalk }}>{c.label}</div>
-              <EventChoiceIcon scene="clutch_pressure" icon={c.icon} />
-              <div className="p-3">
-                <div className="flex items-center justify-between px-3 py-2 rounded-full text-[12px] font-semibold" style={{ background: "rgba(16,185,129,0.14)", color: "#10B981" }}>
-                  <span className="flex items-center gap-1.5"><TrendingUp size={13} />Success</span>
-                  <span className="f-mono text-[11px] font-extrabold px-2 py-0.5 rounded-full" style={{ background: "rgba(16,185,129,0.22)" }}>{Math.round(c.successChance * 100)}%</span>
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ---------------------------------------------------------
    THE BUZZER-BEATER — a Signature Moment
    Deliberately not a choice-card screen. Same underlying shape as any
@@ -11182,221 +11432,6 @@ function BuzzerBeaterScreen({ player, onComplete }) {
 /* ---------------------------------------------------------
    TAIWAN HBL SEASON RESULT
 --------------------------------------------------------- */
-function HblSeasonScreen({ player, onContinue }) {
-  const s = player.hblStats;
-  const awards = player.hblAwards || [];
-  const teamMeta = A17_TEAM_RESULT_META[player.hblTeamResult] || { label: "Season Complete" };
-  const gains = player.hblGains || {};
-  if (!s) return null;
-  return (
-    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-        <div className="flex items-center gap-2 mb-1">
-          <Trophy size={16} color={C.trophyGold} />
-          <span className="f-display text-sm uppercase tracking-wide" style={{ color: C.gold }}>
-            Taiwan HBL — Season Result
-          </span>
-        </div>
-        <div className="f-display text-lg uppercase mt-1" style={{ color: C.chalk }}>{teamMeta.label}</div>
-        <p className="f-body text-xs mb-4" style={{ color: C.chalkDim }}>
-          Your import year at {player.hblTeamName}
-          {player.hblGames ? ` — ${player.hblGames} games as a starter.` : "."}
-        </p>
-
-        <div className="grid grid-cols-4 gap-y-3 p-3 rounded-[10px] mb-3" style={{ background: C.ink3 }}>
-          <StatCell label="PPG" value={s.ppg} />
-          <StatCell label="RPG" value={s.rpg} />
-          <StatCell label="APG" value={s.apg} />
-          <StatCell label="SPG" value={s.spg} />
-          <StatCell label="BPG" value={s.bpg} />
-          <StatCell label="FG%" value={`${s.fgPct}%`} />
-          <StatCell label="3P%" value={`${s.threePct}%`} />
-        </div>
-
-        <div className="mb-4">
-          <div className="f-mono text-[10px] uppercase tracking-widest mb-2" style={{ color: C.chalkDim }}>Awards</div>
-          {awards.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5">
-              {awards.map(id => <Badge key={id}>{A17_AWARD_META[id] ? A17_AWARD_META[id].label : id}</Badge>)}
-            </div>
-          ) : (
-            <p className="f-body text-xs" style={{ color: C.chalkDim }}>
-              No individual honours this season — but a full year of starter minutes abroad counts for plenty.
-            </p>
-          )}
-        </div>
-
-        {Object.keys(gains).length > 0 && (
-          <div className="mb-4">
-            <div className="f-mono text-[10px] uppercase tracking-widest mb-2" style={{ color: C.chalkDim }}>Development</div>
-            <div className="grid grid-cols-3 gap-2 p-3 rounded-[10px]" style={{ background: C.ink3 }}>
-              {STAT_LIST.filter(k => gains[k]).map(k => (
-                <div key={k} className="text-center">
-                  <div className="f-mono text-sm font-bold" style={{ color: "#10B981" }}>+{gains[k]}</div>
-                  <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>{STAT_META[k].label}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <PrimaryButton full onClick={onContinue}>
-          Continue <ChevronRight size={14} className="inline ml-1" />
-        </PrimaryButton>
-      </div>
-    </div>
-  );
-}
-
-function UbaOffersScreen({ player, onAccept, onDecline }) {
-  const offers = (player && player.ubaOffers) || [];
-  const resolved = offers
-    .map(o => ({ team: UBA_TEAMS.find(t => t.id === o.id), role: o.role }))
-    .filter(o => o.team);
-  return (
-    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-        <div className="flex items-center gap-2 mb-1">
-          <Plane size={16} color={C.trophyGold} />
-          <span className="f-mono text-[11px] uppercase tracking-widest" style={{ color: C.trophyGold }}>University Scholarship Offer</span>
-        </div>
-        <div className="f-display text-xl font-extrabold mb-1.5" style={{ color: C.chalk }}>Taiwan UBA Scholarships</div>
-        <p className="f-body text-[13px] mb-4" style={{ color: C.chalkDim }}>
-          Your HBL season earned you scholarship offers from Taiwanese universities — <span style={{ color: C.chalk }}>four years of eligibility</span>, ages 19 to 22. Every programme is different: some want you leading the floor, others have a deeper roster. Take one, or go home and turn professional in Malaysia.
-        </p>
-        <div className="flex flex-col gap-2.5">
-          {resolved.map(({ team, role }) => (
-            <button key={team.id} onClick={() => onAccept(team, role)} className="choice-card w-full text-left p-3 rounded-[10px] transition"
-              style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-              <div className="flex items-center gap-2.5 min-w-0">
-                <ClubCrest name={team.short} size={32} />
-                <div className="min-w-0 flex-1">
-                  <div className="f-display text-sm font-bold truncate" style={{ color: C.chalk }}>{team.name}</div>
-                  <div className="f-mono text-[10px]" style={{ color: C.chalkDim }}>{team.cn}</div>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 mt-2.5 p-2 rounded-[10px]" style={{ background: C.ink2 }}>
-                <div className="flex-1">
-                  <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>League</div>
-                  <div className="f-mono text-[11px]" style={{ color: C.trophyGold }}>Taiwan UBA</div>
-                </div>
-                <div className="flex-1">
-                  <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Role</div>
-                  <div className="f-mono text-[11px]" style={{ color: role === "Starter" ? "#10B981" : C.chalk }}>{role}</div>
-                </div>
-                <div className="flex-1 text-right">
-                  <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Term</div>
-                  <div className="f-mono text-[11px]" style={{ color: C.chalk }}>{UBA_YEARS}yr</div>
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
-        <div className="mt-4">
-          <SecondaryButton full onClick={onDecline}>Return to Malaysia &amp; Turn Pro</SecondaryButton>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function HblOffersScreen({ player, onAccept, onDecline }) {
-  // The shortlist is rolled once when the offer is created and stored on the
-  // player, so it stays stable across re-renders. Older saves that predate
-  // that field fall back to a fresh sample.
-  const ids = player && player.hblOfferIds;
-  const offeredTeams = (ids && ids.length)
-    ? HBL_TEAMS.filter(t => ids.includes(t.id))
-    : sampleN(HBL_TEAMS, HBL_OFFER_COUNT);
-  return (
-    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-        <div className="flex items-center gap-2 mb-1">
-          <Plane size={16} color={C.trophyGold} />
-          <span className="f-mono text-[11px] uppercase tracking-widest" style={{ color: C.trophyGold }}>Overseas Student-Athlete Offer</span>
-        </div>
-        <div className="f-display text-xl font-extrabold mb-1.5" style={{ color: C.chalk }}>Taiwan HBL Scouts Want You</div>
-        <p className="f-body text-[13px] mb-3" style={{ color: C.chalkDim }}>
-          Your U17 form caught the eye of Taiwanese high-school programmes. You'd have <span style={{ color: C.chalk }}>one year of eligibility</span> at 18 — a single HBL season abroad before you turn pro. Take the leap, or stay and keep developing at home.
-        </p>
-        <div className="flex flex-col gap-2.5">
-          {offeredTeams.map(team => (
-            <button key={team.id} onClick={() => onAccept(team)} className="choice-card w-full text-left p-3 rounded-[10px] transition"
-              style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-              <div className="flex items-center gap-2.5 min-w-0">
-                <ClubCrest name={team.name} size={32} />
-                <div className="min-w-0">
-                  <div className="f-display text-sm font-bold truncate" style={{ color: C.chalk }}>{team.name}</div>
-                  <div className="f-mono text-[10px]" style={{ color: C.chalkDim }}>{team.cn} · {team.city}</div>
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
-        <div className="mt-4">
-          <SecondaryButton full onClick={onDecline}>Stay in Malaysia</SecondaryButton>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function OverseasOffersScreen({ player, offer, onSign, onDecline }) {
-  if (!offer) return null;
-  const { tier, teams, role, awardChance, years } = offer;
-  const monthlyRange = teams.map(t => Math.round(t.salaryPerSeason / 12));
-  return (
-    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-        <div className="flex items-center gap-2 mb-1">
-          <Plane size={16} color={C.trophyGold} />
-          <span className="f-mono text-[11px] uppercase tracking-widest" style={{ color: C.trophyGold }}>Overseas Interest</span>
-        </div>
-        <div className="f-display text-xl font-extrabold mb-1.5" style={{ color: C.chalk }}>{tier.label} Clubs Want You</div>
-        <p className="f-body text-[13px] mb-3" style={{ color: C.chalkDim }}>
-          Your rating has scouts from {tier.label === "NBA" ? "the NBA" : tier.label === "EuroLeague" ? "Europe" : "Asia's top leagues"} circling{awardChance > 0 ? ` — ${Math.round(awardChance * 100)}% shot at a personal award this season` : ""}. Every national team game is guaranteed while you're overseas.
-        </p>
-        <div className="flex flex-col gap-2.5">
-          {teams.map((team, i) => (
-            <button key={team.name} onClick={() => onSign(team)} className="choice-card w-full text-left p-3 rounded-[10px] transition"
-              style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-              <div className="flex items-center gap-2.5 min-w-0">
-                <ClubCrest name={team.name} size={32} />
-                <div className="min-w-0">
-                  <div className="f-display text-sm font-bold truncate" style={{ color: C.chalk }}>{team.name}</div>
-                  <div className="f-mono text-[10px]" style={{ color: C.chalkDim }}>{team.league}{team.country ? ` · ${team.country}` : ""}</div>
-                </div>
-              </div>
-              {/* Concrete offer terms — same layout as domestic club offers */}
-              <div className="flex items-center gap-2 mt-2.5 p-2 rounded-[10px]" style={{ background: C.ink2 }}>
-                <div className="flex-1">
-                  <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>League</div>
-                  <div className="f-mono text-[11px]" style={{ color: C.trophyGold }}>{tier.label}</div>
-                </div>
-                <div className="flex-1">
-                  <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Role</div>
-                  <div className="f-mono text-[11px]" style={{ color: C.chalk }}>{role}</div>
-                </div>
-                <div className="flex-1 text-center">
-                  <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Term</div>
-                  <div className="f-mono text-[11px]" style={{ color: C.chalk }}>{years}yr</div>
-                </div>
-                <div className="flex-1 text-right">
-                  <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Salary</div>
-                  <div className="f-mono text-[11px]" style={{ color: C.gold }}>{rm(monthlyRange[i])}/mo</div>
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
-        <div className="mt-4">
-          <SecondaryButton full onClick={onDecline}>Stay in Malaysia</SecondaryButton>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ---------------------------------------------------------
    RESULT SCREEN
 --------------------------------------------------------- */
@@ -11537,232 +11572,6 @@ const LeagueContext = memo(function LeagueContext({ summary }) {
     </div>
   );
 });
-
-const ResultScreen = memo(function ResultScreen({ summary, onContinue }) {
-  const [advancing, setAdvancing] = useState(false);
-  const [advanceError, setAdvanceError] = useState(false);
-  /* Paint the pressed state first, THEN run the off-season on the next
-     frame. Doing both in the same tick meant the button never visibly
-     responded while the main thread was busy.
-     Bug fix: `advancing` was only ever set true, never reset. If onContinue
-     didn't end in a screen change for ANY reason — an exception on some
-     edge-case save, or the app-level re-entrancy guard in
-     handleContinueAfterResult firing at a bad moment — this button stayed
-     disabled forever with literally nothing left to retry it. A season
-     that fails to advance normally unmounts this screen (screen changes
-     away from "result"), which is what actually resets `advancing` in the
-     success case; the fallback below only fires if that DIDN'T happen. */
-  const handleAdvance = () => {
-    if (advancing) return;
-    setAdvancing(true);
-    setAdvanceError(false);
-    requestAnimationFrame(() => {
-      setTimeout(() => {
-        try {
-          onContinue();
-        } catch (e) {
-          console.error("Season transition failed:", e);
-          setAdvancing(false);
-          setAdvanceError(true);
-          return;
-        }
-        // Safety net: if this screen is still mounted ~1.5s later, the
-        // transition silently didn't happen (e.g. blocked by a stale
-        // re-entrancy guard) rather than throwing. Re-enable the button
-        // instead of leaving the player stuck with no way to retry.
-        setTimeout(() => setAdvancing(false), 1500);
-      }, 0);
-    });
-  };
-  return (
-    <div className="min-h-full w-full flex items-center justify-center px-4 py-10" style={{ background: C.ink }}>
-      <div className="max-w-md w-full rounded-[32px] p-6" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-        <div className="flex items-center gap-2 mb-4">
-          <Trophy size={16} color={C.trophyGold} />
-          <span className="f-display text-sm uppercase tracking-wide" style={{ color: C.gold }}>Season {summary.seasonNum} Recap</span>
-        </div>
-
-        {summary.trainingText && (
-          <div className="mb-3">
-            <div className="f-mono text-[10px] uppercase tracking-widest mb-1" style={{ color: C.chalkDim }}>Training</div>
-            <p className="f-body text-sm" style={{ color: C.chalk }}>{summary.trainingText}</p>
-          </div>
-        )}
-
-        <div className="mb-3">
-          <div className="f-mono text-[10px] uppercase tracking-widest mb-1 flex items-center gap-2" style={{ color: C.chalkDim }}>
-            <span>Event</span>
-            {summary.eventTier === "success" && (
-              <span className="px-1.5 py-0.5 rounded" style={{ background: C.ink3, color: C.chalk, border: `1px solid ${C.line}` }}>Success</span>
-            )}
-            {summary.eventTier === "failure" && (
-              <span className="px-1.5 py-0.5 rounded" style={{ background: C.ink3, color: C.chalkDim, border: `1px solid ${C.line}` }}>Setback</span>
-            )}
-            {summary.eventTier === "critical" && (
-              <span className="px-1.5 py-0.5 rounded" style={{ background: "rgba(220,38,38,0.14)", color: C.red, border: `1px solid ${C.red}` }}>Critical Failure</span>
-            )}
-          </div>
-          <p className="f-body text-sm" style={{ color: C.chalk }}>{summary.eventText}</p>
-          {summary.eventAchievementLabel && (
-            <div className="mt-2 p-2.5 rounded-[10px] flex items-center gap-2" style={{ background: "rgba(250,204,21,0.10)", border: `1px solid ${C.trophyGold}` }}>
-              <Gem size={14} color={C.trophyGold} />
-              <span className="f-body text-xs font-semibold" style={{ color: C.trophyGold }}>Hidden Achievement Unlocked: {summary.eventAchievementLabel}</span>
-            </div>
-          )}
-        </div>
-
-        <div className="mb-4 p-3 rounded-[10px]" style={{ background: C.ink3 }}>
-          <div className="f-display text-sm uppercase" style={{ color: C.amberBright }}>{summary.tierLabel} Season</div>
-          <p className="f-body text-xs mt-1" style={{ color: C.chalkDim }}>{summary.note}</p>
-          <div className="flex gap-4 mt-3">
-            <div>
-              <div className="f-mono text-xs" style={{ color: C.gold }}>{rm(summary.moneyDelta)}</div>
-              <div className="f-mono text-[9px] uppercase" style={{ color: C.chalkDim }}>Earned</div>
-            </div>
-            <div>
-              <div className="f-mono text-xs" style={{ color: summary.popularityDelta >= 0 ? C.teal : C.red }}>
-                {summary.popularityDelta >= 0 ? "+" : ""}{summary.popularityDelta}
-              </div>
-              <div className="f-mono text-[9px] uppercase" style={{ color: C.chalkDim }}>Popularity</div>
-            </div>
-          </div>
-        </div>
-
-        {summary.leagueStats && (
-          <div className="mb-4">
-            <div className="f-mono text-[10px] uppercase tracking-widest mb-2 flex items-center justify-between" style={{ color: C.chalkDim }}>
-              <span>{summary.leagueLabel} Season Averages</span>
-              <span style={{ color: C.amberBright }}>{summary.leagueStats.role}</span>
-            </div>
-            {(summary.gamesPlayed != null || summary.wonChampionship) && (
-              <div className="flex items-center gap-2 mb-2">
-                {summary.gamesPlayed != null && (
-                  <span className="f-mono text-[10px] px-2 py-0.5 rounded-[10px]" style={{ background: C.ink3, color: C.chalk, border: `1px solid ${C.line}` }}>
-                    {summary.gamesPlayed} games
-                  </span>
-                )}
-                {summary.wonChampionship && (
-                  <span className="f-mono text-[10px] px-2 py-0.5 rounded-[10px] flex items-center gap-1" style={{ background: "rgba(250,204,21,0.18)", color: C.trophyGold, border: `1px solid ${C.trophyGold}`, boxShadow: "0 0 12px rgba(250,204,21,0.25)" }}>
-                    <Trophy size={10} /> Champions
-                  </span>
-                )}
-              </div>
-            )}
-            {summary.injury && (
-              <div className="mb-2 p-2 rounded-[10px]" style={{ background: "rgba(229,72,77,0.1)", border: `1px solid ${C.red}` }}>
-                <span className="f-body text-[11px]" style={{ color: C.red }}>
-                  {summary.injury.serious
-                    ? `Serious injury — you missed ${summary.injury.missed} games this season.`
-                    : `Injury setback — you missed ${summary.injury.missed} games this season.`}
-                </span>
-                {summary.injuryRecoveryNote && (
-                  <div className="f-body text-[11px] mt-1.5 pt-1.5" style={{ color: C.chalkDim, borderTop: `1px solid rgba(220,38,38,0.3)` }}>
-                    {summary.injuryRecoveryNote}
-                  </div>
-                )}
-              </div>
-            )}
-            <div className="grid grid-cols-4 gap-y-3 p-3 rounded-[10px]" style={{ background: C.ink3 }}>
-              <StatCell label="PPG" value={summary.leagueStats.ppg} />
-              <StatCell label="RPG" value={summary.leagueStats.rpg} />
-              <StatCell label="APG" value={summary.leagueStats.apg} />
-              <StatCell label="SPG" value={summary.leagueStats.spg} />
-              <StatCell label="BPG" value={summary.leagueStats.bpg} />
-              <StatCell label="FG%" value={`${summary.leagueStats.fgPct}%`} />
-              <StatCell label="3P%" value={`${summary.leagueStats.threePct}%`} />
-              {summary.shotProfile && <StatCell label="3PA" value={summary.shotProfile.tpa} />}
-              {summary.shotProfile && <StatCell label="FTA" value={summary.shotProfile.fta} />}
-            </div>
-
-            {/* Role + relationship snapshot — Current Role already existed
-                as a small header label above; Coach Trust and Team
-                Chemistry are genuinely new here, since neither had ever
-                shown up on this screen despite driving the Midseason
-                Checkpoint pool all season. */}
-            <div className="grid grid-cols-3 gap-2 mt-3">
-              <div className="rounded-[10px] p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-                <div className="f-display text-[13px] font-extrabold" style={{ color: C.amberBright }}>{summary.leagueStats.role}</div>
-                <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Role</div>
-              </div>
-              <div className="rounded-[10px] p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-                <div className="f-display text-[13px] font-extrabold" style={{ color: C.chalk }}>{summary.coachTrust}</div>
-                <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Coach Trust</div>
-              </div>
-              <div className="rounded-[10px] p-2.5 text-center" style={{ background: C.ink3, border: `1px solid ${C.line}` }}>
-                <div className="f-display text-[13px] font-extrabold" style={{ color: C.chalk }}>{summary.teamChemistry}</div>
-                <div className="f-mono text-[8px] uppercase" style={{ color: C.chalkDim }}>Team Chemistry</div>
-              </div>
-            </div>
-
-            {/* Season Best Game — the game only ever tracks per-game
-                averages, never individual box scores, so this is a
-                generated standout performance rather than a logged one.
-                Framed as "Season High," not "Career High" or a specific
-                date, to stay honest about what it actually is — except
-                when it genuinely IS a career high, checked against every
-                entry in careerHighlights, in which case it gets to say
-                so and reads with a distinct gold treatment rather than
-                the same amber every ordinary season high gets. The
-                gradient + shadow only apply to the career-high case —
-                keeping that contrast is what makes it read as rare;
-                using it on every season high would flatten the signal
-                right back out. */}
-            {summary.bestGame && (
-              <div className="mt-3 p-3 rounded-[10px]" style={summary.isCareerHigh
-                ? { background: "linear-gradient(160deg, rgba(250,204,21,0.14), rgba(249,115,22,0.05) 60%, " + C.ink3 + ")", border: "1px solid rgba(250,204,21,0.4)", boxShadow: "0 10px 28px rgba(250,204,21,0.08)" }
-                : { background: "rgba(249,115,22,0.06)", border: `1px solid rgba(249,115,22,0.3)` }}>
-                <div className="f-mono text-[9px] uppercase tracking-widest mb-2 flex items-center gap-1.5" style={{ color: summary.isCareerHigh ? C.trophyGold : C.amberBright }}>
-                  {summary.isCareerHigh && <span>★</span>}
-                  {summary.isCareerHigh ? "Career High" : "Season High"}
-                </div>
-                <div className="flex items-center gap-5">
-                  <div>
-                    <div className="f-display text-xl font-extrabold" style={{ color: summary.isCareerHigh ? C.trophyGold : C.gold }}>{summary.bestGame.pts}</div>
-                    <div className="f-mono text-[9px] uppercase" style={{ color: C.chalkDim }}>PTS</div>
-                  </div>
-                  <div>
-                    <div className="f-display text-xl font-extrabold" style={{ color: C.chalk }}>{summary.bestGame.reb}</div>
-                    <div className="f-mono text-[9px] uppercase" style={{ color: C.chalkDim }}>REB</div>
-                  </div>
-                  <div>
-                    <div className="f-display text-xl font-extrabold" style={{ color: C.chalk }}>{summary.bestGame.ast}</div>
-                    <div className="f-mono text-[9px] uppercase" style={{ color: C.chalkDim }}>AST</div>
-                  </div>
-                </div>
-              </div>
-            )}
-            {summary.styleNote && (
-              <div className="mt-2 flex items-center gap-1.5">
-                {summary.playingStyle && getPlayingStyle(summary.playingStyle) && (
-                  <span className="flex-shrink-0" style={{ fontSize: 12 }}>{getPlayingStyle(summary.playingStyle).icon}</span>
-                )}
-                <p className="f-body text-[10.5px] italic" style={{ color: C.chalkDim }}>{summary.styleNote}</p>
-              </div>
-            )}
-            {summary.leagueAwards && summary.leagueAwards.length > 0 && (
-              <div className="mt-2">
-                <div className="f-mono text-[9px] uppercase tracking-widest mb-1.5" style={{ color: C.gold }}>Season Awards</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {summary.leagueAwards.map(a => (
-                    <span key={a} className="f-mono text-[9px] px-1.5 py-0.5 rounded-[10px]" style={{ background: "rgba(250,204,21,0.12)", color: C.trophyGold, border: `1px solid ${C.line}` }}>
-                      {LEAGUE_AWARD_META[a] ? LEAGUE_AWARD_META[a].label : a}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {(summary.leagueBoard || summary.leagueStandings) && (
-              <LeagueContext summary={summary} />
-            )}
-          </div>
-        )}
-
-        <PrimaryButton full disabled={advancing} onClick={handleAdvance}>{advancing ? "Advancing…" : (<>Continue <ChevronRight size={14} className="inline ml-1" /></>)}</PrimaryButton>
-      </div>
-    </div>
-  );
-})
 
 /* ---------------------------------------------------------
    RETIRED SCREEN
@@ -14765,6 +14574,7 @@ export default function App() {
     if (leagueAwards.includes("sixth_man")) p.achievements = Array.from(new Set([...p.achievements, "mbl_sixth_man"]));
     if (leagueAwards.length) p.popularity = clamp(p.popularity + leagueAwards.length * 3 + (leagueAwards.includes("mvp") ? 8 : 0));
     const ctx = comp.ctx || {};
+    try { p.mdLeagueLast = prLeagueSummary(comp); } catch (e) { /* the table page falls back to the simulated MBL */ }
     delete p.mdComp;
     delete p.pendingSecondHalf;
     delete p.pendingSeasonContext;
@@ -14886,7 +14696,18 @@ export default function App() {
       let guard = 0;
       while (!comp.done && guard++ < 600) mdSimUntilMine(comp, p, true);
       const out = mdOutcome(comp);
-      const pend = { ...p.mdPend, overrides: { ...p.mdPend.overrides, [p.mdPend.need]: out } };
+      // Keep a small record of the tournament for the result pages.
+      const b0 = p.mdPend.base;
+      const recap = prRecap(comp, p);
+      let base = b0;
+      if (recap) {
+        recap.before = { ovr: computeOverall(b0.stats, b0.position), popularity: b0.popularity, morale: b0.morale, coach: (b0.relationships || {}).coach };
+        const recs = {};
+        Object.entries(b0.mdRecaps || {}).forEach(([k, r]) => { if (r && r.year >= comp.year - 1) recs[k] = r; });
+        recs[comp.kind] = recap;
+        base = { ...b0, mdRecaps: recs, mdLast: recap };
+      }
+      const pend = { ...p.mdPend, base, overrides: { ...p.mdPend.overrides, [p.mdPend.need]: out } };
       mdRun(pend.key, { ...pend.base, mdPend: pend });
       return;
     }
@@ -16382,6 +16203,7 @@ export default function App() {
   return (
     <div className="w-full min-h-screen" style={{ background: C.ink }}>
       <FontStyle />
+      <PrStyle />
       <RdStyle />
       {/* Always rendered regardless of which screen is showing, same idea
           as any game's persistent settings chrome — fixed position so it
@@ -16390,7 +16212,7 @@ export default function App() {
         className="fixed top-3 right-3 z-50 w-9 h-9 rounded-full flex items-center justify-center transition"
         style={{ background: "rgba(20,20,20,0.55)", border: `1px solid rgba(255,255,255,0.12)`, backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", boxShadow: "0 4px 16px rgba(0,0,0,0.4)" }}
         aria-label={muted ? "Unmute sound" : "Mute sound"}>
-        <span className="text-[15px]">{muted ? "🔇" : "🔊"}</span>
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="#f3f4f6" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{muted ? <><path d="M4 9v6h4l5 4V5L8 9z" /><path d="M17 9l5 6M22 9l-5 6" /></> : <><path d="M4 9v6h4l5 4V5L8 9z" /><path d="M17 8.5a5 5 0 0 1 0 7M19.5 6a8.5 8.5 0 0 1 0 12" /></>}</svg>
       </button>
       {(RD_ME.look = player ? playerLook(player) : null, null)}
       <Shell show={!!player && !RD_NO_SHELL.has(screen)} screen={screen} player={player} onNav={(id) => { setBanner(null); setScreen(id); }}>
@@ -16485,7 +16307,7 @@ export default function App() {
         <NationalTryoutScreen player={player} tryout={nationalTryout} onAttend={handleAttendTryout} onDecline={handleDeclineTryout} />
       )}
       {screen === "national_result" && player && nationalEvent && (
-        <NationalResultScreen event={nationalEvent} onContinue={() => { setBanner(null); if (mdRun("natEvent", { ...player })) return; if (!goHubOrPendingClub(player)) setScreen("hub"); }} />
+        <NationalResultScreen event={nationalEvent} player={player} onContinue={() => { setBanner(null); if (mdRun("natEvent", { ...player })) return; if (!goHubOrPendingClub(player)) setScreen("hub"); }} />
       )}
       {screen === "study_decision" && player && (
         <StudyDecisionScreen onStudy={handleChooseStudy} onFocus={handleFocusBasketball} />
@@ -16549,6 +16371,8 @@ export default function App() {
       {screen === "hub" && player && (
         <Hub
           player={player}
+          onOpenLeague={() => setScreen("league")}
+          onOpenPathway={() => setScreen("pathway")}
           banner={banner}
           onPlaySeason={handlePlaySeason}
           onRetireConsider={handleRetireConsider}
@@ -16568,11 +16392,11 @@ export default function App() {
       )}
       {screen === "offseason_plan" && player && <OffseasonPlanScreen player={player} onChoose={handleOffseasonPlan} />}
       {screen === "training" && player && <AttributeBuilder player={player} points={player.seasonPoints || 0} onConfirm={handleConfirmTraining} />}
-      {screen === "event" && currentEvent && <EventScreen event={currentEvent} onChoose={handleChooseEvent} />}
+      {screen === "event" && currentEvent && <EventScreen event={currentEvent} player={player} onChoose={handleChooseEvent} />}
       {screen === "injury_recovery" && player && player.pendingInjuryDecision && (
         <InjuryRecoveryScreen pending={player.pendingInjuryDecision} onChoose={handleInjuryRecoveryChoice} />
       )}
-      {screen === "result" && summary && !(player && (player.pendingBufferedRecap || player.digestJustBuffered)) && <ResultScreen summary={summary} onContinue={handleContinueAfterResult} />}
+      {screen === "result" && summary && !(player && (player.pendingBufferedRecap || player.digestJustBuffered)) && <ResultScreen summary={summary} player={player} onContinue={handleContinueAfterResult} />}
       {screen === "season_digest" && player && (
         <SeasonDigestScreen player={player} onContinue={() => {
           // Clear the buffer and set the flag in ONE atomic update — not
