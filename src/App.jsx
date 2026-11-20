@@ -7342,84 +7342,6 @@ function MdLiveScreen({ player, comp, game, onClutch, onDone }) {
 }
 
 /* ---------- box score ---------- */
-function MdBoxScreen({ player, comp, gi, game, onContinue }) {
-  const lay = useLayoutMode();
-  const gm = comp.games[gi];
-  const res = gm.res;
-  const T = [mdTeam(comp, gm.h), mdTeam(comp, gm.a)];
-  const mine = gm.h === comp.myTeam ? 0 : 1;
-  const won = res && res.s[mine] > res.s[1 - mine];
-  const box = game ? Object.values(game.box) : null;
-  const potg = box ? box.slice().sort((a, b) => (b.pts + b.reb + b.ast + b.stl + b.blk) - (a.pts + a.reb + a.ast + a.stl + a.blk))[0] : null;
-  const potgTeam = potg ? (potg.side === 0 ? gm.h : gm.a) : null;
-  const look = (b, side) => b.me ? playerLook(player) : mdPersonLook(comp, side === 0 ? gm.h : gm.a, b.id, player);
-  return (
-    <div style={{ padding: lay === "phone" ? "14px 12px 28px" : "24px 28px 40px", maxWidth: 1180, margin: "0 auto" }}>
-      <div className="rd-card rd-up" style={{ padding: lay === "phone" ? 14 : 22, background: `linear-gradient(90deg, ${(T[0].color || "#555")}33, ${C.ink2} 40%, ${C.ink2} 60%, ${(T[1].color || "#555")}33)` }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", gap: 10 }}>
-          {[0, 1].map(s => (
-            <div key={s} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, order: s ? 3 : 1, textAlign: "center" }}>
-              <MdBadge team={T[s]} size={lay === "phone" ? 52 : 76} />
-              <b style={{ font: "700 13px Inter,sans-serif", color: s === mine ? C.amberBright : C.chalk }}>{T[s].name}</b>
-              <small style={{ font: "500 11px Inter,sans-serif", color: C.chalkDim }}>{mdWL(comp, T[s].id)}</small>
-            </div>
-          ))}
-          <div style={{ order: 2, textAlign: "center" }}>
-            <div className="bc" style={{ fontSize: lay === "phone" ? 40 : 62, fontWeight: 800, color: C.chalk, lineHeight: 1 }}>{res.s[0]}<span style={{ color: C.chalkDim, fontSize: ".5em" }}> – </span>{res.s[1]}</div>
-            <span className="rd-chip" style={{ marginTop: 8, color: won ? "#34d399" : "#f87171" }}>FINAL{res.ot ? ` (${res.ot > 1 ? res.ot : ""}OT)` : ""} · {won ? "WIN" : "LOSS"}</span>
-          </div>
-        </div>
-        {game && (
-          <div style={{ overflowX: "auto", marginTop: 14 }}>
-            <table className="rd-table" style={{ maxWidth: 520, margin: "0 auto" }}>
-              <thead><tr><th>Team</th><th>Q1</th><th>Q2</th><th>Q3</th><th>Q4</th>{game.ot ? <th>OT</th> : null}<th>T</th></tr></thead>
-              <tbody>{[0, 1].map(s => <tr key={s}><td>{T[s].short || T[s].name}</td>{game.qs[s].map((v, i) => <td key={i}>{v}</td>)}{game.ot ? <td>{res.s[s] - game.qs[s].reduce((a, b) => a + b, 0)}</td> : null}<td style={{ fontWeight: 800 }}>{res.s[s]}</td></tr>)}</tbody>
-            </table>
-          </div>
-        )}
-      </div>
-      {res.cl && <div className="rd-card" style={{ padding: 12, marginTop: 12, borderColor: C.amber, font: "500 13px Inter,sans-serif", color: C.chalk }}>🔥 Clutch: {res.cl.label} — {res.cl.made ? "it went in." : "it didn't fall."}</div>}
-      {!game && <div className="rd-card" style={{ padding: 14, marginTop: 12, font: "500 13px Inter,sans-serif", color: C.chalkDim }}>{res.my && !res.my.dnp ? `You: ${res.my.pts} pts, ${res.my.reb} reb, ${res.my.ast} ast in ${res.my.min} min (${res.my.fgm}/${res.my.fga} FG).` : "You didn't play in this one."} Full box scores are kept for the games you've just played.</div>}
-      {game && (
-        <>
-          <div style={{ display: "grid", gridTemplateColumns: lay === "phone" ? "1fr" : "1fr 1fr", gap: 12, marginTop: 12 }}>
-            {potg && (
-              <div className="rd-card" style={{ padding: 12, display: "flex", alignItems: "center", gap: 12 }}>
-                <span style={{ width: 54, height: 56, borderRadius: 10, overflow: "hidden", background: "#1d2230" }}><Sprite look={look(potg, potg.side)} style={{ width: 54, height: 56 }} /></span>
-                <div><div className="rd-k">Player of the game</div><b style={{ font: "700 15px Inter,sans-serif", color: C.chalk }}>{potg.me ? player.name : potg.name}</b><div style={{ font: "500 12px Inter,sans-serif", color: C.chalkDim }}>{potg.pts} pts · {potg.reb} reb · {potg.ast} ast · {mdTeam(comp, potgTeam).name}</div></div>
-              </div>
-            )}
-            {game.box[MD_ME] && (
-              <div className="rd-card" style={{ padding: 12, borderColor: C.amber }}>
-                <div className="rd-k">Your line</div>
-                <div className="bc" style={{ fontSize: 24, fontWeight: 800, color: C.chalk }}>{game.box[MD_ME].pts} PTS · {game.box[MD_ME].reb} REB · {game.box[MD_ME].ast} AST</div>
-                <div style={{ font: "500 12px Inter,sans-serif", color: C.chalkDim }}>{game.box[MD_ME].min} min · FG {game.box[MD_ME].fgm}/{game.box[MD_ME].fga} · 3PT {game.box[MD_ME].tpm}/{game.box[MD_ME].tpa} · FT {game.box[MD_ME].ftm}/{game.box[MD_ME].fta} · {game.box[MD_ME].stl} stl · {game.box[MD_ME].blk} blk</div>
-              </div>
-            )}
-          </div>
-          {[0, 1].map(s => (
-            <div key={s} className="rd-card" style={{ padding: 10, marginTop: 12, overflowX: "auto" }}>
-              <div className="rd-k" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}><MdBadge team={T[s]} size={20} />{T[s].name}</div>
-              <table className="rd-table">
-                <thead><tr><th>Player</th><th>MIN</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>FG</th><th>3PT</th><th>FT</th><th className="rd-hide-phone">TO</th></tr></thead>
-                <tbody>{box.filter(b => b.side === s).sort((a, b) => b.min - a.min).map(b => (
-                  <tr key={b.id} className={b.me ? "mine" : ""}>
-                    <td><span className="tn" style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><span style={{ width: 22, height: 23, borderRadius: 5, overflow: "hidden", background: "#1d2230" }}><Sprite look={look(b, s)} still style={{ width: 22, height: 23 }} /></span>{b.me ? player.name : b.name}{b.imp ? <small style={{ color: C.chalkDim }}> · imp</small> : null}</span></td>
-                    <td>{b.min || "DNP"}</td><td style={{ fontWeight: 700 }}>{b.pts}</td><td>{b.reb}</td><td>{b.ast}</td><td>{b.stl}</td><td>{b.blk}</td>
-                    <td>{b.fgm}/{b.fga}</td><td>{b.tpm}/{b.tpa}</td><td>{b.ftm}/{b.fta}</td><td className="rd-hide-phone">{b.tov}</td>
-                  </tr>))}</tbody>
-              </table>
-            </div>
-          ))}
-        </>
-      )}
-      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
-        <button className="rd-btn" onClick={onContinue}>Continue <ChevronRight size={15} /></button>
-      </div>
-    </div>
-  );
-}
-
 /* eslint-disable */
 /* =====================================================================
    PROTOTYPE PAGES — hub, events and results in the approved prototype's
@@ -8275,7 +8197,7 @@ function PrEvo({ icon, emoji, label, tag, tagOr, odds, fx, note, onClick, disabl
       <div className="eh"><span className="ic2">{emoji ? <span style={{ fontSize: 20 }}>{emoji}</span> : <Ic n={icon || "target"} />}</span><b>{label}</b>{tag && <Tg cls={tagOr ? "or" : ""}>{tag}</Tg>}</div>
       {odds && <>
         <div className="odds">{odds.map((o, k) => <i key={k} className={o.tone} style={{ width: o.pct + "%" }} />)}{needle != null && <em className="needle" style={{ "--x": needle + "%" }} />}</div>
-        <div className="ol" style={odds.length < 3 ? { gridTemplateColumns: `repeat(${odds.length},minmax(0,1fr))` } : undefined}>{odds.map((o, k) => <div key={k}><span className={"dot " + o.tone} /><b>{o.pct}%</b> {o.label}{o.fx && <small>{o.fx}</small>}</div>)}</div>
+        <div className="ol" style={odds.length !== 3 ? { gridTemplateColumns: `repeat(${odds.length},minmax(0,1fr))` } : undefined}>{odds.map((o, k) => <div key={k}><span className={"dot " + o.tone} /><b>{o.pct}%</b> {o.label}{o.fx && <small>{o.fx}</small>}</div>)}</div>
       </>}
       {fx && fx.length > 0 && <div className="ticks">{fx.map(([t, pos], k) => <Tg key={k} cls={pos ? "pos" : "neg"}>{t}</Tg>)}</div>}
       {note && <small style={{ color: "var(--mu)", fontSize: 12.5 }}>{note}</small>}
@@ -8518,18 +8440,6 @@ function NegotiateOfferScreen({ player, club, terms, onCommit }) {
         <PrEvo i={0} emoji={renderChoiceIcon(META[ask].icon)} label={`Commit: ${META[ask].label.toLowerCase()}`} tag="Commit to the ask" tagOr odds={odds(META[ask].o)} onClick={() => onCommit(ask)} />
         <button className="ghost" style={{ alignSelf: "flex-start" }} onClick={() => setAsk(null)}><Ic n="left" /> Choose a different ask</button>
       </>}
-    </PrEventPage>
-  );
-}
-function TradeRequestScreen({ player, club, onCommit }) {
-  const cases = TRADE_REQUEST_REASONS.map(r => ({ ...r, strength: tradeRequestCase(player, club, r.id) }));
-  const avg = cases.reduce((a, c) => a + c.strength, 0) / cases.length;
-  const tier = avg < 0.30 ? "low" : avg < 0.45 ? "medium" : "high";
-  return (
-    <PrEventPage lbl={`${club.name} · Trade request`} title="Why do you want out?" scene="office" player={player}
-      desc={"The reason isn't flavour: it changes your case. A weak ask can still be granted, just not on your terms, and a bad one can cost you more than a “no”. A denial locks out another request for 2 seasons."}
-      right={<span className="chip">Your standing <b style={{ textTransform: "capitalize" }}>{tier}</b></span>}>
-      {cases.map((c, i) => <PrEvo key={c.id} i={i} emoji={renderChoiceIcon(c.icon)} label={c.label} tag={c.tagline(player)} odds={[{ label: "Granted", pct: Math.round(c.strength * 100), tone: "ok" }, { label: "Denied", pct: 100 - Math.round(c.strength * 100), tone: "bd" }]} onClick={() => onCommit(c.id)} />)}
     </PrEventPage>
   );
 }
@@ -9196,6 +9106,260 @@ function LeagueScreen({ player, onBack }) {
     </PrPage>
   );
 }
+/* =====================================================================
+   BOX SCORE — the prototype's final screen
+===================================================================== */
+function prGameScore(b) {
+  if (!b) return 0;
+  return b.pts + 0.4 * b.fgm - 0.7 * b.fga - 0.4 * (b.fta - b.ftm) + 0.7 * (b.oreb || 0) + 0.3 * (b.dreb != null ? b.dreb : b.reb) + b.stl + 0.7 * b.ast + 0.7 * b.blk - 0.4 * (b.pf || 0) - b.tov;
+}
+function prGrade(gs) {
+  return gs >= 25 ? "A+" : gs >= 20 ? "A" : gs >= 16 ? "A−" : gs >= 13 ? "B+" : gs >= 10 ? "B" : gs >= 7 ? "B−" : gs >= 4 ? "C+" : gs >= 1 ? "C" : "D";
+}
+function prOrd(n) { const s = ["th", "st", "nd", "rd"], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
+/* Lead changes, biggest lead and bench points, from the game's own log. */
+function prGameFacts(game, T) {
+  let changes = 0, lastLeader = 0, big = [0, 0];
+  (game.ev || []).forEach(e => {
+    if (e.h == null) return;
+    const d = e.h - e.a;
+    const leader = d > 0 ? 1 : d < 0 ? -1 : 0;
+    if (leader && lastLeader && leader !== lastLeader) changes++;
+    if (leader) lastLeader = leader;
+    if (d > big[0]) big[0] = d;
+    if (-d > big[1]) big[1] = -d;
+  });
+  const bench = [0, 1].map(s => {
+    const t = game.T && game.T[s];
+    const five = t && t.stints && t.stints[0] && t.stints[0].five ? new Set(t.stints[0].five.map(x => x.id || x)) : null;
+    if (!five) return null;
+    return Object.values(game.box).filter(b => b.side === s && !five.has(b.id)).reduce((a, b) => a + b.pts, 0);
+  });
+  const bs = big[0] >= big[1] ? 0 : 1;
+  return [["Lead changes", String(changes)], ["Biggest lead", `${(T[bs].short || T[bs].name).split(" ")[0]} +${Math.max(big[0], big[1])}`], ["Bench points", bench[0] != null && bench[1] != null ? `${bench[0]}–${bench[1]}` : "—"]];
+}
+function MdBoxScreen({ player, comp, gi, game, onContinue }) {
+  const gm = comp.games[gi];
+  const res = gm.res;
+  const T = [mdTeam(comp, gm.h), mdTeam(comp, gm.a)];
+  const mine = gm.h === comp.myTeam ? 0 : 1;
+  const won = res && res.s[mine] > res.s[1 - mine];
+  const box = game ? Object.values(game.box) : null;
+  const me = box ? box.find(b => b.me) : null;
+  const potg = box ? box.slice().sort((a, b) => prGameScore(b) - prGameScore(a))[0] : null;
+  const hero = me && me.min > 0 ? me : potg;
+  const heroSide = hero ? hero.side : mine;
+  const look = (b) => b.me ? playerLook(player) : mdPersonLook(comp, b.side === 0 ? gm.h : gm.a, b.id, player);
+  const table = comp.type === "league" ? mdTable(comp, Object.keys(comp.teams), ["rs"]) : null;
+  const rec = (id) => { const wl = mdWL(comp, id); const i = table ? table.findIndex(r => r.id === id) : -1; return i >= 0 && gm.ph === "rs" ? `${wl} · ${prOrd(i + 1)}` : wl; };
+  const lg = comp.type === "league" ? (comp.kind === "mbl" ? "MBL" : LEAGUE[comp.kind] ? LEAGUE[comp.kind].short : comp.label) : comp.label;
+  const col = (t) => mdTeamColor(t);
+  const qsN = game ? game.qs[0].length : 4;
+  const ot = game ? [0, 1].map(s => res.s[s] - game.qs[s].reduce((a, b) => a + b, 0)) : null;
+  const tb = (s) => (
+    <div className="scroll">
+      <table className="box">
+        <thead><tr><th>Player</th><th>MIN</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>FG</th><th>3PT</th><th>FT</th><th>TO</th></tr></thead>
+        <tbody>{box.filter(b => b.side === s).sort((a, b) => b.min - a.min).map(b => (
+          <tr key={b.id} className={b.me ? "y" : ""}>
+            <td><span className="pcell"><span className="ph" style={{ background: "linear-gradient(160deg,#2a2f3a,#14171c)", overflow: "hidden", display: "inline-block", flex: "none" }}><Sprite look={look(b)} still style={{ width: 34, height: 36 }} /></span><b>{b.me ? player.name : b.name}</b>{b.imp ? <small style={{ color: "var(--di)" }}>Import</small> : null}</span></td>
+            <td>{b.min || "DNP"}</td><td><b>{b.pts}</b></td><td>{b.reb}</td><td>{b.ast}</td><td>{b.stl}</td><td>{b.blk}</td>
+            <td>{b.fgm}/{b.fga}</td><td>{b.tpm}/{b.tpa}</td><td>{b.ftm}/{b.fta}</td><td>{b.tov}</td>
+          </tr>))}</tbody>
+      </table>
+    </div>
+  );
+  return (
+    <PrPage>
+      <div className="fin" data-a="" style={{ "--a": col(T[0]), "--b": col(T[1]) }}>
+        {[0, 1].map(s => (
+          <div key={s} className={"t" + (s ? " r" : "")} style={{ order: s ? 3 : 1 }}>
+            <PrTeamLogo team={T[s]} s={72} />
+            <span><b style={s === mine ? { color: "var(--or2)" } : undefined}>{T[s].name}</b><small>{rec(T[s].id)}</small></span>
+          </div>
+        ))}
+        <div style={{ order: 2 }}>
+          <div className="sc"><span className={"num" + (res.s[0] < res.s[1] ? " l" : "")}>{res.s[0]}</span><span style={{ color: "var(--di)", fontSize: ".5em" }}>–</span><span className={"num" + (res.s[1] < res.s[0] ? " l" : "")}>{res.s[1]}</span></div>
+          <span className="wl" style={won ? undefined : { color: "var(--bd)" }}>FINAL{res.ot ? ` · ${res.ot > 1 ? res.ot : ""}OT` : ""} · {won ? "WIN" : "LOSS"} <span className="sim">SIM</span></span>
+        </div>
+      </div>
+      <div className="g" style={{ marginTop: 16 }}>
+        {hero ? (
+          <section className="pn pog c5 l12" data-a="">
+            <span className="ph" style={{ display: "block", overflow: "hidden", background: `radial-gradient(80% 70% at 50% 75%, ${col(T[heroSide])}55, #14171c 75%)` }}><Sprite look={look(hero)} full ball={hero === potg} style={{ width: "100%", height: "100%", objectFit: "contain", objectPosition: "bottom" }} /></span>
+            <div>
+              <Tg cls="or"><Ic n="star" /> {hero === potg ? "Player of the game" : "Your game"}</Tg>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginTop: 8 }}><span className="grade">{prGrade(prGameScore(hero))}</span><span style={{ color: "var(--mu)", fontSize: 13 }}>Game grade</span></div>
+              <b style={{ fontSize: 17 }}>{hero.me ? player.name : hero.name}</b>
+              <div className="pogl">{[["PTS", hero.pts], ["REB", hero.reb], ["AST", hero.ast], ["STL", hero.stl]].map(([l, v]) => <div key={l}><b>{v}</b><small>{l}</small></div>)}</div>
+              {hero !== potg && potg && <PrSrc color="var(--gd)">Player of the game: {potg.me ? player.name : potg.name}, {potg.pts} pts · {potg.reb} reb · {potg.ast} ast</PrSrc>}
+            </div>
+          </section>
+        ) : (
+          <section className="pn pog c5 l12" data-a="" style={{ gridTemplateColumns: "minmax(0,1fr)" }}>
+            <div>
+              <Tg><Ic n="user" /> Your game</Tg>
+              {res.my && !res.my.dnp ? <>
+                <div className="pogl">{[["PTS", res.my.pts], ["REB", res.my.reb], ["AST", res.my.ast], ["MIN", res.my.min]].map(([l, v]) => <div key={l}><b>{v}</b><small>{l}</small></div>)}</div>
+                <PrSrc color="var(--in)">Simmed: the full box score is kept for games you've just played</PrSrc>
+              </> : <p style={{ color: "var(--mu)", margin: "10px 0 0" }}>You didn't play in this one.</p>}
+            </div>
+          </section>
+        )}
+        <section className="pn c7 l12" data-a="">
+          <h3><Ic n="clock" /> Line score<small>{lg}{gm.ph && MD_PHASE[gm.ph] ? ` · ${MD_PHASE[gm.ph]}` : ""}</small></h3>
+          {game ? (
+            <div className="scroll"><table className="qs">
+              <thead><tr><th>Team</th>{game.qs[0].map((_, i) => <th key={i}>Q{i + 1}</th>)}{ot[0] || ot[1] ? <th>OT</th> : null}<th>Final</th></tr></thead>
+              <tbody>{[0, 1].map(s => (
+                <tr key={s}><td><span className="tcell"><PrTeamLogo team={T[s]} s={28} /><b>{T[s].short || T[s].name}</b></span></td>{game.qs[s].map((v, i) => <td key={i}>{v}</td>)}{ot[0] || ot[1] ? <td>{ot[s]}</td> : null}<td><b>{res.s[s]}</b></td></tr>
+              ))}</tbody>
+            </table></div>
+          ) : <p style={{ color: "var(--di)", margin: 0 }}>Quarter scores are kept for the games you play or sim one at a time.</p>}
+          {game && <div className="pr-facts">{prGameFacts(game, T).map(([l, v]) => <div key={l}><small className="lbl">{l}</small><b>{v}</b></div>)}</div>}
+          {res.cl && <div className="injb ok" style={{ marginTop: 12, background: "rgba(255,122,26,.1)", borderColor: "rgba(255,122,26,.35)" }}><Ic n="fire" /> Clutch: {res.cl.label}, and {res.cl.made ? "it went in." : "it didn't fall."}</div>}
+        </section>
+        {game && [mine, 1 - mine].map(s => (
+          <section key={s} className="pn c12" data-a="">
+            <h3><PrTeamLogo team={T[s]} s={26} /> {T[s].name}{s === mine && <small>Real names where HoopStatsMY has them · game stats simulated</small>}</h3>
+            {tb(s)}
+          </section>
+        ))}
+      </div>
+      <PrNext onClick={onContinue}>Back to the schedule</PrNext>
+    </PrPage>
+  );
+}
+
+/* =====================================================================
+   INVESTMENTS
+===================================================================== */
+const PR_INV = {
+  trainer: { scene: "gym", sub: "Extra individual sessions, year-round.", eff: ["+1 attribute point every season"] },
+  science: { scene: "medical", sub: "Load management, recovery and treatment.", eff: ["Injury risk halved", "Guided rehab: full speed, zero risk", "Slower decline after 33", "+1 playable season"] },
+  family: { scene: "home", sub: "Send money home and fly them out to see you.", eff: ["No settling-in dip when you move abroad", "A bad season stops spiralling"] },
+  agent: { scene: "office", sub: "Real representation. Gets you seen, gets you in the room.", eff: ["Scouts rate you 3 higher for overseas moves"], risk: true },
+};
+function InvestmentsScreen({ player, onConfirm, onBack }) {
+  const p = player;
+  const [sel, setSel] = useState(() => ({ ...(p.investments || {}) }));
+  const salary = p.contractSalary || 0;
+  const pct = Object.keys(INVESTMENTS).reduce((t, k) => t + (sel[k] ? INVESTMENTS[k].pct : 0), 0);
+  const upkeep = Math.round(salary * pct);
+  const net = salary - upkeep;
+  const years = Math.max(1, 34 - p.age);
+  const projected = p.money + net * 12 * years;
+  const tierNow = wealthTier(projected);
+  const toggle = (k) => {
+    if (salary <= 0) return;
+    const would = pct + (sel[k] ? -INVESTMENTS[k].pct : INVESTMENTS[k].pct);
+    if (!sel[k] && would > INVESTMENT_MAX_PCT + 1e-9) return;
+    setSel(a => ({ ...a, [k]: !a[k] }));
+  };
+  const barC = pct > 0.6 ? "#f05252" : pct > 0.45 ? "#e2b65a" : "#34c37a";
+  const changed = Object.keys(INVESTMENTS).some(k => !!sel[k] !== !!(p.investments || {})[k]);
+  return (
+    <PrPage>
+      <PrHead lbl={`Season ${p.year} · Career & money`} title="Career investments"
+        desc="Monthly commitments taken straight out of your salary. They pay you back in development, health and opportunity, at the cost of what you retire with."
+        right={<span className="chip"><Ic n="cash" />Bank <b>{rm(p.money)}</b></span>} />
+      <div className="g">
+        <div className="c8 l12">
+          {salary <= 0 && <div className="alert" style={{ cursor: "default", marginBottom: 12 }}><span className="ini-b" style={{ background: "var(--p3)" }}><Ic n="cash" /></span><span><b>No salary yet</b><small>Investments open up once you sign a contract.</small></span></div>}
+          <div className="choices" style={{ gridTemplateColumns: "repeat(2,minmax(0,1fr))" }}>
+            {Object.keys(INVESTMENTS).map((k, i) => {
+              const inv = INVESTMENTS[k], m = PR_INV[k], on = !!sel[k];
+              const locked = !on && (salary <= 0 || pct + inv.pct > INVESTMENT_MAX_PCT + 1e-9);
+              return (
+                <button key={k} className={"ch " + (on ? "on" : "")} data-a="" style={{ "--i": i, opacity: locked ? 0.45 : 1, cursor: locked ? "not-allowed" : "pointer" }} onClick={() => !locked && toggle(k)} aria-pressed={on}>
+                  <div className="art" style={{ aspectRatio: "2/1" }}>
+                    <PrSceneArt name={m.scene} player={p} ph={i * 7} />
+                    <span className="tg risk" style={on ? { background: "var(--or)", color: "#1a0b00", borderColor: "var(--or)" } : { background: "rgba(0,0,0,.55)" }}>{on ? <><Ic n="check" /> Active</> : m.risk ? "High risk" : `${Math.round(inv.pct * 100)}% of salary`}</span>
+                  </div>
+                  <div className="bd">
+                    <b className="t">{inv.label}</b>
+                    <p>{m.sub}</p>
+                    <div className="fx">
+                      {m.eff.map(e => <div key={e}><span>{e}</span><b className="up">+</b></div>)}
+                      <div><span>Cost · {Math.round(inv.pct * 100)}% of salary</span><b className="dn">{rm(Math.round(salary * inv.pct))}/mo</b></div>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <section className="pn c4 l12" data-a="">
+          <h3><Ic n="bolt" /> This month</h3>
+          <div className="pts" style={{ marginBottom: 12 }}>
+            <div><div className="lbl">Take-home</div><small style={{ color: "var(--mu)" }}>{rm(salary)} salary · {rm(upkeep)} invested</small></div>
+            <b className="num" style={{ fontSize: 30, color: pct > 0.6 ? "#ff9a9a" : "var(--or)" }}>{rm(net)}</b>
+          </div>
+          <div className="meter"><span>Committed</span><div className="bar"><i style={{ "--w": Math.min(100, pct / INVESTMENT_MAX_PCT * 100) + "%", "--bc": barC }} /></div><b>{Math.round(pct * 100)}%</b></div>
+          <PrSrc color={barC}>Up to {Math.round(INVESTMENT_MAX_PCT * 100)}% of your salary can be committed</PrSrc>
+          {pct > 0.6 && <div className="injb" style={{ marginTop: 10 }}><Ic n="x" /> Overcommitted: a released or injured season could leave you unable to keep these up.</div>}
+          <h3 style={{ marginTop: 18 }}><Ic n="crown" /> Retirement outlook<small>at this rate</small></h3>
+          {WEALTH_TIERS.map(t => {
+            const now = t.id === tierNow.id;
+            return <div key={t.id} className="dec" style={{ opacity: now ? 1 : 0.38, padding: "8px 0" }}><span className={"k " + (now ? "you" : "ms")}><Ic n={now ? "target" : "cash"} /></span><div><b>{t.label} <small style={{ display: "inline", color: "var(--di)" }}>{t.min ? `${rm(t.min)}+` : ""}</small></b>{now && <small>{t.note}</small>}</div></div>;
+          })}
+          <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+            <button className="ghost" onClick={onBack}>Back</button>
+            <button className="cta" style={{ flex: 1 }} onClick={() => onConfirm(sel)}>{changed ? "Confirm plan" : "Keep plan"} <Ic n="check" /></button>
+          </div>
+        </section>
+      </div>
+    </PrPage>
+  );
+}
+
+/* =====================================================================
+   TRADE REQUEST
+===================================================================== */
+function TradeRequestScreen({ player, club, onCommit, onBack }) {
+  const p = player;
+  const ovr = computeOverall(p.stats, p.position);
+  const cases = TRADE_REQUEST_REASONS.map(r => {
+    const strength = tradeRequestCase(p, club, r.id);
+    const o = tradeRequestOutcome(strength, p);
+    const well = Math.round(o.grantWell * 100), poor = Math.round(o.grantPoorly * 100), harsh = Math.round(o.denyHarsh * 100);
+    return { ...r, strength, odds: [{ label: "Transfer window", pct: well, tone: "ok", fx: "They hear offers. You pick the club." }, { label: "Released", pct: poor, tone: "wa", fx: "Cut loose: no say in where you land." }, { label: "Told no", pct: Math.max(0, 100 - well - poor - harsh), tone: "n", fx: "Coach −4 · ask again in 2 seasons" }, { label: "Benched for asking", pct: harsh, tone: "bd", fx: "Role and salary down one step · Coach −10" }] };
+  });
+  const avg = cases.reduce((a, c) => a + c.strength, 0) / cases.length;
+  const tier = avg < 0.30 ? "low" : avg < 0.45 ? "medium" : "high";
+  const best = cases.slice().sort((a, b) => b.odds[0].pct - a.odds[0].pct)[0];
+  const key = LOGO[club.id] ? club.id : logoKeyFor(club.name);
+  const WHY = { role: `You're ${p.starterStatus === "Starter" ? "already starting, so this is a hard sell" : `a ${(p.starterStatus || "Bench").toLowerCase()} player: the less you play, the stronger this case`}.`, contender: `Strongest when you're rated well above ${club.name}'s level.`, fresh: "No grievance to point at: the weakest case on paper." };
+  return (
+    <PrPage>
+      <PrHead lbl={<>{key ? <PrLogo k={key} s={22} /> : null} {club.name} · Trade request</>} title="Why do you want out?"
+        desc="The reason isn't flavour: it changes your case. A strong case opens the transfer window on your terms; a weak one can get you released, or benched for asking."
+        right={<span className="chip">Your standing <b style={{ textTransform: "capitalize", color: tier === "high" ? "#7fe0ad" : tier === "medium" ? "var(--or2)" : "#ff9a9a" }}>{tier}</b></span>} />
+      <div className="g">
+        <section className="pn c4 l12" data-a="">
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+            {key ? <PrLogo k={key} s={56} /> : <PrTeamLogo team={{ name: club.name }} s={56} />}
+            <div><b style={{ font: "800 22px/1 var(--cd)", textTransform: "uppercase", display: "block" }}>{club.name}</b><small style={{ color: "var(--mu)" }}>{p.seasonsAtClub || 0} season{p.seasonsAtClub === 1 ? "" : "s"} here · {p.contractYearsLeft || 0} yr left · {rm(p.contractSalary || 0)}/mo</small></div>
+          </div>
+          {[["Coach trust", p.relationships.coach, "#e2b65a"], ["Chemistry", p.relationships.team, "#4aa8ff"], ["Popularity", p.popularity, "#ff9a4d"], ["Overall", ovr, "#ff7a1a"]].map(([k, v, c]) => (
+            <div key={k} className="meter"><span>{k}</span><div className="bar"><i style={{ "--w": v + "%", "--bc": c }} /></div><b>{v}</b></div>
+          ))}
+          <h3 style={{ marginTop: 16 }}><Ic n="eye" /> What moves the odds</h3>
+          <div className="dec"><span className="k chance"><Ic n="target" /></span><div><b>Low chemistry helps</b><small>A locker room that's cooled on you is more willing to let you go.</small></div></div>
+          <div className="dec"><span className="k chance"><Ic n="target" /></span><div><b>Your rating decides how</b><small>The better you are, the more a grant means a real transfer window instead of a release.</small></div></div>
+          <div className="dec"><span className="k you"><Ic n="hand" /></span><div><b>A no costs you</b><small>Any denial locks out another request for 2 seasons.</small></div></div>
+        </section>
+        <section className="c8 l12" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {cases.map((c, i) => (
+            <PrEvo key={c.id} i={i} emoji={renderChoiceIcon(c.icon)} label={c.label} tag={c === best ? "Strongest case" : c.tagline(p)} tagOr={c === best}
+              odds={c.odds.map(o => ({ ...o, tone: o.tone === "n" ? "" : o.tone }))} note={WHY[c.id]} onClick={() => onCommit(c.id)} />
+          ))}
+          {onBack && <button className="ghost" style={{ alignSelf: "flex-start" }} onClick={onBack}><Ic n="left" /> Stay put for now</button>}
+        </section>
+      </div>
+    </PrPage>
+  );
+}
 
 const PR_CSS = `.pr{color-scheme:dark;--bg:#0a0b0e;--bg2:#0f1115;--p1:#14171c;--p2:#1a1e25;--p3:#222731;--ln:rgba(255,255,255,.07);--ln2:rgba(255,255,255,.12);--ink:#f3f4f6;--mu:#a3a9b4;--di:#737a86;--or:#ff7a1a;--or2:#ff9a4d;--gd:#e2b65a;--ok:#34c37a;--bd:#f05252;--in:#4aa8ff;--r1:6px;--r2:10px;--r3:14px;--r4:20px;--tc:#ff7a1a;--td:#1a1208;--cd:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;--sn:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;--ease:cubic-bezier(.2,.8,.2,1)}
 .pr .i{width:18px;height:18px;flex:none}
@@ -9329,6 +9493,10 @@ const PR_CSS = `.pr{color-scheme:dark;--bg:#0a0b0e;--bg2:#0f1115;--p1:#14171c;--
 .pr input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:#fff;margin-top:-8px;box-shadow:0 0 0 5px rgba(255,122,26,.3),0 3px 8px rgba(0,0,0,.5)}
 .pr input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:#fff;border:0;box-shadow:0 0 0 5px rgba(255,122,26,.3)}
 .pr input[type=range]:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 7px rgba(255,122,26,.5)}
+.pr .eff{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.pr .eff div{padding:10px;border-radius:10px;background:var(--p1);border:1px solid var(--ln);text-align:center}
+.pr .eff b{display:block;font:800 20px/1 var(--cd)}
+.pr .eff small{font-size:11.5px;color:var(--di)}
 .pr .up{color:var(--ok)}
 .pr .dn{color:var(--bd)}
 .pr .ids{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
@@ -9359,6 +9527,8 @@ const PR_CSS = `.pr{color-scheme:dark;--bg:#0a0b0e;--bg2:#0f1115;--p1:#14171c;--
 .pr #confetti{position:absolute;inset:0;pointer-events:none;width:100%;height:100%}
 .pr .ini-b{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;font:800 17px/1 var(--cd);flex:none;color:#fff}
 .pr .path{display:flex;align-items:center;gap:0;flex-wrap:wrap;justify-content:center}
+.pr .path .nd{display:flex;flex-direction:column;align-items:center;gap:6px;width:92px;font-size:11.5px;color:var(--di);font-weight:600;text-align:center}
+.pr .path .nd.on{color:var(--ink)}
 .pr .hero{display:grid;grid-template-columns:minmax(200px,280px) minmax(0,1fr);min-height:340px;padding:0;background:linear-gradient(120deg,var(--td),#0e1014 70%);border-color:color-mix(in srgb,var(--tc) 30%,transparent)}
 .pr .hero .pic{position:relative;overflow:hidden;background:radial-gradient(260px 300px at 50% 70%,color-mix(in srgb,var(--tc) 55%,transparent),transparent 70%)}
 .pr .hero .pic .ph{position:absolute;inset:18px 0 0 0;background:none;border-radius:0}
@@ -9458,7 +9628,9 @@ const PR_CSS = `.pr{color-scheme:dark;--bg:#0a0b0e;--bg2:#0f1115;--p1:#14171c;--
 .pr .mu{position:relative;border-radius:var(--r4);overflow:hidden;padding:28px;background:#0d0f13;border:1px solid var(--ln);min-height:300px;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:20px}
 @keyframes pr-sl{from{opacity:0;transform:translateX(-60px)}}
 @keyframes pr-sr{from{opacity:0;transform:translateX(60px)}}
+.pr .five{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
 .pr[data-l=phone] .mu{grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);padding:18px 12px;min-height:0;gap:8px}
+.pr[data-l=phone] .five{grid-template-columns:repeat(5,minmax(96px,1fr));overflow-x:auto;padding-bottom:4px}
 .pr[data-l=land] .mu{min-height:0;padding:14px}
 .pr .wrap:has(.live){height:100%;display:flex;flex-direction:column}
 .pr .live{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 340px;grid-template-rows:auto minmax(0,1fr) auto;gap:14px;height:100%}
@@ -9476,6 +9648,42 @@ const PR_CSS = `.pr{color-scheme:dark;--bg:#0a0b0e;--bg2:#0f1115;--p1:#14171c;--
 .pr[data-l=phone] .live{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto minmax(220px,1fr);height:auto}
 .pr[data-l=phone] .wrap:has(.live){height:auto}
 .pr[data-l=land] .live{grid-template-columns:minmax(0,1fr) 250px;gap:8px}
+.pr .fin{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:16px;padding:22px;border-radius:var(--r4);background:linear-gradient(110deg,color-mix(in srgb,var(--a) 30%,#0d0f13),#0d0f13 45%,#0d0f13 55%,color-mix(in srgb,var(--b) 25%,#0d0f13));border:1px solid var(--ln)}
+.pr .fin .t{display:flex;align-items:center;gap:14px}
+.pr .fin .t.r{flex-direction:row-reverse;text-align:right}
+.pr .fin .t b{font:800 28px/1 var(--cd);text-transform:uppercase;display:block}
+.pr .fin .t small{color:var(--mu)}
+.pr .fin .sc{font:800 clamp(48px,6vw,84px)/1 var(--cd);font-variant-numeric:tabular-nums;display:flex;gap:14px;align-items:center}
+.pr .fin .sc .l{color:var(--di)}
+.pr .fin .wl{display:block;text-align:center;font:700 12px/1 var(--sn);color:var(--ok);letter-spacing:.06em;margin-top:4px}
+.pr .qs{width:100%;border-collapse:collapse;font-size:13px}
+.pr .qs th,.pr .qs td{padding:8px 8px;text-align:center;border-bottom:1px solid var(--ln);font-variant-numeric:tabular-nums}
+.pr .qs th{font-size:11.5px;color:var(--di);font-weight:600}
+.pr .qs td:first-child,.pr .qs th:first-child{text-align:left}
+.pr .qs td b{font:800 17px/1 var(--cd)}
+.pr .box{width:100%;border-collapse:collapse;font-size:13px;min-width:620px}
+.pr .box th{font-size:11.5px;color:var(--di);font-weight:600;text-align:right;padding:8px;border-bottom:1px solid var(--ln);position:sticky;top:0;background:var(--p1)}
+.pr .box th:first-child{text-align:left}
+.pr .box td{padding:7px 8px;text-align:right;border-bottom:1px solid var(--ln);font-variant-numeric:tabular-nums;white-space:nowrap}
+.pr .box td:first-child{text-align:left}
+.pr .box tr.y td{background:rgba(255,122,26,.08)}
+.pr .box .pcell{display:flex;align-items:center;gap:10px}
+.pr .box .pcell .ph{width:34px;height:34px;border-radius:9px}
+.pr .box .pcell b{font-weight:600}
+.pr .scroll{overflow-x:auto}
+.pr .pog{display:grid;grid-template-columns:150px minmax(0,1fr);gap:16px;align-items:end;background:linear-gradient(160deg,rgba(255,122,26,.15),transparent 60%)}
+.pr .pog .ph{aspect-ratio:296/340;border-radius:14px}
+.pr .grade{font:800 64px/1 var(--cd);color:var(--or)}
+.pr .pogl{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:10px}
+.pr .pogl div{padding:8px;border-radius:10px;background:rgba(0,0,0,.25);text-align:center}
+.pr .pogl b{display:block;font:800 24px/1 var(--cd)}
+.pr .pogl small{font-size:11px;color:var(--di);font-weight:600}
+.pr[data-l=phone] .fin{padding:14px;gap:8px}
+.pr[data-l=phone] .fin .t{flex-direction:column;gap:6px;text-align:center}
+.pr[data-l=phone] .fin .t.r{flex-direction:column}
+.pr[data-l=phone] .fin .t b{font-size:16px}
+.pr[data-l=phone] .fin .t small{display:none}
+.pr[data-l=phone] .pog{grid-template-columns:110px minmax(0,1fr)}
 .pr .offers{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
 .pr .of{border-radius:var(--r4);overflow:hidden;background:var(--p1);border:1px solid var(--ln);display:flex;flex-direction:column;transition:transform .3s var(--ease),border-color .25s,box-shadow .3s;position:relative}
 .pr .of:hover{transform:translateY(-4px);box-shadow:0 26px 40px -24px rgba(0,0,0,.9)}
@@ -9797,6 +10005,15 @@ const PR_CSS = `.pr{color-scheme:dark;--bg:#0a0b0e;--bg2:#0f1115;--p1:#14171c;--
 .pr .of .bd .ghost.sm{min-height:34px}
 .pr[data-l=land] .evart{aspect-ratio:3/1}
 .pr[data-l=land] .ch .art canvas.pxs{object-position:center 60%}
+.pr .pr-facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:14px}
+.pr .pr-facts>div{padding:10px;border-radius:10px;background:var(--bg2)}
+.pr .pr-facts b{display:block;font:800 20px/1.2 var(--cd)}
+.pr .pog .ph canvas{width:100%;height:100%;object-fit:contain;object-position:bottom}
+.pr .odds i:not(.ok):not(.wa):not(.bd){background:#3a404c}
+.pr .ol .dot:not(.ok):not(.wa):not(.bd){background:#3a404c}
+.pr .box .pcell small{font-size:10.5px;margin-left:2px}
+.pr[data-l=phone] .pr-facts b{font-size:16px}
+.pr .odds i:last-child:not(:first-child){border-radius:3px 12px 12px 3px}
 `;
 function PrStyle() { return <style>{PR_CSS}</style>; }
 
@@ -10446,135 +10663,6 @@ function BodySetup({ player, onConfirm }) {
           Continue <ChevronRight size={14} className="inline ml-1" />
         </PrimaryButton>
       </div>
-      </div>
-    </div>
-  );
-}
-
-function InvestmentsScreen({ player, onConfirm, onBack }) {
-  const [sel, setSel] = useState(() => ({ ...(player.investments || {}) }));
-  const salary = player.contractSalary || 0;
-  const pct = Object.keys(INVESTMENTS).reduce((t, k) => t + (sel[k] ? INVESTMENTS[k].pct : 0), 0);
-  const upkeep = Math.round(salary * pct);
-  const net = salary - upkeep;
-  const banked = net * 12;
-  const projected = player.money + banked * Math.max(1, 34 - player.age);
-  const tierNow = wealthTier(projected);
-
-  const META = {
-    trainer: { icon: "🏋️", sub: "Extra individual sessions year-round.",
-      eff: ["+1 attribute point every season"] },
-    science: { icon: "🩺", sub: "Load management, recovery and treatment.",
-      eff: ["Injury risk halved", "Guided rehab — full speed, zero risk", "Slower decline after 33", "+1 playable season"] },
-    family: { icon: "🏠", sub: "Send money home and fly them out to see you.",
-      eff: ["No settling-in dip when you move abroad", "A bad season stops spiralling"] },
-    agent: { icon: "📈", sub: "Real representation. Gets you seen, gets you in the room.",
-      eff: ["Scouts rate you 3 higher for overseas moves"], risk: true },
-  };
-
-  const toggle = (k) => {
-    const would = pct + (sel[k] ? -INVESTMENTS[k].pct : INVESTMENTS[k].pct);
-    if (!sel[k] && would > INVESTMENT_MAX_PCT) return;
-    setSel(a => ({ ...a, [k]: !a[k] }));
-  };
-
-  const barColor = pct > 0.6 ? C.red : pct > 0.45 ? C.trophyGold : "#10B981";
-
-  return (
-    <div className="min-h-full w-full flex items-start justify-center px-4 py-8" style={{ background: C.ink }}>
-      <div className="max-w-md w-full">
-        <div className="rounded-[22px] p-4 mb-3.5" style={{ background: C.ink2, border: `1px solid ${C.amber}` }}>
-          <div className="flex items-center gap-3.5">
-            <div>
-              <div className="f-mono text-[22px] leading-none" style={{ color: C.amberBright }}>{rm(salary)}</div>
-              <div className="f-mono text-[10px] uppercase tracking-widest mt-1" style={{ color: C.chalkDim }}>Monthly salary</div>
-            </div>
-            <div className="ml-auto text-right">
-              <div className="f-mono text-[19px] leading-none" style={{ color: pct > 0.6 ? C.red : C.chalk }}>{rm(net)}</div>
-              <div className="f-mono text-[10px] uppercase tracking-widest mt-1" style={{ color: C.chalkDim }}>Take-home</div>
-            </div>
-          </div>
-          <div className="h-[7px] rounded-full mt-3 overflow-hidden" style={{ background: C.ink3 }}>
-            <div className="h-full rounded-full" style={{ width: `${Math.min(100, pct * 100)}%`, background: barColor, transition: "width .18s" }} />
-          </div>
-          <div className="flex justify-between mt-1.5">
-            <span className="f-mono text-[9px]" style={{ color: C.chalkDim }}>{Math.round(pct * 100)}% committed</span>
-            <span className="f-mono text-[9px]" style={{ color: C.chalkDim }}>Max {Math.round(INVESTMENT_MAX_PCT * 100)}%</span>
-          </div>
-        </div>
-
-        {salary <= 0 && (
-          <p className="f-body text-[11px] mb-3 px-1" style={{ color: C.trophyGold }}>
-            You're not earning yet — investments become available once you sign a contract.
-          </p>
-        )}
-
-        {Object.keys(INVESTMENTS).map(k => {
-          const inv = INVESTMENTS[k], m = META[k], on = !!sel[k];
-          const would = pct + (on ? 0 : inv.pct);
-          const locked = !on && (would > INVESTMENT_MAX_PCT || salary <= 0);
-          return (
-            <div key={k} onClick={() => !locked && toggle(k)}
-              className={`rounded-2xl px-4 py-3.5 mb-2 transition ${locked ? "" : "choice-card cursor-pointer"}`}
-              style={{ background: on ? "#171310" : C.ink2, border: `1px solid ${on ? C.amber : C.line}`, opacity: locked ? 0.45 : 1, cursor: locked ? "not-allowed" : "pointer" }}>
-              <div className="flex items-start gap-3">
-                <div className="w-5 h-5 rounded-[10px] flex items-center justify-center shrink-0 mt-0.5 f-mono text-[12px]"
-                  style={{ background: on ? C.amber : "transparent", border: `1.5px solid ${on ? C.amber : C.line}`, color: C.ink }}>
-                  {on ? "✓" : ""}
-                </div>
-                <span className="text-[19px] w-7 text-center shrink-0">{m.icon}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="f-display text-[13.5px]" style={{ color: C.chalk }}>
-                    {inv.label}
-                    {m.risk && (
-                      <span className="f-mono text-[8.5px] ml-1.5 px-1.5 py-0.5 rounded-full"
-                        style={{ color: C.trophyGold, background: "rgba(250,204,21,0.1)", border: "1px solid rgba(250,204,21,0.35)" }}>HIGH RISK</span>
-                    )}
-                  </div>
-                  <div className="f-body text-[10.5px] mt-0.5" style={{ color: C.chalkDim }}>{m.sub}</div>
-                </div>
-                <div className="text-right shrink-0">
-                  <div className="f-mono text-[14px]" style={{ color: C.amberBright }}>{Math.round(inv.pct * 100)}%</div>
-                  <div className="f-mono text-[9px]" style={{ color: C.chalkDim }}>{rm(Math.round(salary * inv.pct))}/mo</div>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-1.5 mt-2.5 pl-[52px]">
-                {m.eff.map((e, i) => (
-                  <span key={i} className="f-mono text-[9px] px-2 py-1 rounded-full"
-                    style={{ background: C.ink3, color: "#10B981", border: `1px solid ${C.line}` }}>{e}</span>
-                ))}
-              </div>
-            </div>
-          );
-        })}
-
-        <div className="rounded-2xl px-4 py-3 mt-3" style={{ background: C.ink2, border: `1px solid ${C.line}` }}>
-          <div className="f-mono text-[10px] uppercase tracking-widest mb-2" style={{ color: C.chalkDim }}>Retirement outlook</div>
-          {WEALTH_TIERS.map(t => {
-            const isNow = t.id === tierNow.id;
-            return (
-              <div key={t.id} className="flex items-center gap-2 py-1.5"
-                style={{ opacity: isNow ? 1 : 0.32, borderBottom: t.id === "nothing_left" ? "none" : `1px solid ${C.line}` }}>
-                <span className="f-display text-[11.5px] w-[92px] shrink-0" style={{ color: isNow ? C.trophyGold : C.chalkDim }}>{t.label}</span>
-                <span className="f-body text-[9.5px] flex-1" style={{ color: C.chalkDim }}>{isNow ? t.note : ""}</span>
-                <span className="f-mono text-[9px]" style={{ color: C.chalkDim }}>{t.min ? rm(t.min) + "+" : "—"}</span>
-              </div>
-            );
-          })}
-        </div>
-
-        {pct > 0.6 && (
-          <p className="f-body text-[10.5px] mt-2.5 px-1" style={{ color: C.red }}>
-            Overcommitted — a released or injured season could leave you unable to keep these up.
-          </p>
-        )}
-
-        <div className="grid grid-cols-3 gap-2.5 mt-4">
-          <SecondaryButton full onClick={onBack}>Back</SecondaryButton>
-          <div className="col-span-2">
-            <PrimaryButton full onClick={() => onConfirm(sel)}>Confirm</PrimaryButton>
-          </div>
-        </div>
       </div>
     </div>
   );
@@ -16351,7 +16439,7 @@ export default function App() {
         <NegotiateOfferScreen player={player} club={negotiatingOffer.club} terms={negotiatingOffer.terms} onCommit={handleCommitNegotiation} />
       )}
       {screen === "trade_request" && player && player.clubId && (
-        <TradeRequestScreen player={player} club={getClub(player.clubId)} onCommit={handleCommitTradeRequest} />
+        <TradeRequestScreen player={player} club={getClub(player.clubId)} onCommit={handleCommitTradeRequest} onBack={() => setScreen("hub")} />
       )}
       {screen === "lifestyle_spending" && player && (
         <LifestyleSpendingScreen
