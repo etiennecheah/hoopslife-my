@@ -10922,7 +10922,7 @@ function TeamsScreen({ player }) {
           {teams.map(t => (
             <button key={t.id} className="pr-team" onClick={() => setTeam(t.id)}>
               {t.logo ? <PrTeamLogo team={{ name: t.name, logo: t.logo }} s={44} /> : t.flag ? <PrFlag state={t.flag} w={44} /> : <PrLogo k="c_harimau" s={44} />}
-              <span><b>{t.name}</b><small>{rec(t.id) ? `${rec(t.id)} · ${season && season.src === "you" ? "your season" : "simulated"}` : t.state || (cat === "youth" ? `${sub.toUpperCase()} state team` : "")}</small></span>
+              <span className="tx"><b>{t.name}</b><small>{rec(t.id) ? `${rec(t.id)} · ${season && season.src === "you" ? "your season" : "simulated"}` : t.state || (cat === "youth" ? `${sub.toUpperCase()} state team` : "")}</small></span>
               {season && season.champ === t.id && <Tg cls="or" style={{ height: 22 }}><Ic n="trophy" /></Tg>}
             </button>
           ))}
@@ -11740,7 +11740,7 @@ const PR_CSS = `.pr{color-scheme:dark;--bg:#0a0b0e;--bg2:#0f1115;--p1:#14171c;--
 .pr .pr-teamgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
 .pr .pr-team{display:flex;align-items:center;gap:12px;padding:12px;border-radius:14px;background:var(--p1);border:1px solid var(--ln);text-align:left;color:var(--tx);cursor:pointer;transition:border-color .2s,transform .2s}
 .pr .pr-team:hover{border-color:var(--or);transform:translateY(-1px)}
-.pr .pr-team b{display:block;font-size:14px}.pr .pr-team small{color:var(--mu);font-size:12px}.pr .pr-team>span{flex:1;min-width:0}
+.pr .pr-team b{display:block;font-size:14px}.pr .pr-team small{color:var(--mu);font-size:12px}.pr .pr-team>.tx{flex:1;min-width:0}.pr .pr-team>.lg,.pr .pr-team>.flag{flex:none}
 .pr .pr-modal{position:fixed;inset:0;z-index:80;background:rgba(5,6,9,.72);backdrop-filter:blur(4px);display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:28px 16px}
 .pr .pr-modal-in{width:100%;max-width:1080px}
 .pr .pr-ldr.click,.pr .click-n{cursor:pointer}.pr .click-n:hover{color:var(--or2)}
