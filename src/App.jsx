@@ -4073,6 +4073,7 @@ function generateClubOffers(p, { count = 3, excludeId = null, firstProSigning = 
     if (c.shootingClub && p.stats.shooting >= 70) interest += 15;
     if (c.tier === "semipro") interest = Math.max(interest, 45) + randInt(-8, 12);
     else interest += randInt(-15, 15); // noise
+    if ((p.agentInterest || []).includes(c.id)) interest += 20; // your agent heard they want you
     return { club: c, interest };
   });
   scored.sort((a, b) => b.interest - a.interest);
@@ -4893,7 +4894,7 @@ function useLayoutMode() {
   return lay;
 }
 
-const RD_FREE = new Set(["hub", "league", "pathway", "lifestyle_spending", "career_highlights", "investments", "legacy", "teams", "social"]);
+const RD_FREE = new Set(["hub", "league", "pathway", "lifestyle_spending", "career_highlights", "investments", "legacy", "teams", "social", "agent"]);
 const RD_NO_SHELL = new Set(["start", "look", "body_setup", "hall_of_fame", "achievement_gallery", "retired"]);
 const RD_ICONS = {
   hub: (s) => <Home size={s} />, league: (s) => <Trophy size={s} />, pathway: (s) => <Flag size={s} />,
@@ -7420,9 +7421,12 @@ function mdEvText(e, name) {
   if (e.make) return e.three ? `${name} drills a three` : ["scores at the rim", "hits the pull-up", "finishes through contact", "knocks down the jumper"][(name.length + e.t) % 4].replace(/^/, name + " ");
   return e.blk ? `${name}'s shot is blocked` : e.three ? `${name} misses from deep` : `${name} misses the jumper`;
 }
+/* Where the live feed was, so leaving through the menu and coming back resumes it. */
+let MD_LIVE_POS = { g: null, n: 0 };
 function MdLiveScreen({ player, comp, game, onClutch, onDone }) {
   const lay = useLayoutMode();
-  const [shown, setShown] = useState(0);
+  const [shown, setShown] = useState(() => MD_LIVE_POS.g === game ? MD_LIVE_POS.n : 0);
+  useEffect(() => { MD_LIVE_POS = { g: game, n: shown }; }, [game, shown]);
   const [speed, setSpeed] = useState(1);
   const [run, setRun] = useState(true);
   const [clutchBang, setClutchBang] = useState(null);
@@ -7711,7 +7715,7 @@ function prCrumb(p) {
   return `Season ${p.year || ""}${lg ? " · " + lg : ""}${p.teamName ? " · " + p.teamName : ""}`;
 }
 const PR_TITLES = {
-  legacy: "Legacy", teams: "Teams", investments: "Investments", social: "Social", hall_of_fame: "Hall of Fame", achievement_gallery: "Achievements", leg_offers: "League-only offers", dl_invite: "D-League invite",
+  legacy: "Legacy", teams: "Teams", investments: "Investments", social: "Social", agent: "Agent", hall_of_fame: "Hall of Fame", achievement_gallery: "Achievements", leg_offers: "League-only offers", dl_invite: "D-League invite",
   offseason_plan: "Off-season", training: "Training", creation_build: "Build your player", event: "Career event", result: "Season result",
   u15_result: "State selection", u15_tournament: "Tournament result", u15_shortlist: "Youth shortlist", u15_bootcamp_result: "Bukit Jalil",
   age16_u16_result: "Age 16", age16_u17_result: "Age 16", a17_result: "Age 17", a17_shortlist: "U18 shortlist", a17_bootcamp_result: "Bukit Jalil",
@@ -7912,7 +7916,8 @@ function prLeaguesFor(p, all) {
 /* =====================================================================
    SHELL — prototype side menu, top bar and phone tabs
 ===================================================================== */
-const PR_NAV_IC = { hub: "home", league: "table", pathway: "route", lifestyle_spending: "cash", career_highlights: "star", legacy: "crown", teams: "users", investments: "chart", social: "phone" };
+const PR_COMP_SCREENS = new Set(["comp", "md_pregame", "md_live", "md_box"]);
+const PR_NAV_IC = { hub: "home", league: "table", pathway: "route", lifestyle_spending: "cash", career_highlights: "star", legacy: "crown", teams: "users", investments: "chart", social: "phone", agent: "user", matchday: "play" };
 function Shell({ show, screen, player, onNav, onUpdate, children }) {
   const lay = useLayoutMode();
   const [rotSeen, setRotSeen] = useState(() => { try { return window.localStorage.getItem("hl_rot_seen") === "1"; } catch (e) { return true; } });
@@ -7931,13 +7936,13 @@ function Shell({ show, screen, player, onNav, onUpdate, children }) {
   }, [onNav]);
   useEffect(() => { setNpc(null); }, [screen]);
   if (!show || !player) return <div data-l={lay} className="rd-root pr">{children}</div>;
-  const free = RD_FREE.has(screen);
+  const free = RD_FREE.has(screen) || (!!player.mdComp && PR_COMP_SCREENS.has(screen));
   const adult = player.age >= 18;
-  const items = [["hub", "Hub", true], ["league", "League", true], ["teams", "Teams", true], ["pathway", "Pathway", true], ["lifestyle_spending", "Lifestyle", adult], ["investments", "Investments", adult], ["social", "Social", true], ["career_highlights", "Highlights", adult], ["legacy", "Legacy", true]].filter(i => i[2]);
+  const items = [["matchday", "Matchday", !!player.mdComp], ["hub", "Hub", true], ["league", "League", true], ["teams", "Teams", true], ["pathway", "Pathway", true], ["lifestyle_spending", "Lifestyle", adult], ["investments", "Investments", adult], ["social", "Social", true], ["agent", "Agent", adult && player.stage === "pro"], ["career_highlights", "Highlights", adult], ["legacy", "Legacy", true]].filter(i => i[2]);
   const look = playerLook(player);
   const dismissRot = () => { setRotSeen(true); try { window.localStorage.setItem("hl_rot_seen", "1"); } catch (e) { /* ignore */ } };
   const nav = (b) => items.map(([id, label]) => (
-    <button key={id} className={(b ? "" : "nav rd-nav-x ") + (screen === id ? "on" : "")} disabled={!free} onClick={() => free && onNav(id)} title={free ? label : "Finish this step first"}>
+    <button key={id} className={(b ? "" : "nav rd-nav-x ") + ((screen === id || (id === "matchday" && PR_COMP_SCREENS.has(screen))) ? "on" : "") + (id === "matchday" ? " pr-md" : "")} disabled={!free} onClick={() => free && onNav(id)} title={free ? label : "Finish this step first"}>
       <Ic n={PR_NAV_IC[id]} /><span>{label}</span>
     </button>
   ));
@@ -8045,6 +8050,14 @@ function prUpNext(p) {
 /* The coming season's first game, from the same schedule the season will use. */
 function prOpener(p) {
   try {
+    if (p.mdComp && p.mdComp.games) {
+      // mid-competition: the next game you're in
+      const c = p.mdComp, me = c.myTeam;
+      const mine = c.games.filter(g => g.h === me || g.a === me);
+      const nx = mine.find(g => !g.res);
+      if (!nx || !c.teams[nx.h] || !c.teams[nx.a]) return null;
+      return { home: c.teams[nx.h], away: c.teams[nx.a], d: nx.d, venue: c.teams[nx.h].venue, n: mine.length, at: mine.indexOf(nx) + 1, kind: c.kind };
+    }
     if (!p.clubId || !p.league || p.abroad || p.uba || p.hblSeasonPending || !LEAGUE[p.league]) return null;
     const world = mdWorldAt(p.mdWorld ? JSON.parse(JSON.stringify(p.mdWorld)) : null, p.year, MD_NAMES);
     const comp = mdNewLeague({ kind: p.league, year: p.year, p, world, names: MD_NAMES, clubsMeta: prClubsMeta(p.league), myClub: p.clubId, myRole: p.starterStatus || "Bench" });
@@ -8209,13 +8222,16 @@ function PrLeaders({ L, player, onOpenLeague }) {
     </section>
   );
 }
-function Hub({ player, onPlaySeason, onRetireConsider, onManageInvestments, onRequestTrade, onOpenLifestyle, onOpenCareerHighlights, onOpenLeague, onOpenPathway, onOpenSocial, banner, summary }) {
+function Hub({ player, onPlaySeason, onRetireConsider, onManageInvestments, onRequestTrade, onOpenLifestyle, onOpenCareerHighlights, onOpenLeague, onOpenPathway, onOpenSocial, onBackToComp, banner, summary }) {
   const p = player;
+  const inComp = !!p.mdComp && !!onBackToComp;
+  const playFn = inComp ? onBackToComp : onPlaySeason;
+  const playLbl = (d) => inComp ? "Back to your competition" : d;
   const overall = computeOverall(p.stats, p.position);
   const youth = prIsYouth(p);
   const leagues = useMemo(() => prLeaguesFor(p), [p.year, p.league, p.mdLeagueLast, p.mdComp]);
   const nx = useMemo(() => youth ? prUpNext(p) : null, [p]);
-  const opener = useMemo(() => youth ? null : prOpener(p), [p.year, p.clubId, p.league, p.seasonNum]);
+  const opener = useMemo(() => youth ? null : prOpener(p), [p.year, p.clubId, p.league, p.seasonNum, p.mdComp]);
   const wire = useMemo(() => prWire(p, summary, leagues), [p, summary, leagues]);
   const sn = p.seasonNum || 1;
   const lgShort = p.league && LEAGUE[p.league] ? (p.league === "mbl" ? "MBL" : LEAGUE[p.league].short) : null;
@@ -8223,14 +8239,14 @@ function Hub({ player, onPlaySeason, onRetireConsider, onManageInvestments, onRe
     .concat(youth && nx ? nx.steps.map(x => [x[0], x[1], ""]) : lgShort ? [[`${lgShort} regular season`, opener ? `${opener.n} games · play or sim each one` : "Play or sim each game", ""], ["Playoffs", p.league === "mbl" ? "Top 4 · best-of-3 semis, best-of-5 final" : "Top 8 · single-game knockouts", ""]]
       : p.uba ? [["UBA season", p.ubaTeamName || "Taiwan", ""], ["Next year", "Stay or turn pro", ""]] : [["The season", p.teamName || "Your season", ""], ["Next year", "Offers and decisions", ""]]);
   const showInvest = p.age >= 18 && p.contractSalary > 0;
-  const showTrade = p.clubId && !p.abroad && (p.seasonsAtClub || 0) >= 1;
+  const showTrade = p.clubId && !p.abroad && (p.seasonsAtClub || 0) >= 1 && !p.mdComp && !p.mdYear;
   const acts = !youth ? [
     showInvest && ["cash", "Investments", investmentPct(p) > 0 ? `${Object.keys(INVESTMENTS).filter(k => p.investments && p.investments[k]).length} active` : "Not started", onManageInvestments],
     ["heart", "Lifestyle", p.homeTier ? HOME_TIERS.find(t => t.id === p.homeTier).label : "No home yet", onOpenLifestyle],
     showTrade && ["swap", "Request a trade", p.tradeRequestCooldown > 0 ? `${p.tradeRequestCooldown} season${p.tradeRequestCooldown === 1 ? "" : "s"} until you can ask` : `${p.seasonsAtClub} season${p.seasonsAtClub === 1 ? "" : "s"} at ${p.teamName}`, p.tradeRequestCooldown > 0 ? null : onRequestTrade],
     ["phone", "Social", `${fmtK(socialOf(p).tt + socialOf(p).ig)} followers · ${SOCIAL_LV[socialOf(p).level].label}`, onOpenSocial],
     ["star", "Career highlights", (p.careerHighlights || []).length ? `${p.careerHighlights.length} standout game${p.careerHighlights.length === 1 ? "" : "s"}` : "No standout games yet", onOpenCareerHighlights],
-    p.age >= 30 && ["x", "Retire", "End your professional career", onRetireConsider],
+    p.age >= 30 && !p.mdComp && !p.mdYear && ["x", "Retire", "End your professional career", onRetireConsider],
   ].filter(Boolean) : [];
   const L0 = leagues.find(l => l.mine) || leagues[0];
   return (
@@ -8246,13 +8262,13 @@ function Hub({ player, onPlaySeason, onRetireConsider, onManageInvestments, onRe
               <div><b style={{ font: "800 24px/1 var(--cd)", textTransform: "uppercase", display: "block" }}>{nx.title}</b><small style={{ color: "var(--mu)" }}>{nx.sub}</small></div>
             </div>
             <div className="meta">{nx.meta.map(([ic, t], i) => <span key={i}><Ic n={ic} />{t}</span>)}</div>
-            <button className="cta" style={{ width: "100%" }} onClick={onPlaySeason}>Play season {sn} <Ic n="play" /></button>
+            <button className="cta" style={{ width: "100%" }} onClick={playFn}>{playLbl(`Play season ${sn}`)} <Ic n="play" /></button>
             <PrSrc>Odds from the game's own rules</PrSrc>
           </section>
         )}
         {!youth && (
           <section className="pn next c4" data-a="">
-            <h3><Ic n="cal" /> {opener ? "Next game" : "Next season"}<small>{opener ? `Game 1 of ${opener.n}` : `Season ${sn}`}</small></h3>
+            <h3><Ic n="cal" /> {opener ? "Next game" : "Next season"}<small>{opener ? `Game ${opener.at || 1} of ${opener.n}` : `Season ${sn}`}</small></h3>
             {opener ? <>
               <div className="pr-vs">
                 <div><PrTeamLogo team={opener.home} s={72} /><b>{opener.home.short || opener.home.name}</b></div>
@@ -8267,7 +8283,7 @@ function Hub({ player, onPlaySeason, onRetireConsider, onManageInvestments, onRe
               </div>
               <div className="meta"><span><Ic n="flag" />{p.starterStatus || p.ubaRole || "Squad player"}</span></div>
             </>}
-            <button className="cta" style={{ width: "100%" }} onClick={onPlaySeason}>{opener ? "Start the season" : `Play season ${sn}`} <Ic n="play" /></button>
+            <button className="cta" style={{ width: "100%" }} onClick={playFn}>{playLbl(opener ? "Start the season" : `Play season ${sn}`)} <Ic n="play" /></button>
             {opener && <PrSrc>Fixture from the simulated {lgShort} schedule</PrSrc>}
           </section>
         )}
@@ -8286,7 +8302,7 @@ function Hub({ player, onPlaySeason, onRetireConsider, onManageInvestments, onRe
         <section className="pn c12" data-a="">
           <h3><Ic n="route" /> Your season {sn}, step by step{onOpenPathway && <a onClick={onOpenPathway}>See the whole pathway</a>}</h3>
           <div className="road">{road.map((r, i) => (
-            <button key={i} className={"rs " + r[2]} onClick={i === 0 ? onPlaySeason : undefined} style={i === 0 ? undefined : { cursor: "default" }}>
+            <button key={i} className={"rs " + r[2]} onClick={i === 0 ? playFn : undefined} style={i === 0 ? undefined : { cursor: "default" }}>
               <span className="n">{i + 1}</span><span><b>{r[0]}</b><small>{r[1]}</small></span>
             </button>
           ))}</div>
@@ -8318,7 +8334,7 @@ function Hub({ player, onPlaySeason, onRetireConsider, onManageInvestments, onRe
           </section>
         )}
       </div>
-      <PrNext onClick={onPlaySeason}>{youth ? `Play season ${sn}` : opener ? "Start the season" : `Play season ${sn}`}</PrNext>
+      <PrNext onClick={playFn}>{playLbl(youth ? `Play season ${sn}` : opener ? "Start the season" : `Play season ${sn}`)}</PrNext>
     </PrPage>
   );
 }
@@ -10072,6 +10088,7 @@ function msApply(p0, ev, choiceId, hit) {
     if (choiceId === "accept") {
       p.natCode = ev.code; p.natFrom = "MAS"; p.natYear = p.year;
       add("popularity", -15);
+      incidentAdd(p, { kind: "nationality", stat: "popularity", loss: hit === 0 ? 5 : 15 });
       if (hit === 0) { add("popularity", 10); p.money = (p.money || 0) + 30000; p.totalEarnings = (p.totalEarnings || 0) + 30000; rel("family", -10); add("morale", -5); text = `The papers clear in weeks. You'll wear ${nat}'s colours at this year's SEA Games. RM 30,000 signing fee. Your family is quiet about it.`; label = "Paperwork clears"; }
       else { p.natWait = p.year + 2; text = `The paperwork stalls in a ministry somewhere. You miss this SEA Games and play for ${nat} at the next one. Malaysia is closed to you either way.`; tone = "wa"; label = "Paperwork stalls"; }
     } else { rel("family", 5); add("popularity", 5); p.natAgain = p.year + 2; text = "You thank him and say no. Your family is proud, and the story gets out. Malaysian fans like it."; label = "You stay Malaysian"; }
@@ -10082,6 +10099,7 @@ function msApply(p0, ev, choiceId, hit) {
       else {
         add("popularity", -15); rel("coach", -12); p.money = Math.max(0, (p.money || 0) - 5000);
         const nx = nextMine(); if (comp && nx) comp.injuredUntil = Math.max(comp.injuredUntil || -1, nx.i);
+        incidentAdd(p, { kind: "alcohol", stat: "popularity", loss: 15 });
         text = "A video ends up online. The club fines you RM 5,000 and sits you for the next game."; tone = "bd"; label = "It goes wrong";
       }
     } else if (choiceId === "soft") { rel("team", 3); text = "You go, you laugh, you drive two teammates home. Nobody minds the soft drinks."; label = "Good call"; }
@@ -10102,7 +10120,7 @@ function msApply(p0, ev, choiceId, hit) {
     } else if (choiceId === "report") {
       p.fixReported = true;
       if (hit === 0) { add("popularity", 12); rel("coach", 10); ach("integrity"); text = "You hand the messages to the league's integrity unit. Two arrests follow. The league puts your name in its statement."; label = "Hailed for it"; }
-      else { rel("team", -15); add("morale", -5); text = "You did the right thing, but a teammate's cousin was involved. The locker room goes quiet around you."; tone = "wa"; label = "The room turns on you"; }
+      else { rel("team", -15); add("morale", -5); incidentAdd(p, { kind: "report", stat: "team", loss: 15 }); text = "You did the right thing, but a teammate's cousin was involved. The locker room goes quiet around you."; tone = "wa"; label = "The room turns on you"; }
     } else {
       if (hit === 1) { p.fixRetry = p.year + 1; text = "You delete the number. They don't delete yours."; tone = "wa"; label = "They'll be back"; }
       else { text = "You block the number and never hear from them again."; label = "Left alone"; }
@@ -10126,6 +10144,7 @@ function msBan(p, comp) {
   p.popularity = clamp((p.popularity || 0) - 30);
   p.relationships = { ...p.relationships, coach: clamp((p.relationships.coach || 0) - 25) };
   p.contractSalary = 0;
+  incidentAdd(p, { kind: "doping", stat: "popularity", loss: 30 });
   if (comp) { comp.seasonOut = true; comp.stripAwards = true; comp.banned = true; }
   p.history = [...(p.history || []), { age: p.age, tierLabel: "Banned", note: "Tested positive for a banned substance. Two-season ban, contract voided, awards stripped." }];
 }
@@ -11194,6 +11213,7 @@ function invYearEnd(p0) {
         p.morale = clamp((p.morale || 50) - 15); p.relationships.family = clamp((p.relationships.family || 50) - 10);
         p.history = [...(p.history || []), { age: A, tierLabel: "Bankrupt", note: `The market collapse wiped out ${rm(before)} in shares, more than half of everything you had. Bankrupt: the bank account is empty and the house is sold.` }];
         notes.push("You're bankrupt.");
+        incidentAdd(p, { kind: "bankrupt", stat: "morale", loss: 15 });
       } else p.history = [...(p.history || []), { age: A, tierLabel: "Market collapse", note: `Lost the whole ${rm(before)} portfolio in a market collapse.` }];
     } else notes.push(`Shares ${pct >= 0 ? "up" : "down"} ${Math.abs(pct).toFixed(1)}%: portfolio ${rm(after)}.`);
   }
@@ -11219,7 +11239,7 @@ function invYearEnd(p0) {
     p.popularity = clamp((p.popularity || 0) + L.pop + (viral ? 10 : 0) - (backlash ? 12 : 0));
     p.fatigue = clamp((p.fatigue || 0) + L.fat);
     if (L.coach) p.relationships.coach = clamp((p.relationships.coach || 50) + L.coach);
-    if (backlash) p.relationships.coach = clamp((p.relationships.coach || 50) - 6);
+    if (backlash) { p.relationships.coach = clamp((p.relationships.coach || 50) - 6); incidentAdd(p, { kind: "backlash", stat: "popularity", loss: 12 }); }
     if (pay) { p.money = (p.money || 0) + pay; p.totalEarnings = (p.totalEarnings || 0) + pay; }
     if (viral) notes.push("A clip of yours went viral.");
     if (backlash) notes.push("A post caused a backlash online.");
@@ -11334,6 +11354,255 @@ function SocialScreen({ player, onUpdate }) {
         </section>
         {pts.length > 1 && <section className="pn c7 l12" data-a=""><h3><Ic n="fire" /> Followers by year<small>thousands, both platforms</small></h3><PrMiniArc pts={pts} /></section>}
         {(so.log || []).length > 0 && <section className="pn c5 l12" data-a=""><h3><Ic n="star" /> Moments</h3>{so.log.slice().reverse().map((x, i) => <div key={i} className="dec"><span className={"k " + (x.t === "viral" ? "you" : "chance")}><Ic n={x.t === "viral" ? "fire" : "x"} /></span><div><b>{x.t === "viral" ? "Went viral" : "Backlash"}</b><small>{x.y}</small></div></div>)}</section>}
+      </div>
+    </PrPage>
+  );
+}
+/* =====================================================================
+   AGENT — rumours, damage control and approaches to other clubs.
+   Everyone with a pro career has a basic agent; the Elite Agent
+   investment makes him sharper. He takes 5% of a deal's first year.
+===================================================================== */
+const AGENT_FEE = 0.05;
+const agentElite = p => hasInvestment(p, "agent");
+function incidentAdd(p, inc) {
+  p.incidents = [...(p.incidents || []), { id: `${inc.kind}:${p.year}:${(p.incidents || []).length}`, y: p.year, done: false, ...inc }].slice(-20);
+  return p;
+}
+const INC_LBL = { alcohol: "Night out gone wrong", backlash: "Online backlash", doping: "Positive drug test", report: "Locker room turned on you", nationality: "Fans at home turned on you", bankrupt: "Bankruptcy", benched: "Benched for asking to leave" };
+const STAT_LBL = { popularity: "popularity", team: "team chemistry", coach: "coach trust", morale: "morale" };
+/* Real release odds: the same sum the club uses when it decides. */
+function agentReleaseOdds(p) {
+  const club = getClub(p.clubId);
+  if (!club) return null;
+  const overall = computeOverall(p.stats, p.position);
+  const rating = overall * 0.7 + (p.popularity || 0) * 0.3;
+  const why = [];
+  let c = 0.05;
+  if (rating < club.prestige - 25) { c += 0.15; why.push("Your level is well below what the club expects"); }
+  if (p.relationships.coach < 25) { c += 0.12; why.push("The coach has lost faith in you"); }
+  if (p.relationships.team < 25) { c += 0.08; why.push("The locker room has cooled on you"); }
+  if (p.morale < 25) { c += 0.06; why.push("Your morale is low and it shows"); }
+  if (p.age >= 33) { c += 0.05; why.push("Age: clubs start planning without you"); }
+  if (p.relationships.family >= 80) c -= 0.04;
+  c = Math.max(0, Math.min(0.6, c));
+  if (club.bankruptcyChance) why.push(`${club.name} has money trouble`);
+  return { c, why };
+}
+/* How well the last league went (0-99), from the season lines. */
+function agentRecentForm(p) {
+  const done = (p.mdYear && (p.mdYear.done || []).length ? p.mdYear.done : (p.mdYearLast && p.mdYearLast.y >= p.year - 1 ? p.mdYearLast.done : [])) || [];
+  const gs = done.filter(d => d.gp && d.tr != null);
+  if (!gs.length) return null;
+  let f = Math.max(...gs.map(d => d.tr));
+  if (gs.some(d => d.champion)) f += 4;
+  if ((p.popularity || 0) >= 70) f += 4;
+  return f;
+}
+/* Build this window's rumours (kept on the save so they don't change on every visit). */
+const agentKey = p => `${p.year}:${p.clubId || "-"}:${p.mdYear ? p.mdYear.i : "x"}:${(p.mdYear && p.mdYear.done ? p.mdYear.done.length : 0)}`;
+function agentBuild(p0) {
+  const p = { ...p0 };
+  const key = agentKey(p);
+  if (p.agent && p.agent.key === key) return p;
+  const elite = agentElite(p);
+  const acc = elite ? 0.9 : 0.7;
+  const r = Math.random;
+  // waiver watch
+  const odds = agentReleaseOdds(p);
+  let waiver = null;
+  if (odds) {
+    const real = odds.c < 0.1 ? 0 : odds.c < 0.22 ? 1 : 2;
+    const sure = r() < acc;
+    const lvl = sure ? real : Math.max(0, Math.min(2, real + (r() < 0.5 ? -1 : 1)));
+    waiver = { lvl, sure, why: odds.why.length ? odds.why : ["Nothing stands out: form, coach and locker room are all fine."] };
+  }
+  // clubs interested: only after a good recent season
+  const form = agentRecentForm(p);
+  const n = form == null ? 0 : form < 38 ? 0 : form < 48 ? 1 + (r() < 0.4 ? 1 : 0) : form < 58 ? 2 + (r() < 0.4 ? 1 : 0) : 3 + (r() < 0.5 ? 1 : 0);
+  const interest = [];
+  if (n > 0) {
+    let offers = [];
+    try { offers = generateClubOffers({ ...p, agentInterest: [], stats: { ...p.stats } }, { count: n + 2, excludeId: p.clubId }); } catch (e) { offers = []; }
+    offers.slice(0, n).forEach((o, i) => interest.push({ clubId: o.club.id, name: o.club.name, lvl: i === 0 && form >= 55 ? "Strong" : i < 2 ? "Keen" : "Watching", sure: true, league: o.terms.league }));
+    if (!elite && interest.length && r() > acc) { const fake = DLEAGUE_CLUBS.filter(c => c.id !== p.clubId && !interest.some(x => x.clubId === c.id)); if (fake.length) { const f = fake[Math.floor(r() * fake.length)]; interest.push({ clubId: f.id, name: f.name, lvl: "Watching", sure: false }); } }
+  }
+  // around the league: your connections and your own locker room
+  const news = [];
+  try {
+    const y = p.year;
+    (typeof connList === "function" ? connList(p, 30) : []).forEach(c => {
+      if (news.length >= 6) return;
+      const now = mdWhereIs(c.k, y, MD_NAMES), before = y > MD_BASE_YEAR ? mdWhereIs(c.k, y - 1, MD_NAMES) : null;
+      if (now && before && now.club !== before.club) news.push({ t: `${c.n} has moved from ${npcTeamName(before.club)} to ${npcTeamName(now.club)}.`, k: c.k, sure: true });
+      else if (!now && before && before.lvl === "mbl") news.push({ t: `${c.n} was let go by ${npcTeamName(before.club)} and is without a club.`, k: c.k, sure: true });
+      else if (now && !before && now.lvl === "mbl") news.push({ t: `${c.n} has broken into the MBL with ${npcTeamName(now.club)}.`, k: c.k, sure: true });
+    });
+    if (p.league === "mbl" && p.clubId) {
+      const a = (mdWorldAt(null, y, MD_NAMES).clubs[p.clubId] || []), b = (mdWorldAt(null, y + 1, MD_NAMES).clubs[p.clubId] || []);
+      a.filter(e => !b.some(x => x.k === e.k)).slice(0, 3).forEach(e => news.push({ t: `Word is ${e.n} won't be back at ${npcTeamName(p.clubId)} next season.`, k: e.k, sure: r() < acc }));
+      b.filter(e => e.imp && !a.some(x => x.k === e.k)).slice(0, 1).forEach(e => news.push({ t: `${npcTeamName(p.clubId)} are close to signing ${e.n} as an import for next season.`, k: e.k, sure: r() < acc }));
+    }
+  } catch (e) { /* rumours are extras */ }
+  p.agent = { key, waiver, interest, news, approaches: (p.agent && p.agent.y === p.year) ? p.agent.approaches || 0 : 0, y: p.year, last: (p.agent && p.agent.last) || null };
+  p.agentInterest = interest.filter(x => x.sure).map(x => x.clubId);
+  return p;
+}
+/* Damage control. */
+const AGENT_PR = [
+  { id: "apology", label: "Public apology", cost: 2000, odds: 0.6, win: 0.5, lose: 0, note: "Recovers half of what you lost" },
+  { id: "charity", label: "Charity appearance", cost: 10000, odds: 0.8, win: 0.5, lose: 0, family: 3, note: "Recovers half · family +3" },
+  { id: "interview", label: "Exclusive interview", cost: 0, odds: 0.5, win: 1, lose: -0.5, note: "Recovers it all; if it goes badly, it gets worse" },
+];
+function agentRepair(p0, incId, optId) {
+  const p = { ...p0, relationships: { ...p0.relationships } };
+  const inc = (p.incidents || []).find(x => x.id === incId);
+  const o = AGENT_PR.find(x => x.id === optId);
+  if (!inc || !o || inc.done) return { p: p0, text: "" };
+  if ((p.money || 0) < o.cost) return { p: p0, text: "You can't afford that." };
+  p.money = (p.money || 0) - o.cost;
+  const odds = Math.min(0.95, o.odds + (agentElite(p) ? 0.1 : 0));
+  const ok = Math.random() < odds;
+  const amt = Math.round(inc.loss * (ok ? o.win : o.lose));
+  const st = inc.stat;
+  if (st === "popularity" || st === "morale") p[st] = clamp((p[st] || 0) + amt);
+  else p.relationships[st] = clamp((p.relationships[st] || 0) + amt);
+  if (ok && o.family) p.relationships.family = clamp((p.relationships.family || 0) + o.family);
+  p.incidents = p.incidents.map(x => x.id === incId ? { ...x, done: true, fix: optId, ok } : x);
+  const text = ok ? `${o.label} worked: ${STAT_LBL[st]} ${amt >= 0 ? "+" : ""}${amt}.` : amt < 0 ? `${o.label} backfired: ${STAT_LBL[st]} ${amt}.` : `${o.label} didn't land. Nothing changed.`;
+  p.history = [...(p.history || []), { age: p.age, tierLabel: "Damage control", note: `${INC_LBL[inc.kind] || "Bad news"}: ${text}` }];
+  return { p, text };
+}
+/* Approach a club: will they have you, and on what terms? */
+function agentApproach(p0, clubId) {
+  const p = { ...p0, relationships: { ...p0.relationships } };
+  const club = getClub(clubId);
+  p.agent = { ...(p.agent || {}), approaches: ((p.agent && p.agent.y === p.year) ? p.agent.approaches || 0 : 0) + 1, y: p.year };
+  if (!club) return { p, res: { yes: false, text: "That club isn't taking calls." } };
+  if (p.lifeBan) return { p, res: { yes: false, clubId, text: "Nobody will take the call. You're banned for life." } };
+  if ((p.banSeasons || 0) > 0) return { p, res: { yes: false, clubId, text: `${club.name} won't talk until your ban is served.` } };
+  const overall = computeOverall(p.stats, p.position);
+  const rating = overall * 0.7 + (p.popularity || 0) * 0.3;
+  let terms = null;
+  try { terms = computeClubTerms({ ...p, stats: { ...p.stats } }, club, {}); } catch (e) { terms = null; }
+  if (!terms) return { p, res: { yes: false, clubId, text: `${club.name} aren't hiring.` } };
+  if (club.tier !== "semipro" && p.studying && p.age <= 23) return { p, res: { yes: false, clubId, text: `${club.name} can't sign you while you're studying. Semi-pro clubs only until you graduate.` } };
+  if (club.tier === "semipro" && p.age > 23) return { p, res: { yes: false, clubId, text: `${club.name} only run D-League sides. You're past 23.` } };
+  let fit = 0.55 - Math.max(0, club.prestige - rating) * 0.025 + Math.max(0, rating - club.prestige) * 0.004;
+  if (club.prefersLocal && club.prefersLocal === p.hometown) fit += 0.1;
+  if ((p.agentInterest || []).includes(clubId)) fit += 0.2;
+  if (agentElite(p)) fit += 0.1;
+  const form = agentRecentForm(p);
+  if (form != null) fit += (form - 45) * 0.006;
+  fit = Math.max(0.03, Math.min(0.92, fit));
+  const yes = Math.random() < fit;
+  if (!yes) {
+    const why = club.prestige > rating + 12 ? "They feel you're not at their level yet." : (p.popularity || 0) < 30 ? "They don't know enough about you." : "Their roster is set for now.";
+    const res = { yes: false, clubId, text: `${club.name} said no. ${why}` };
+    p.agent.last = res;
+    return { p, res };
+  }
+  // under contract: your club must agree to let you go
+  let release = null;
+  if (p.clubId && (p.contractYearsLeft || 0) > 0 && p.clubId !== clubId) {
+    const cur = getClub(p.clubId) || {};
+    const value = Math.min(0.85, Math.max(0.1, 0.25 + (rating - (cur.prestige || 50)) * 0.02 + (p.starterStatus === "Starter" ? 0.15 : 0) + ((p.relationships.coach || 50) - 50) * 0.004));
+    const letGo = Math.random() >= value;
+    release = { letGo, cur: cur.name || "Your club" };
+  }
+  const salary = Math.round(terms.salary / 10) * 10;
+  const res = { yes: true, clubId, club: club.name, terms: { ...terms, salary }, release, text: release && !release.letGo ? `${club.name} want you, but ${release.cur} won't release you from your contract.` : `${club.name} want you.` };
+  if (release && !release.letGo) p.relationships.coach = clamp((p.relationships.coach || 50) - 3);
+  p.agent.last = res;
+  return { p, res };
+}
+
+function AgentScreen({ player, onUpdate, onSign }) {
+  const p = player;
+  const fresh = !!(p.agent && p.agent.key === agentKey(p));
+  useEffect(() => { if (!fresh) onUpdate(agentBuild(p)); }, [fresh]);
+  const A = p.agent || {};
+  const elite = agentElite(p);
+  const [pr, setPr] = useState(null);
+  const [pick, setPick] = useState("");
+  const [busy, setBusy] = useState(false);
+  const midComp = !!p.mdComp || !!p.mdYear;
+  const left = Math.max(0, 2 - ((A.y === p.year ? A.approaches : 0) || 0));
+  const clubs = [...MD_MBL_CLUBS.map(id => getClub(id)).filter(Boolean), ...DLEAGUE_CLUBS.filter(c => !MD_MBL_CLUBS.includes(c.id)).map(c => getClub(c.id) || c)].filter(c => c.id !== p.clubId);
+  const open = (p.incidents || []).filter(x => !x.done).slice(-4);
+  const last = A.last && A.y === p.year ? A.last : null;
+  const W = ["Low", "Medium", "High"], WC = ["pos", "", "neg"];
+  const approach = () => { if (!pick || busy) return; setBusy(true); setTimeout(() => { const r = agentApproach(p, pick); onUpdate(r.p); setBusy(false); }, 500); };
+  const sign = () => {
+    if (!last || !last.yes || (last.release && !last.release.letGo)) return;
+    const fee = Math.round(last.terms.salary * 12 * AGENT_FEE);
+    onSign({ club: getClub(last.clubId), terms: last.terms }, fee);
+  };
+  return (
+    <PrPage>
+      <PrHead lbl={`${p.name} · ${p.year}`} title="Your agent" desc={elite ? "Elite representation: well connected, rarely wrong, and clubs return his calls." : "A basic agent: he hears things, but not everything he hears is true. The Elite Agent investment makes him sharper."}
+        right={<span className="chip"><Ic n="user" />{elite ? "Elite agent" : "Basic agent"} · {Math.round(AGENT_FEE * 100)}% fee</span>} />
+      <div className="g">
+        <section className="pn c4 l12" data-a="">
+          <h3><Ic n="shield" /> Waiver watch</h3>
+          {!A.waiver ? <p style={{ color: "var(--di)", margin: 0, fontSize: 13 }}>You're not under contract at a club right now.</p> : <>
+            <div className="pr-wv"><b className={"num " + WC[A.waiver.lvl]}>{W[A.waiver.lvl]}</b><small>risk of being waived{A.waiver.sure ? "" : " · unconfirmed"}</small></div>
+            {A.waiver.why.map((w, i) => <div key={i} className="dec"><span className={"k " + (A.waiver.lvl ? "chance" : "you")}><Ic n={A.waiver.lvl ? "x" : "check"} /></span><div><small style={{ color: "var(--ink)" }}>{w}</small></div></div>)}
+          </>}
+        </section>
+        <section className="pn c4 l12" data-a="">
+          <h3><Ic n="eye" /> Clubs interested</h3>
+          {(A.interest || []).length === 0 && <p style={{ color: "var(--di)", margin: 0, fontSize: 13 }}>{agentRecentForm(p) == null ? "No season on record yet. Clubs need to see you play first." : "Nobody's calling right now. A strong season changes that fast."}</p>}
+          {(A.interest || []).map(x => (
+            <div key={x.clubId} className="pr-ldr c3">
+              <span className="fc" style={{ background: "transparent" }}><PrTeamLogo team={{ name: x.name, logo: x.clubId }} s={36} /></span>
+              <span style={{ minWidth: 0 }}><b>{x.name}</b><small>{x.sure ? (x.league ? `${LEAGUE[x.league] ? LEAGUE[x.league].short : x.league} · ` : "") + "confirmed" : "unconfirmed rumour"}</small></span>
+              <span className="v"><Tg cls={x.lvl === "Strong" ? "or" : ""} style={{ height: 22 }}>{x.lvl}</Tg></span>
+            </div>
+          ))}
+          {(A.interest || []).length > 0 && <PrSrc>Clubs on this list are likelier to offer at your next window</PrSrc>}
+        </section>
+        <section className="pn c4 l12" data-a="">
+          <h3><Ic n="mic" /> Around the league</h3>
+          {(A.news || []).length === 0 && <p style={{ color: "var(--di)", margin: 0, fontSize: 13 }}>Quiet for now.</p>}
+          {(A.news || []).map((n, i) => <div key={i} className={"dec" + (n.k ? " click-n" : "")} onClick={() => n.k && npcOpen(n.k, p.year)}><span className="k chance"><Ic n="mic" /></span><div><small style={{ color: "var(--ink)" }}>{n.t}</small>{!n.sure && <small>Unconfirmed</small>}</div></div>)}
+        </section>
+        <section className="pn c6 l12" data-a="">
+          <h3><Ic n="heart" /> Damage control</h3>
+          {open.length === 0 && <p style={{ color: "var(--di)", margin: 0, fontSize: 13 }}>No bad press to deal with.</p>}
+          {open.map(inc => (
+            <div key={inc.id} className="pr-inc">
+              <b>{INC_LBL[inc.kind] || "Bad news"} · {inc.y}</b><small>Cost you {inc.loss} {STAT_LBL[inc.stat]}. {inc.kind === "doping" ? "The ban itself stands." : ""}</small>
+              <div className="pr-prs">{AGENT_PR.map(o => (
+                <button key={o.id} className="ghost" disabled={(p.money || 0) < o.cost} onClick={() => { const r = agentRepair(p, inc.id, o.id); setPr(r.text); onUpdate(r.p); }}>
+                  <b>{o.label}</b><small>{o.cost ? rm(o.cost) : "Free"} · {Math.round(Math.min(0.95, o.odds + (elite ? 0.1 : 0)) * 100)}% · {o.note}</small>
+                </button>
+              ))}</div>
+            </div>
+          ))}
+          {pr && <PrSrc color="var(--or)">{pr}</PrSrc>}
+        </section>
+        <section className="pn c6 l12" data-a="">
+          <h3><Ic n="swap" /> Approach a club<small>{left} of 2 left this season</small></h3>
+          {p.stage !== "pro" ? <p style={{ color: "var(--di)", margin: 0, fontSize: 13 }}>Your agent can approach clubs once you've turned pro.</p>
+            : midComp ? <p style={{ color: "var(--di)", margin: 0, fontSize: 13 }}>Approaches happen between seasons. Finish this year's competitions first.</p>
+            : <>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <select className="pr-agsel" style={{ flex: 1, minWidth: 200 }} value={pick} onChange={ev => setPick(ev.target.value)}>
+                  <option value="">Pick a club…</option>
+                  {clubs.map(c => <option key={c.id} value={c.id}>{c.name}{c.tier === "semipro" ? " (D-League)" : " (MBL)"}</option>)}
+                </select>
+                <button className="cta" style={{ flex: "0 1 auto" }} disabled={!pick || left <= 0 || busy} onClick={approach}>{busy ? "Calling…" : "Send your agent"}</button>
+              </div>
+              {last && (
+                <div className={"pr-appr " + (last.yes && !(last.release && !last.release.letGo) ? "ok" : "no")}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}><PrTeamLogo team={{ name: last.club || "", logo: last.clubId }} s={40} /><b>{last.text}</b></div>
+                  {last.yes && <PrSline items={[["Salary", `${rm(last.terms.salary)}/mo`], ["Role", last.terms.firstOption ? "First option" : last.terms.role], ["League", LEAGUE[last.terms.league] ? LEAGUE[last.terms.league].short : last.terms.league], ["Years", last.terms.years || 2]]} />}
+                  {last.yes && !(last.release && !last.release.letGo) && <button className="cta" style={{ width: "100%", marginTop: 10 }} onClick={sign}>Sign with {last.club} · agent takes {rm(Math.round(last.terms.salary * 12 * AGENT_FEE))}</button>}
+                </div>
+              )}
+            </>}
+        </section>
       </div>
     </PrPage>
   );
@@ -12147,9 +12416,9 @@ const PR_CSS = `.pr{color-scheme:dark;--bg:#0a0b0e;--bg2:#0f1115;--p1:#14171c;--
 .pr[data-l=phone] .ph-hide{display:none}
 .pr .pr-teamctl{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
 .pr .pr-teamctl .tabs{margin:0}
-.pr .pr-sel{height:38px;border-radius:10px;background:var(--p2);color:var(--tx);border:1px solid var(--ln2);padding:0 12px;font-weight:700}
+.pr .pr-sel{height:38px;border-radius:10px;background:var(--p2);color:var(--ink);border:1px solid var(--ln2);padding:0 12px;font-weight:700}
 .pr .pr-teamgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
-.pr .pr-team{display:flex;align-items:center;gap:12px;padding:12px;border-radius:14px;background:var(--p1);border:1px solid var(--ln);text-align:left;color:var(--tx);cursor:pointer;transition:border-color .2s,transform .2s}
+.pr .pr-team{display:flex;align-items:center;gap:12px;padding:12px;border-radius:14px;background:var(--p1);border:1px solid var(--ln);text-align:left;color:var(--ink);cursor:pointer;transition:border-color .2s,transform .2s}
 .pr .pr-team:hover{border-color:var(--or);transform:translateY(-1px)}
 .pr .pr-team b{display:block;font-size:14px}.pr .pr-team small{color:var(--mu);font-size:12px}.pr .pr-team>.tx{flex:1;min-width:0}.pr .pr-team>.lg,.pr .pr-team>.flag{flex:none}
 .pr .pr-modal{position:fixed;inset:0;z-index:80;background:rgba(5,6,9,.72);backdrop-filter:blur(4px);display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:28px 16px}
@@ -12168,10 +12437,10 @@ const PR_CSS = `.pr{color-scheme:dark;--bg:#0a0b0e;--bg2:#0f1115;--p1:#14171c;--
 .pr .pr-srch{cursor:pointer;gap:6px}.pr .pr-srch:hover{border-color:var(--or)}
 .pr .pr-search{max-width:680px;margin-top:6vh}
 .pr .pr-sbox{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--ln)}
-.pr .pr-sbox input{flex:1;background:transparent;border:0;outline:0;color:var(--tx);font:600 17px/1.2 Inter,sans-serif}
+.pr .pr-sbox input{flex:1;background:transparent;border:0;outline:0;color:var(--ink);font:600 17px/1.2 Inter,sans-serif}
 .pr .pr-sbox svg{width:20px;height:20px;color:var(--mu)}
 .pr .pr-shits{max-height:60vh;overflow-y:auto;padding:6px}
-.pr .pr-shit{display:flex;align-items:center;gap:12px;width:100%;padding:8px 10px;border-radius:10px;background:transparent;border:0;color:var(--tx);text-align:left;cursor:pointer}
+.pr .pr-shit{display:flex;align-items:center;gap:12px;width:100%;padding:8px 10px;border-radius:10px;background:transparent;border:0;color:var(--ink);text-align:left;cursor:pointer}
 .pr .pr-shit:hover{background:var(--p2)}
 .pr .pr-shit .tx{flex:1;min-width:0}.pr .pr-shit b{display:block;font-size:14px}.pr .pr-shit small{display:block;color:var(--mu);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pr .pr-shit .fc{width:34px;height:36px;border-radius:9px;overflow:hidden;background:linear-gradient(160deg,#2a2f3a,#14171c);flex:none;display:flex;align-items:flex-end}
@@ -12183,6 +12452,14 @@ const PR_CSS = `.pr{color-scheme:dark;--bg:#0a0b0e;--bg2:#0f1115;--p1:#14171c;--
 .pr .pr-odds i{display:flex;align-items:center;justify-content:center;font-style:normal;color:var(--mu);white-space:nowrap;overflow:hidden}
 .pr .pr-odds i.ok{background:rgba(52,195,122,.22);color:#7fe0ad}
 .pr .injb.ok{background:rgba(52,195,122,.12);border-color:rgba(52,195,122,.35);color:#7fe0ad}
+.pr .pr-wv{display:flex;align-items:baseline;gap:10px;margin-bottom:10px}.pr .pr-wv b{font:800 30px/1 var(--cd);text-transform:uppercase}.pr .pr-wv b.pos{color:var(--ok)}.pr .pr-wv b.neg{color:var(--bd)}.pr .pr-wv small{color:var(--mu)}
+.pr .pr-inc{border:1px solid var(--ln2);border-radius:12px;padding:12px;margin-bottom:10px}.pr .pr-inc>b{display:block}.pr .pr-inc>small{color:var(--mu);display:block;margin:2px 0 10px}
+.pr .pr-prs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.pr .pr-prs button.ghost{display:flex;flex-direction:column;align-items:flex-start;text-align:left;gap:3px;padding:10px;height:auto;white-space:normal}.pr .pr-prs button small{color:var(--mu);font-size:11px;line-height:1.3}
+.pr .pr-agsel{flex:none;align-self:center;background:var(--p2);color:var(--ink);border:1px solid var(--ln2);border-radius:10px;padding:0 12px;height:44px;font:600 14px var(--sn)}
+.pr .pr-appr{margin-top:12px;border-radius:12px;padding:12px;border:1px solid var(--ln2)}.pr .pr-appr.ok{border-color:var(--or)}.pr .pr-appr.no{opacity:.9}
+.pr .click-n{cursor:pointer}.pr .click-n:hover b,.pr .click-n:hover small:first-child{text-decoration:underline}
+.pr .nav.pr-md,.pr .bnav .pr-md{color:var(--or)}
+.pr[data-l=phone] .pr-prs{grid-template-columns:1fr}
 `;
 function PrStyle() { return <style>{PR_CSS}</style>; }
 
@@ -14416,6 +14693,13 @@ export default function App() {
   const [nationalEvent, setNationalEvent] = useState(null);
   const [nationalTryout, setNationalTryout] = useState(null);
   const [mdLive, setMdLive] = useState(null);
+  const mdLastScreen = useRef("comp");
+  useEffect(() => { if (PR_COMP_SCREENS.has(screen)) mdLastScreen.current = screen; }, [screen]);
+  const mdBackToComp = () => {
+    const w = mdLastScreen.current;
+    const ok = w === "md_live" ? !!(mdLive && mdLive.g) : (w === "md_pregame" || w === "md_box") ? !!mdLive : true;
+    setBanner(null); setScreen(ok ? w : "comp");
+  };
   const nationalTryoutRef = useRef(null);
   nationalTryoutRef.current = nationalTryout;
   const usedEvents = useRef([]);
@@ -15567,11 +15851,11 @@ export default function App() {
     setScreen("hub");
   };
 
-  const handleJoinClub = (offer) => {
+  const handleJoinClub = (offer, base) => {
     // offer = { club, terms: { league, role, salary, firstOption, semiPro } }
     const club = offer.club;
     const terms = offer.terms || computeClubTerms(player, club, { firstProSigning: !player.league });
-    let p = { ...player, stats: { ...player.stats } };
+    let p = { ...(base || player), stats: { ...player.stats } };
     const semiPro = terms.semiPro;
 
     p.clubId = club.id;
@@ -15732,6 +16016,7 @@ export default function App() {
       p.starterStatus = downgraded;
       p.contractSalary = contractMonthlySalary({ leagueId: player.league, role: downgraded, club, semiPro: !!player.semiProClub, mvpCount: player.mvpCount, dpoyCount: player.dpoyCount });
       p.relationships.coach = clamp(p.relationships.coach - 10);
+      incidentAdd(p, { kind: "benched", stat: "coach", loss: 10 });
       setBanner(`"Asking to leave? Fine — you can ask for minutes too." ${club.name} heard you, and isn't pretending otherwise.`);
     } else {
       p.relationships.coach = clamp(p.relationships.coach - 4);
@@ -18212,7 +18497,7 @@ export default function App() {
         <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="#f3f4f6" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{muted ? <><path d="M4 9v6h4l5 4V5L8 9z" /><path d="M17 9l5 6M22 9l-5 6" /></> : <><path d="M4 9v6h4l5 4V5L8 9z" /><path d="M17 8.5a5 5 0 0 1 0 7M19.5 6a8.5 8.5 0 0 1 0 12" /></>}</svg>
       </button>
       {(RD_ME.look = player ? playerLook(player) : null, null)}
-      <Shell show={!!player && !RD_NO_SHELL.has(screen)} screen={screen} player={player} onNav={(id) => { setBanner(null); setScreen(id); }} onUpdate={(q) => { setPlayer(q); save(q); }}>
+      <Shell show={!!player && !RD_NO_SHELL.has(screen)} screen={screen} player={player} onNav={(id) => { if (id === "matchday") { if (player && player.mdComp) mdBackToComp(); return; } setBanner(null); setScreen(id); }} onUpdate={(q) => { setPlayer(q); save(q); }}>
       <Stage screen={screen} player={player} event={currentEvent}>
       <ScreenFade key={screen}>
       {screen === "start" && <StartHero><StartScreen onStart={handleStart} savedGame={savedGame} onContinue={handleContinue} onViewHallOfFame={() => setScreen("hall_of_fame")} onViewAchievements={() => setScreen("achievement_gallery")} /></StartHero>}
@@ -18381,6 +18666,7 @@ export default function App() {
           onOpenLifestyle={handleOpenLifestyle}
           onOpenCareerHighlights={handleOpenCareerHighlights}
           onOpenSocial={() => setScreen("social")}
+          onBackToComp={mdBackToComp}
           summary={summary}
         />
       )}
@@ -18418,6 +18704,9 @@ export default function App() {
       {screen === "legacy" && player && <LegacyScreen player={player} />}
       {screen === "teams" && player && <TeamsScreen player={player} onUpdate={(q) => { setPlayer(q); save(q); }} />}
       {screen === "social" && player && <SocialScreen player={player} onUpdate={(q) => { setPlayer(q); save(q); }} />}
+      {screen === "agent" && player && <AgentScreen player={player} onUpdate={(q) => { setPlayer(q); save(q); }}
+        onSign={(offer, fee) => handleJoinClub(offer, { ...player, money: Math.max(0, (player.money || 0) - fee), agent: { ...(player.agent || {}), last: null, key: null },
+          history: [...(player.history || []), { age: player.age, tierLabel: "Agent", note: `Your agent set up the move to ${offer.club.name} and took ${rm(fee)} (5% of the first year).` }] })} />}
       </ScreenFade>
       </Stage>
       </Shell>
