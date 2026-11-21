@@ -4092,6 +4092,8 @@ function generateClubOffers(p, { count = 3, excludeId = null, firstProSigning = 
    or 'released' (let go). Weighted by performance, relationships, morale, and
    whether the club has money troubles. */
 function rollClubEvent(p) {
+  // the club folded mid-season: every contract ends now
+  if (p.pendingFold) { const n = p.pendingFold; p.pendingFold = false; return { type: "bankrupt", fold: n }; }
   const overall = computeOverall(p.stats, p.position);
   const club = getClub(p.clubId);
   const rating = overall * 0.7 + p.popularity * 0.3;
@@ -7426,7 +7428,7 @@ function mdEvText(e, name) {
 }
 /* Where the live feed was, so leaving through the menu and coming back resumes it. */
 let MD_LIVE_POS = { g: null, n: 0 };
-function MdLiveScreen({ player, comp, game, onClutch, onDone }) {
+function MdLiveScreen({ player, comp, game, onClutch, onDone, brkAt, onBreak }) {
   const lay = useLayoutMode();
   const [shown, setShown] = useState(() => MD_LIVE_POS.g === game ? MD_LIVE_POS.n : 0);
   useEffect(() => { MD_LIVE_POS = { g: game, n: shown }; }, [game, shown]);
@@ -7447,8 +7449,14 @@ function MdLiveScreen({ player, comp, game, onClutch, onDone }) {
   const total = g.ev.length;
   const waitingClutch = !!g.clutch && shown >= total;
   const ended = g.final && shown >= total;
+  // breaking news: the game pauses at a quarter break until you've chosen
+  const brkDue = brkAt != null && !g.brkFired;
+  useEffect(() => {
+    if (brkDue && shown >= brkAt && onBreak) { g.brkFired = true; onBreak(); }
+  }, [shown, brkDue]);
   useEffect(() => {
     if (!run || shown >= total) return undefined;
+    if (brkDue && shown >= brkAt) return undefined;
     const t = setTimeout(() => setShown(s => Math.min(total, s + 1)), Math.max(60, 520 / speed));
     return () => clearTimeout(t);
   }, [run, shown, total, speed]);
@@ -7478,7 +7486,7 @@ function MdLiveScreen({ player, comp, game, onClutch, onDone }) {
   }, [shown]);
   const T = g.teams;
   const cols = [mdTeamColor(T[0]), mdTeamColor(T[1])];
-  const skip = () => { setRun(true); setShown(total); };
+  const skip = () => { setRun(true); setShown(brkDue && brkAt > shown ? brkAt : total); };
   const pick = (id) => { const res = onClutch(id); setClutchBang(res); setTimeout(() => setClutchBang(null), 1600); };
   return (
     <div style={{ padding: lay === "phone" ? "12px 10px 24px" : "20px 24px 32px", maxWidth: 1180, margin: "0 auto" }}>
@@ -7718,7 +7726,7 @@ function prCrumb(p) {
   return `Season ${p.year || ""}${lg ? " · " + lg : ""}${p.teamName ? " · " + p.teamName : ""}`;
 }
 const PR_TITLES = {
-  legacy: "Legacy", teams: "Teams", investments: "Investments", social: "Social", agent: "Agent", hall_of_fame: "Hall of Fame", achievement_gallery: "Achievements", leg_offers: "League-only offers", dl_invite: "D-League invite",
+  legacy: "Legacy", teams: "Teams", investments: "Investments", social: "Social", agent: "Agent", md_breaking: "Breaking news", hall_of_fame: "Hall of Fame", achievement_gallery: "Achievements", leg_offers: "League-only offers", dl_invite: "D-League invite",
   offseason_plan: "Off-season", training: "Training", creation_build: "Build your player", event: "Career event", result: "Season result",
   u15_result: "State selection", u15_tournament: "Tournament result", u15_shortlist: "Youth shortlist", u15_bootcamp_result: "Bukit Jalil",
   age16_u16_result: "Age 16", age16_u17_result: "Age 16", a17_result: "Age 17", a17_shortlist: "U18 shortlist", a17_bootcamp_result: "Bukit Jalil",
@@ -10009,6 +10017,7 @@ function msPickMidseason(p, comp) {
   if (p.starterStatus && typeof nextRoleTier === "function" && nextRoleTier(p.starterStatus)) pool.push(["coach_talk", 1]);
   pool.push(["locker_room", 1], ["injury_scare", 1], ["trade_buzz", 1]);
   if (age >= 21) pool.push(["alcohol", 1]);
+  try { ms2Eligible(p, comp, "rs").forEach(([id, w]) => pool.push([id, w * 0.7])); } catch (e) { /* new events are extras */ }
   const cn = msConnInLeague(p, comp);
   if (cn) pool.push(["conn", 1.3]);
   let open = pool.filter(([id]) => !msRecent(p, id, y));
@@ -10019,6 +10028,7 @@ function msPickMidseason(p, comp) {
     return { type: "locker_room", subScenario: sub };
   }
   if (id === "conn") return { type: "special", id: "conn", conn: cn };
+  if (MS2_IDS.includes(id)) return ms2Make(id, p, comp);
   if (id === "alcohol") return { type: "special", id: "alcohol" };
   return { type: id };
 }
@@ -10054,7 +10064,7 @@ function msChoices(ev, p) {
         { id: "pass", icon: "x", label: "Keep it professional", tag: "Cold", fx: [["Coach +3", 1], ["The bond fades", 0]] },
       ];
     }
-    default: return [];
+    default: return ms2Choices(ev, p);
   }
 }
 function msCopy(ev, p, comp) {
@@ -10066,7 +10076,7 @@ function msCopy(ev, p, comp) {
     case "substance": return { scene: "shadow", title: "Risk it or no?", desc: "After practice a man you don't know is waiting by the far lockers. He says he can get you back to full speed in weeks, not months. He holds up a small packet. 'Nobody tests this mid-season.' He's wrong about that, sometimes." };
     case "fixing": return { scene: "carpark", title: ev.retry ? "They're back" : "A message in the car park", desc: ev.retry ? "Same number, same car park. 'Last time you walked. This time the offer's better for you.' Still RM 50,000. Still just keep the margin under the line." : "An unknown number, a car park after the game. 'RM 50,000. You don't lose the game. You just make sure it's close.' Nobody else needs to know, he says." };
     case "conn": return { scene: "mamak", title: `${ev.conn ? ev.conn.c.n : "An old teammate"} calls`, desc: `You came up together${ev.conn && ev.conn.c.teams && ev.conn.c.teams.length ? ` at ${ev.conn.c.teams[0][0]}` : ""}. Now he's ${ev.conn && ev.conn.same ? "in your locker room again" : `at ${club}`}, and he wants to meet up during the break.` };
-    default: return { scene: "street", title: "Midseason", desc: "" };
+    default: return ms2Copy(ev, p, comp);
   }
 }
 function msRoll(odds) {
@@ -10136,6 +10146,9 @@ function msApply(p0, ev, choiceId, hit) {
     else if (choiceId === "mamak") { add("morale", 6); rel("family", 2); if (c) c.teams.push(["Mamak catch-ups " + p.year, p.year]); text = "Roti canai at 1 a.m. and the same old stories. You needed that."; label = "Old friends"; }
     else { rel("coach", 3); if (c) c.teams = c.teams.slice(0, 1); text = "You keep it short. He gets the message."; tone = "wa"; label = "Kept your distance"; }
     if (c) { c.last = p.year; conn[k] = c; p.conn = conn; }
+  } else if (MS2_IDS.includes(ev.id)) {
+    const r = ms2Apply(p, comp, ev, choiceId, hit);
+    text = r.text; tone = r.tone; label = r.label;
   }
   if (comp) p.mdComp = comp;
   p.msHist = [...(p.msHist || []).filter(h => p.year - h.y < 6), { id: ev.id, y: p.year }];
@@ -10172,7 +10185,7 @@ function msSeasonStart(p, comp) {
 }
 
 /* ---------- the page ---------- */
-function SpecialEventScreen({ player, event, onDone }) {
+function SpecialEventScreen({ player, event, onDone, breaking }) {
   const p = player;
   const comp = p.mdComp;
   const ch = useMemo(() => msChoices(event, p), [event]);
@@ -10189,7 +10202,7 @@ function SpecialEventScreen({ player, event, onDone }) {
   const tone = res ? res.out.tone : "ok";
   const flag = event.id === "nationality" ? <PrFlag code={event.code} w={28} /> : null;
   return (
-    <PrEventPage lbl={<>{prSeasonLbl(p, "Midseason")} · <span style={{ color: "var(--or2)" }}>Special event</span></>} title={cp.title} desc={cp.desc} scene={cp.scene} player={p}
+    <PrEventPage lbl={<>{prSeasonLbl(p, breaking ? "Matchday" : "Midseason")} · <span style={{ color: breaking ? "var(--bd)" : "var(--or2)" }}>{breaking ? "Breaking news" : "Special event"}</span></>} title={cp.title} desc={cp.desc} scene={cp.scene} player={p}
       right={<span className="chip">{flag || <Ic n="star" />}{MS_LABEL[event.id]}</span>}>
       {ch.map((c, i) => (
         <PrEvo key={c.id} i={i} icon={c.icon} label={c.label} tag={c.tag} tagOr={c.or}
@@ -10201,7 +10214,7 @@ function SpecialEventScreen({ player, event, onDone }) {
         <div className={"pn evres " + tone} data-a="">
           <Tg><Ic n={tone === "ok" ? "check" : "x"} /> {res.out.label}</Tg>
           <p>{res.out.text}</p>
-          <div style={{ display: "flex", gap: 10, marginTop: 12 }}><button className="cta" onClick={() => onDone(res.out.p, res.out)}>{res.out.p.lifeBan ? "Face what's coming" : "To the midseason recap"} <Ic n="right" /></button></div>
+          <div style={{ display: "flex", gap: 10, marginTop: 12 }}><button className="cta" onClick={() => onDone(res.out.p, res.out)}>{res.out.p.lifeBan ? "Face what's coming" : breaking ? (event.liveGi != null ? "Back to the game" : "Back to your competition") : "To the midseason recap"} <Ic n="right" /></button></div>
         </div>
       )}
     </PrEventPage>
@@ -10370,6 +10383,7 @@ function RetiredScreen({ player, onPlayAgain, onViewHallOfFame, onViewAchievemen
             {p.tainted && <Tg cls="neg">Tainted · failed a drug test</Tg>}
             {banned && <Tg cls="neg">Life ban · match-fixing</Tg>}
             {p.bankrupt ? <Tg cls="neg">Went bankrupt</Tg> : null}
+            {prFamilyLbl(p) ? <Tg><Ic n="heart" /> {prFamilyLbl(p)}</Tg> : null}
           </div>
         </div>
         <div className="pk"><b className="num">{p.peakOverall}</b><small>Peak OVR</small></div>
@@ -10572,6 +10586,7 @@ function prCareerClubs(p) {
   return seen.slice(-4);
 }
 const PR_HOF_TINT = { gold: "#e2b65a", amber: "#ff9a4d", neutral: "#c9d2dc", dim: "#737a86" };
+const prFamilyLbl = p => { const k = (p.kids || []).length; return [p.married ? `Married ${p.married}` : null, k ? `${k} ${k === 1 ? "child" : "children"}` : null].filter(Boolean).join(" · "); };
 function PrCareerCard({ p, entry }) {
   // A live or retired career (p), or a Hall of Fame entry when no career is loaded.
   const look = p ? playerLook(p) : (entry && entry.look ? { ...DEFLOOK, ...entry.look } : DEFLOOK);
@@ -10597,6 +10612,7 @@ function PrCareerCard({ p, entry }) {
           {y0 && <span className="tg">{y0}–{y1}</span>}
           {p && p.tainted && <span className="tg neg">Tainted</span>}
           {(p ? p.lifeBan : entry && entry.banned) && <span className="tg neg">Banned</span>}
+          {p && prFamilyLbl(p) && <span className="tg"><Ic n="heart" /> {prFamilyLbl(p)}</span>}
         </div>
         <b className="n">{name}</b>
         {(clubs.length > 0 || capsCode) && <div className="clubs">
@@ -11220,8 +11236,12 @@ function invYearEnd(p0) {
       } else p.history = [...(p.history || []), { age: A, tierLabel: "Market collapse", note: `Lost the whole ${rm(before)} portfolio in a market collapse.` }];
     } else notes.push(`Shares ${pct >= 0 ? "up" : "down"} ${Math.abs(pct).toFixed(1)}%: portfolio ${rm(after)}.`);
   }
+  // ---- sponsor deal and money lent to family
+  if (p.sponsor && Y >= p.sponsor.y0 && Y <= p.sponsor.y1) { p.money = (p.money || 0) + p.sponsor.pay; p.totalEarnings = (p.totalEarnings || 0) + p.sponsor.pay; notes.push(`${p.sponsor.brand} paid ${rm(p.sponsor.pay)}.`); }
+  if (p.loanBack && Y >= p.loanBack.y) { p.money = (p.money || 0) + p.loanBack.amt; notes.push(`Your family paid back ${rm(p.loanBack.amt)}.`); delete p.loanBack; }
   // ---- social media
-  const so = socialOf(p);
+  let so = socialOf(p);
+  if (p.sponsorCap >= Y && so.level === "full") so = { ...so, level: "casual" };
   const lv = SOCIAL_LV[so.level] || SOCIAL_LV.off;
   const pro = p.stage === "pro";
   const level = !pro && so.level !== "off" ? "off" : so.level;
@@ -11305,11 +11325,12 @@ function PrSocialLevel({ player, onUpdate }) {
   return (
     <div className="choices" style={{ gridTemplateColumns: "repeat(3,minmax(0,1fr))" }}>
       {Object.entries(SOCIAL_LV).map(([k, L]) => {
-        const locked = k !== "off" && (!pro || (k === "full" && p.age < 21));
+        const capped = k === "full" && p.sponsorCap >= p.year;
+        const locked = k !== "off" && (!pro || (k === "full" && p.age < 21) || capped);
         return (
           <button key={k} className={"ch " + (so.level === k ? "on" : "")} disabled={locked} style={{ padding: 12, textAlign: "left", opacity: locked ? 0.45 : 1 }} onClick={() => !locked && set(k)}>
             <b className="t">{L.label}</b>
-            <p style={{ margin: "2px 0 8px" }}>{k === "off" ? "Just basketball. Followers still grow slowly." : k === "casual" ? "A few posts a week." : "Vlogs, collabs, sponsors. A second job."}{locked ? (pro ? " Opens at 21." : " Opens when you turn pro.") : ""}</p>
+            <p style={{ margin: "2px 0 8px" }}>{k === "off" ? "Just basketball. Followers still grow slowly." : k === "casual" ? "A few posts a week." : "Vlogs, collabs, sponsors. A second job."}{locked ? (capped ? ` Your ${p.sponsor ? p.sponsor.brand : "sponsor"} deal rules it out until ${p.sponsorCap + 1}.` : pro ? " Opens at 21." : " Opens when you turn pro.") : ""}</p>
             {k !== "off" && <div className="fx">
               <div><span>Popularity / season</span><b className="up">+{L.pop}</b></div>
               <div><span>Income</span><b className="up">{L.pay}× followers rate</b></div>
@@ -11372,7 +11393,7 @@ function incidentAdd(p, inc) {
   p.incidents = [...(p.incidents || []), { id: `${inc.kind}:${p.year}:${(p.incidents || []).length}`, y: p.year, done: false, ...inc }].slice(-20);
   return p;
 }
-const INC_LBL = { alcohol: "Night out gone wrong", backlash: "Online backlash", doping: "Positive drug test", report: "Locker room turned on you", nationality: "Fans at home turned on you", bankrupt: "Bankruptcy", benched: "Benched for asking to leave" };
+const INC_LBL = { alcohol: "Night out gone wrong", backlash: "Online backlash", doping: "Positive drug test", report: "Locker room turned on you", nationality: "Fans at home turned on you", bankrupt: "Bankruptcy", referee: "Referee row", benched: "Benched for asking to leave" };
 const STAT_LBL = { popularity: "popularity", team: "team chemistry", coach: "coach trust", morale: "morale" };
 /* Real release odds: the same sum the club uses when it decides. */
 function agentReleaseOdds(p) {
@@ -11609,6 +11630,330 @@ function AgentScreen({ player, onUpdate, onSign }) {
       </div>
     </PrPage>
   );
+}
+/* =====================================================================
+   MORE SPECIAL EVENTS — coach fired, takeover or folding, sponsor deal,
+   overseas trial, contract holdout, playoff injury, referee row, and
+   life events (wedding, a baby, family asking for money).
+   They join the halfway pool, and 30% of seasons get one extra
+   "breaking news" event on a random game day (or at the playoffs).
+===================================================================== */
+
+/* ---------- 8-bit scenes ---------- */
+SCN.boardroom = (c, t, W, H, o) => {
+  RR(c, 0, 0, W, H, "#141821"); RR(c, 0, 0, W, 56, "#1b2130");
+  for (let x = 0; x < W; x += 20) RR(c, x, 0, 1, 56, "#181d29");
+  RR(c, 10, 8, 50, 30, "#0e1220"); RR(c, 11, 9, 48, 28, "#16203a");
+  [[14, 30, 6], [22, 24, 6], [30, 27, 6], [38, 18, 6], [46, 13, 6]].forEach(([x, y, w]) => RR(c, x, y, w, 37 - y, (t % 20) < 10 ? "#2fbf71" : "#25a060"));
+  txt(c, "SOLD", 120, 12, (t % 16) < 10 ? "#ffd34d" : "#6a5a2a", 8, "center");
+  RR(c, 96, 26, 48, 2, "#ffd34d");
+  RR(c, 0, 56, W, 34, "#2a2420"); RR(c, 14, 54, 132, 8, "#5a4030"); RR(c, 14, 54, 132, 1, "#8a6a4a");
+  [[34, 50], [60, 50], [100, 50]].forEach(([x, y]) => { RR(c, x, y, 10, 4, "#f7f3ea"); RR(c, x + 1, y + 1, 7, 1, "#9aa4b2"); });
+  drawSprite(c, { ...DEFLOOK, hair: "short", beard: "none", jersey: "#1b1e25", trim: "#c99320", panel: "#1b1e25", shorts: "#1b1e25", no: "" }, { full: false, frame: Math.floor(t / 4), blink: t % 43 === 0, ox: 112, oy: 22, t });
+  drawSprite(c, (o && o.me) || DEFLOOK, { full: false, frame: Math.floor(t / 3), blink: t % 37 === 0, ox: 22, oy: 24, t });
+};
+SCN.shoot = (c, t, W, H, o) => {
+  RR(c, 0, 0, W, H, "#e9eef4"); RR(c, 30, 0, 100, 70, "#f7f9fc");
+  RR(c, 30, 70, 100, 20, "#dfe6ee");
+  [[8, 10], [138, 10]].forEach(([x, y]) => { RR(c, x + 6, y + 14, 2, 56, "#3a404c"); RR(c, x, y, 14, 14, "#1b1e25"); RR(c, x + 2, y + 2, 10, 10, (t % 30) < 3 ? "#ffffff" : "#ffe6a0"); });
+  if ((t % 30) < 3) RR(c, 0, 0, W, H, "rgba(255,255,255,.35)");
+  txt(c, "NEW DROP", 80, 6, "#d8282b", 6, "center");
+  drawSprite(c, (o && o.me) || DEFLOOK, { full: true, frame: Math.floor(t / 3), blink: t % 37 === 0, ox: 63, oy: 32, t });
+  RR(c, 112, 60, 18, 12, "#1b1e25"); RR(c, 114, 62, 14, 8, "#4ff0ff"); RR(c, 128, 58, 4, 4, "#1b1e25");
+};
+SCN.airport = (c, t, W, H, o) => {
+  band(c, W, 0, 50, ["#8fc3ef", "#a9d2f3", "#c6e1f7"]);
+  const px = (t * 1.2) % (W + 40) - 20; RR(c, px, 14, 18, 3, "#f3f4f6"); RR(c, px + 6, 11, 4, 9, "#f3f4f6"); RR(c, px + 15, 11, 3, 4, "#d8282b");
+  RR(c, 0, 30, W, 30, "#2a3140"); for (let x = 4; x < W; x += 22) RR(c, x, 32, 16, 24, "#6fa8d8");
+  RR(c, 96, 34, 58, 30, "#11151f"); RR(c, 97, 35, 56, 28, "#0b0e14");
+  txt(c, "DEPARTURES", 125, 37, "#ffd34d", 4, "center");
+  [["TOKYO", "B2"], ["TAIPEI", "ON"], ["MACAU", "GO"], ["SINGAPORE", "ON"]].forEach(([d, s2], i) => { txt(c, d, 100, 44 + i * 5, "#e8e8e8", 4); txt(c, s2, 150, 44 + i * 5, (t + i * 7) % 20 < 14 ? "#2fbf71" : "#1d6b42", 4, "right"); });
+  RR(c, 0, 64, W, 26, "#c9c3b5"); for (let x = 0; x < W; x += 12) RR(c, x, 64, 1, 26, "#b8b1a2");
+  RR(c, 58, 66, 12, 9, "#1b1e25"); RR(c, 61, 64, 6, 2, "#3a404c");
+  drawSprite(c, (o && o.me) || DEFLOOK, { full: true, frame: Math.floor(t / 3), blink: t % 37 === 0, ox: 30, oy: 34, t });
+};
+SCN.wedding = (c, t, W, H, o) => {
+  band(c, W, 0, 60, ["#ffd9e6", "#ffe8ef", "#fff3f6"]);
+  for (let i = 0; i < 9; i++) { const x = (i * 19 + t) % W, y = (i * 11 + t * 0.6) % 60; RR(c, x, y, 2, 2, ["#ff7aa8", "#ffd34d", "#ffffff"][i % 3]); }
+  RR(c, 40, 8, 80, 4, "#f7f3ea"); RR(c, 40, 8, 4, 50, "#f7f3ea"); RR(c, 116, 8, 4, 50, "#f7f3ea");
+  [[40, 14], [116, 14], [78, 8]].forEach(([x, y]) => { RR(c, x - 3, y - 3, 10, 6, "#ff7aa8"); RR(c, x, y - 1, 4, 2, "#ffd34d"); });
+  RR(c, 0, 60, W, 30, "#c7a77a"); RR(c, 0, 60, W, 2, "#a8865a"); RR(c, 56, 60, 48, 30, "#d8282b");
+  drawSprite(c, { ...DEFLOOK, hair: "long", beard: "none", jersey: "#f7f3ea", trim: "#ffd34d", panel: "#f7f3ea", shorts: "#f7f3ea", no: "" }, { full: true, frame: Math.floor(t / 4), blink: t % 41 === 0, ox: 84, oy: 34, t });
+  drawSprite(c, { ...((o && o.me) || DEFLOOK), jersey: "#1b1e25", trim: "#c99320", panel: "#1b1e25", shorts: "#1b1e25", no: "" }, { full: true, frame: Math.floor(t / 3), blink: t % 37 === 0, ox: 50, oy: 34, t });
+};
+
+/* ---------- data ---------- */
+const MS2_LABEL = { coach_fired: "Coach fired", takeover: "Club takeover", fold: "Club folding", sponsor: "Sponsor deal", trial: "Overseas trial", holdout: "Contract holdout", po_injury: "Playoff injury", referee: "Referee row", wedding: "Wedding", parent: "New baby", family_money: "Family asks for money" };
+Object.assign(MS_LABEL, MS2_LABEL);
+const MS2_RS = ["coach_fired", "takeover", "sponsor", "trial", "holdout", "referee", "parent", "family_money"];
+const MS2_PO = ["po_injury", "wedding"];
+const MS2_IDS = [...MS2_RS, ...MS2_PO, "fold"];
+const MS2_BRANDS = ["Kilat Sports", "Harimau Athletics", "Rimba Wear", "Nusa Kicks", "Tropika Energy", "Langkah Footwear"];
+const MS2_RIVAL_BRAND = { "Kilat Sports": "Rimba Wear", "Harimau Athletics": "Nusa Kicks", "Rimba Wear": "Kilat Sports", "Nusa Kicks": "Harimau Athletics", "Tropika Energy": "Kilat Sports", "Langkah Footwear": "Harimau Athletics" };
+const MS2_KIN = ["Your uncle", "Your cousin", "Your younger brother", "Your aunt", "Your older sister"];
+const MS2_ROLE_DOWN = { "First Option": "Starter", Starter: "Rotation", Rotation: "Bench", Bench: "Bench" };
+/* The trial clubs: a step up in pay from the MBL, a level below Asia Pro. */
+const OVERSEAS_TRIAL_TIER = {
+  id: "asia_trial", label: "Asia Pro", threshold: 60,
+  teams: [
+    { name: "Singapore Slingers", league: "ABL", country: "Singapore", salaryPerSeason: 240000 },
+    { name: "Macau Black Bears", league: "ABL", country: "Macau", salaryPerSeason: 240000 },
+    { name: "Formosa Dreamers", league: "TPBL", country: "Taiwan", salaryPerSeason: 360000 },
+    { name: "Hsinchu Lioneers", league: "TPBL", country: "Taiwan", salaryPerSeason: 360000 },
+    { name: "Kumamoto Volters", league: "B.League B2", country: "Japan", salaryPerSeason: 360000 },
+    { name: "Rizing Zephyr Fukuoka", league: "B.League B2", country: "Japan", salaryPerSeason: 360000 },
+  ],
+  roleBands: [
+    { min: 0, max: 70, role: "Rotation", awardChance: 0 },
+    { min: 71, max: 76, role: "Starter", awardChance: 0.10 },
+    { min: 77, max: 999, role: "First Option", awardChance: 0.30 },
+  ],
+};
+
+try { ALL_OVERSEAS_TIERS.push(OVERSEAS_TRIAL_TIER); LEAGUE_TIER_ANCHOR.asia_trial = 68; } catch (e) { /* tables missing */ }
+
+/* ---------- small helpers ---------- */
+const ms2Mine = comp => comp ? comp.games.filter(g => g.h === comp.myTeam || g.a === comp.myTeam) : [];
+const ms2MyGP = comp => (comp && comp.stats && comp.stats[MD_ME] ? comp.stats[MD_ME].g : 0);
+/* Sit out your next n games (not the one being played right now). */
+function ms2Sit(comp, n, liveGi) {
+  if (!comp || n <= 0) return 0;
+  const up = ms2Mine(comp).filter(g => !g.res && g.i !== liveGi);
+  if (!up.length) return 0;
+  const last = up[Math.min(n, up.length) - 1];
+  comp.injuredUntil = Math.max(comp.injuredUntil == null ? -1 : comp.injuredUntil, last.i);
+  return Math.min(n, up.length);
+}
+function ms2Market(p) {
+  try { const c = getClub(p.clubId); return c ? computeClubTerms({ ...p, stats: { ...p.stats } }, c, {}).salary : 0; } catch (e) { return 0; }
+}
+function ms2BottomHalf(comp) {
+  try {
+    const rows = mdTable(comp, Object.keys(comp.teams), ["rs"]);
+    const i = rows.findIndex(r => r.id === comp.myTeam);
+    return i >= rows.length / 2;
+  } catch (e) { return false; }
+}
+
+/* Which of the new events can happen to you right now. */
+function ms2Eligible(p, comp, phase) {
+  const ovr = computeOverall(p.stats, p.position);
+  const under = !!p.clubId && (p.contractYearsLeft || 0) > 0;
+  const out = [];
+  if (phase === "po") {
+    out.push(["po_injury", 1]);
+    if (p.age >= 25 && !p.married) out.push(["wedding", 0.8]);
+    return out;
+  }
+  out.push(["coach_fired", ms2BottomHalf(comp) ? 2.2 : 0.8]);
+  if (under) out.push(["takeover", 0.6]);
+  if ((p.popularity || 0) >= 40 && !(p.sponsor && p.sponsor.y1 >= p.year)) out.push(["sponsor", 1]);
+  if (ovr >= 65 && p.age >= 20 && p.age <= 30 && !p.trialOffer) out.push(["trial", 0.9]);
+  if (under && (p.contractYearsLeft || 0) >= 1) { const mk = ms2Market(p); if (mk && (p.contractSalary || 0) <= mk * 0.75) out.push(["holdout", 1.2]); }
+  out.push(["referee", 0.9]);
+  if (p.age >= 24 && (p.kids || []).length < 2 && !(p.kids || []).includes(p.year)) out.push(["parent", 0.7]);
+  if ((p.money || 0) >= 20000) out.push(["family_money", 0.8]);
+  return out;
+}
+/* Build the event (rolls the details that the copy needs). */
+function ms2Make(id, p, comp, liveGi) {
+  const ev = { type: "special", id };
+  if (id === "takeover") { if (Math.random() < 0.3) ev.id = "fold"; else ev.pay = randInt(-20, 20); }
+  if (id === "sponsor") {
+    ev.brand = MS2_BRANDS[Math.floor(Math.random() * MS2_BRANDS.length)];
+    const pop = p.popularity || 40;
+    ev.pay = Math.round(Math.max(60000, Math.min(250000, 60000 + (pop - 40) / 60 * 190000)) / 1000) * 1000;
+    const so = socialOf(p);
+    ev.clash = so.level && so.level !== "off" ? "social" : "club";
+    ev.rival = MS2_RIVAL_BRAND[ev.brand];
+  }
+  if (id === "trial") {
+    const ovr = computeOverall(p.stats, p.position);
+    const pool = OVERSEAS_TRIAL_TIER.teams.filter(t => ovr >= 72 ? t.league !== "ABL" : t.league === "ABL");
+    ev.team = pool[Math.floor(Math.random() * pool.length)];
+    ev.odds = Math.round(Math.max(0.25, Math.min(0.85, 0.25 + (ovr - 65) * 0.06)) * 100);
+  }
+  if (id === "holdout") { ev.market = Math.round(ms2Market(p) / 10) * 10; }
+  if (id === "referee") ev.ban = Math.random() < 0.5 ? 2 : 3;
+  if (id === "family_money") { ev.who = MS2_KIN[Math.floor(Math.random() * MS2_KIN.length)]; ev.amt = Math.round((p.money || 0) * 0.2 / 100) * 100; }
+  if (liveGi != null) ev.liveGi = liveGi;
+  return ev;
+}
+/* Pick one of the new events (for the breaking-news slot). */
+function ms2PickBreaking(p, comp, phase, liveGi) {
+  let pool = ms2Eligible(p, comp, phase).filter(([id]) => !msRecent(p, id === "takeover" ? "takeover" : id, p.year) && !(id === "takeover" && msRecent(p, "fold", p.year)));
+  if (!pool.length) return null;
+  return ms2Make(msPickW(pool), p, comp, liveGi);
+}
+
+/* ---------- choices ---------- */
+function ms2Choices(ev, p) {
+  const sal = p.contractSalary || 0;
+  switch (ev.id) {
+    case "coach_fired": return [
+      { id: "earn", icon: "ball", label: "Earn it back on the court", tag: "Work", fx: [["Fatigue +10", 0], ["Average a solid game rating over the next 6 games: role back · Coach +15", 1]] },
+      { id: "office", icon: "mic", label: "Go to his office", tag: "Bold", or: true, odds: [[50, "He gives you a shot", "ok", "Role back now"], [50, "He doesn't like it", "bd", "Coach −15"]] },
+      { id: "agent", icon: "swap", label: "Get your agent to find a move", tag: "Exit", fx: [["Guaranteed offers from other clubs at season end", 1], ["Coach −5", 0]] },
+    ];
+    case "takeover": return [
+      { id: "stay", icon: "home", label: "Stay under the new owners", tag: "Steady", fx: [[`Salary ${ev.pay >= 0 ? "+" : ""}${ev.pay}% (${rm(Math.round(sal * (1 + ev.pay / 100)))}/mo)`, ev.pay >= 0 ? 1 : 0]] },
+      { id: "release", icon: "swap", label: "Ask for a release", tag: "Exit", fx: [["Free-agent window at season end", 1], ["Coach −5", 0]] },
+    ];
+    case "fold": return [
+      { id: "loyal", icon: "shield", label: "Stay loyal to the end", tag: "Loyal", fx: [["Team +10", 1], ["Popularity +5", 1], ["Free agent at season end · 3 offers", 1]] },
+      { id: "talk", icon: "mic", label: "Start talking to other clubs now", tag: "Smart", fx: [["Free agent at season end · 4 offers", 1], ["Team −5", 0]] },
+    ];
+    case "sponsor": return [
+      { id: "excl", icon: "cash", label: `Sign exclusive · ${rm(ev.pay)} a year`, tag: "Big money", or: true, fx: [[`${rm(ev.pay)} a year for 2 years`, 1], [ev.clash === "social" ? "Social media capped at Casual for 2 years" : `Clashes with the club's ${ev.rival} deal · Coach −8`, 0]] },
+      { id: "nego", icon: "mic", label: "Negotiate non-exclusive", tag: "Gamble", odds: [[60, "They agree", "ok", `${rm(Math.round(ev.pay / 2))} a year for 2 years, no conditions`], [40, "They walk away", "wa", "No deal"]] },
+      { id: "decline", icon: "x", label: "Decline", tag: "Safe", fx: [["Nothing changes", 1]] },
+    ];
+    case "trial": return [
+      { id: "go", icon: "flag", label: `Go on trial with ${ev.team.name}`, tag: "Risky", or: true, odds: [[ev.odds, "They want you", "ok", `Miss 2 games · guaranteed ${ev.team.league} offer at season end`], [100 - ev.odds, "Not this time", "bd", "Miss 2 games · Coach −8 · Popularity −3"]] },
+      { id: "stay", icon: "home", label: "Stay and focus on the season", tag: "Loyal", fx: [["Coach +5", 1]] },
+    ];
+    case "holdout": return [
+      { id: "hold", icon: "x", label: "Hold out", tag: "Gamble", or: true, odds: [[50, "They pay up", "ok", `Miss 2 games · salary to ${rm(ev.market)}/mo · Coach −10`], [50, "They refuse", "bd", `Miss 2 games · fined ${rm(sal)} · Coach −20 · role drops`]] },
+      { id: "agent", icon: "user", label: "Let your agent ask quietly", tag: "Safe", odds: [[30, "Small raise", "ok", `Salary +10% (${rm(Math.round(sal * 1.1))}/mo)`], [70, "Not now", "wa", "Nothing changes"]] },
+      { id: "play", icon: "ball", label: "Play on", tag: "Quiet", fx: [["Morale −5", 0]] },
+    ];
+    case "po_injury": return [
+      { id: "surgery", icon: "bed", label: "Surgery now", tag: "Safe", fx: [["Miss the playoffs", 0], ["Come back clean next season", 1]] },
+      { id: "inject", icon: "pill", label: "Play through with injections", tag: "Risky", or: true, odds: [[65, "You get through it", "wa", "−6 OVR in the playoffs"], [35, "It gets serious", "bd", "−6 OVR now · miss half of next season · Athleticism −2"]] },
+      { id: "rest", icon: "clock", label: "Rest one game and see", tag: "Wait", odds: [[70, "It settles", "ok", "Miss 1 game"], [30, "It's worse than it looked", "wa", "Miss 3 games"]] },
+    ];
+    case "referee": return [
+      { id: "appeal", icon: "shield", label: "Appeal", tag: "Gamble", odds: [[40, "Overturned", "ok", "No suspension"], [60, "Appeal fails", "bd", `Suspended ${ev.ban + 1} games`]] },
+      { id: "sorry", icon: "heart", label: "Apologise", tag: "Safe", fx: [[`Suspended ${ev.ban} games`, 0], ["Coach +5", 1], ["Popularity −2", 0]] },
+      { id: "fight", icon: "mic", label: "Fight it publicly", tag: "Loud", or: true, odds: [[50, "The fans rally", "ok", `Suspended ${ev.ban} games · Popularity +8`], [50, "The league hits back", "bd", `Suspended ${ev.ban + 2} games · Popularity −6 · on your agent's list`]] },
+    ];
+    case "wedding": return [
+      { id: "attend", icon: "heart", label: "Fly home for the wedding", tag: "Family", fx: [["Miss one playoff game", 0], ["Family +15", 1], ["Morale +10", 1], ["Coach −5", 0]] },
+      { id: "postpone", icon: "ball", label: "Postpone it until after the finals", tag: "Focus", fx: [["Family −15", 0], ["You marry in the off-season", 1]] },
+    ];
+    case "parent": return [
+      { id: "leave", icon: "home", label: "Take paternity leave", tag: "Family", fx: [["Miss 2 games", 0], ["Family +10", 1], ["Morale +10", 1]] },
+      { id: "play", icon: "ball", label: "Keep playing", tag: "Focus", fx: [["Family −10", 0]] },
+    ];
+    case "family_money": return [
+      { id: "give", icon: "cash", label: `Give ${rm(ev.amt)}`, tag: "Generous", fx: [[`−${rm(ev.amt)}`, 0], ["Family +10", 1]] },
+      { id: "lend", icon: "swap", label: `Lend ${rm(Math.round(ev.amt / 2))}`, tag: "Middle", odds: [[50, "Paid back next year", "ok", "Family +3 · money back next season"], [50, "Never paid back", "wa", "Family +3 · the money's gone"]] },
+      { id: "refuse", icon: "x", label: "Refuse", tag: "Firm", fx: [["Family −15", 0]] },
+    ];
+    default: return [];
+  }
+}
+function ms2Copy(ev, p, comp) {
+  const club = (comp && comp.teams && comp.teams[comp.myTeam] ? comp.teams[comp.myTeam].name : p.teamName) || "your club";
+  switch (ev.id) {
+    case "coach_fired": return { scene: "office", title: "The coach is gone", desc: `${club} fired the head coach this morning. His replacement has his own favourites, and you're not one of them. He's cut your minutes and barely looks at you in practice. You start at the bottom of his list.` };
+    case "takeover": return { scene: "boardroom", title: "New owners", desc: `${club} has been sold. The new owners are reviewing every contract, and yours comes back with a ${ev.pay >= 0 ? "raise" : "pay cut"} of ${Math.abs(ev.pay)}%. Stay with them, or ask to leave at the end of the season.` };
+    case "fold": return { scene: "boardroom", title: "The club is going under", desc: `The owners of ${club} have run out of money. The season will be played out, but after the last game every contract is void. New owners will relaunch the club next year, without any of you.` };
+    case "sponsor": return { scene: "shoot", title: `${ev.brand} wants you`, desc: `${ev.brand} wants you as the face of their new range, exclusive, for two years. ${ev.clash === "social" ? "The catch: they control what you post. Your vlogs and collabs would have to stop." : `The catch: ${club} is sponsored by ${ev.rival}, and the club won't be happy.`}` };
+    case "trial": return { scene: "airport", title: `A trial in ${ev.team.country}`, desc: `${ev.team.name} of the ${ev.team.league} want to see you in person: a week of practice with their team. Their offer would be a big pay jump, but there's no guarantee, and ${club} won't love you leaving mid-season.` };
+    case "holdout": return { scene: "home", title: "You're underpaid", desc: `Your agent has done the maths. Players at your level are earning ${rm(ev.market)} a month. You're on ${rm(p.contractSalary || 0)}. You could refuse to train until the club pays you properly. It might work.` };
+    case "po_injury": return { scene: "medical", title: "Knee trouble before the playoffs", desc: "The scan shows damage in your knee. The doctor can fix it now, but you'd miss the playoffs. Or the team physio can get you through with injections, if you're willing to take the risk." };
+    case "referee": return { scene: "press", title: "A viral clip", desc: `A clip of you shouting at a referee is everywhere. The league has suspended you for ${ev.ban} games. Everyone wants to know what you'll say.` };
+    case "wedding": return { scene: "wedding", title: "The wedding is during the playoffs", desc: "You set the date a year ago, before anyone knew your team would be in the playoffs. The hall is booked, the relatives have flown in, and the second playoff game is the same night." };
+    case "parent": return { scene: "home", title: "You're a father", desc: "Your baby arrived this morning, two weeks early. Everyone's healthy. The club says you can take some time, but the team has big games coming up." };
+    case "family_money": return { scene: "life", title: `${ev.who} needs money`, desc: `${ev.who} calls. Their business is in trouble and they need ${rm(ev.amt)} by the end of the month. They know you're doing well. The whole family will hear how you answer.` };
+    default: return { scene: "street", title: "Breaking news", desc: "" };
+  }
+}
+
+/* ---------- outcomes ---------- */
+function ms2Apply(p, comp, ev, choiceId, hit) {
+  const R = p.relationships;
+  const add = (k, v) => { p[k] = clamp((p[k] || 0) + v); };
+  const rel = (k, v) => { R[k] = clamp((R[k] || 0) + v); };
+  const live = ev.liveGi;
+  let text = "", tone = "ok", label = "";
+  if (ev.id === "coach_fired") {
+    const prev = p.starterStatus || (comp && comp.myRole) || "Rotation";
+    const down = MS2_ROLE_DOWN[prev] || prev;
+    R.coach = 35; p.starterStatus = down; if (comp) comp.myRole = down;
+    if (choiceId === "earn") { add("fatigue", 10); if (comp) comp.earn = { g0: ms2MyGP(comp), prev, n: 6 }; text = `You're a ${down.toLowerCase()} player now. Extra film, extra reps. Six games to change his mind.`; label = "Back to work"; tone = "wa"; }
+    else if (choiceId === "office") {
+      if (hit === 0) { p.starterStatus = prev; if (comp) comp.myRole = prev; text = "You tell him what you bring. He listens, then nods. 'Show me.' You keep your role."; label = "He gives you a shot"; }
+      else { rel("coach", -15); text = "He hears you out, then tells you he doesn't take orders from players. It's worse than before."; label = "He doesn't like it"; tone = "bd"; }
+    } else { rel("coach", -5); p.pendingForcedTransferRequest = true; text = "Your agent starts making calls. There'll be offers when the season ends."; label = "Looking for a move"; tone = "wa"; }
+  } else if (ev.id === "takeover") {
+    if (choiceId === "stay") { p.contractSalary = Math.round((p.contractSalary || 0) * (1 + ev.pay / 100)); text = `You stay. New owners, new logo on the training shirts, and ${rm(p.contractSalary)} a month.`; label = "You stay"; tone = ev.pay >= 0 ? "ok" : "wa"; }
+    else { rel("coach", -5); p.pendingForcedTransferRequest = true; text = "The owners agree to let you talk to other clubs once the season ends."; label = "Release agreed"; tone = "wa"; }
+  } else if (ev.id === "fold") {
+    p.pendingFold = choiceId === "talk" ? 4 : 3;
+    if (choiceId === "loyal") { rel("team", 10); add("popularity", 5); text = "You tell the press you'll finish what you started. The fans love it. The squad does too."; label = "Loyal to the end"; }
+    else { rel("team", -5); text = "Your agent starts lining up clubs. A couple of teammates notice."; label = "Planning ahead"; tone = "wa"; }
+  } else if (ev.id === "sponsor") {
+    if (choiceId === "excl") {
+      p.sponsor = { brand: ev.brand, pay: ev.pay, y0: p.year, y1: p.year + 1, excl: true, clash: ev.clash };
+      if (ev.clash === "social") { const so = socialOf(p); if (so.level === "full") p.social = { ...so, level: "casual" }; p.sponsorCap = p.year + 1; }
+      else rel("coach", -8);
+      text = `You're the face of ${ev.brand}: ${rm(ev.pay)} a year for two years.${ev.clash === "social" ? " Your channels go quiet." : " The club is not impressed."}`; label = "Deal signed";
+    } else if (choiceId === "nego") {
+      if (hit === 0) { p.sponsor = { brand: ev.brand, pay: Math.round(ev.pay / 2), y0: p.year, y1: p.year + 1, excl: false }; text = `${ev.brand} agree: ${rm(Math.round(ev.pay / 2))} a year, no conditions.`; label = "They agree"; }
+      else { text = `${ev.brand} sign someone else.`; label = "They walk away"; tone = "wa"; }
+    } else { text = "You say no thanks."; label = "Declined"; tone = "wa"; }
+  } else if (ev.id === "trial") {
+    if (choiceId === "go") {
+      ms2Sit(comp, 2, live);
+      if (hit === 0) { p.trialOffer = ev.team.name; text = `A week in ${ev.team.country}, and they want you. An offer from ${ev.team.name} will be waiting when the season ends.`; label = "They want you"; }
+      else { rel("coach", -8); add("popularity", -3); text = `${ev.team.name} thank you and pass. You're back with a coach who isn't happy you went.`; label = "Not this time"; tone = "bd"; }
+    } else { rel("coach", 5); text = "You tell your agent no. The coach hears about it."; label = "You stay"; }
+  } else if (ev.id === "holdout") {
+    if (choiceId === "hold") {
+      ms2Sit(comp, 2, live);
+      if (hit === 0) { p.contractSalary = ev.market; rel("coach", -10); text = `Two games without you and the club pays up: ${rm(ev.market)} a month.`; label = "They pay up"; }
+      else {
+        const fine = p.contractSalary || 0; p.money = Math.max(0, (p.money || 0) - fine); rel("coach", -20);
+        const down = MS2_ROLE_DOWN[p.starterStatus || "Rotation"]; p.starterStatus = down; if (comp) comp.myRole = down;
+        text = `The club doesn't move. You're fined ${rm(fine)}, and you come back as a ${down.toLowerCase()} player.`; label = "They refuse"; tone = "bd";
+      }
+    } else if (choiceId === "agent") {
+      if (hit === 0) { p.contractSalary = Math.round((p.contractSalary || 0) * 1.1); text = `Your agent gets a 10% bump: ${rm(p.contractSalary)} a month.`; label = "Small raise"; }
+      else { text = "The club says not now. Nothing lost."; label = "Not now"; tone = "wa"; }
+    } else { add("morale", -5); text = "You keep your head down and play."; label = "Play on"; tone = "wa"; }
+  } else if (ev.id === "po_injury") {
+    if (choiceId === "surgery") { if (comp) { comp.seasonOut = true; comp.injuryPerGame = 0; } add("fatigue", -20); text = "Surgery goes well. You watch the playoffs from the bench in a knee brace."; label = "Surgery"; tone = "wa"; }
+    else if (choiceId === "inject") {
+      if (comp) comp.meDebuff = { games: 99, amt: 6 };
+      if (hit === 0) { text = "Injections before every game. It hurts, but you're out there."; label = "You get through it"; tone = "wa"; }
+      else { p.stats.athleticism = clamp(p.stats.athleticism - 2, 1, 99); p.halfOutNext = p.year + 1; text = "You play, but the knee gives way more each game. Next season starts without you."; label = "It gets serious"; tone = "bd"; }
+    } else {
+      const n = hit === 0 ? 1 : 3; ms2Sit(comp, n, live);
+      text = hit === 0 ? "One game off and the swelling's gone." : "The swelling doesn't go down. You miss three games."; label = hit === 0 ? "It settles" : "Worse than it looked"; tone = hit === 0 ? "ok" : "wa";
+    }
+  } else if (ev.id === "referee") {
+    if (choiceId === "appeal") {
+      if (hit === 0) { text = "The panel watches the full footage and lifts the ban."; label = "Overturned"; }
+      else { ms2Sit(comp, ev.ban + 1, live); text = `Appeal rejected, and they add a game. ${ev.ban + 1} games out.`; label = "Appeal fails"; tone = "bd"; }
+    } else if (choiceId === "sorry") { ms2Sit(comp, ev.ban, live); rel("coach", 5); add("popularity", -2); text = `You apologise to the referee in person. You serve ${ev.ban} games.`; label = "Apologised"; tone = "wa"; }
+    else {
+      if (hit === 0) { ms2Sit(comp, ev.ban, live); add("popularity", 8); text = `"The call was wrong and everyone saw it." The fans agree. You still serve ${ev.ban} games.`; label = "The fans rally"; tone = "wa"; }
+      else { ms2Sit(comp, ev.ban + 2, live); add("popularity", -6); incidentAdd(p, { kind: "referee", stat: "popularity", loss: 6 }); text = `The league doesn't like being called out. ${ev.ban + 2} games out.`; label = "The league hits back"; tone = "bd"; }
+    }
+  } else if (ev.id === "wedding") {
+    p.married = p.year;
+    if (choiceId === "attend") { ms2Sit(comp, 1, live); rel("family", 15); add("morale", 10); rel("coach", -5); text = "You fly home, say your vows and fly back. The team plays one game without you."; label = "Married"; }
+    else { rel("family", -15); text = "You move the date to after the finals. Not everyone in the family forgives you."; label = "Postponed"; tone = "wa"; }
+  } else if (ev.id === "parent") {
+    p.kids = [...(p.kids || []), p.year];
+    if (choiceId === "leave") { ms2Sit(comp, 2, live); rel("family", 10); add("morale", 10); text = "Two weeks at home. Not much sleep, and no regrets."; label = "Paternity leave"; }
+    else { rel("family", -10); text = "You're back at practice the next day. Your family notices."; label = "Back at work"; tone = "wa"; }
+  } else if (ev.id === "family_money") {
+    if (choiceId === "give") { p.money = Math.max(0, (p.money || 0) - ev.amt); rel("family", 10); text = `You transfer ${rm(ev.amt)}. The family won't forget it.`; label = "Given"; }
+    else if (choiceId === "lend") {
+      const half = Math.round(ev.amt / 2); p.money = Math.max(0, (p.money || 0) - half); rel("family", 3);
+      if (hit === 0) { p.loanBack = { amt: half, y: p.year + 1 }; text = `You lend ${rm(half)}. They promise to pay it back next year.`; label = "Paid back next year"; }
+      else { text = `You lend ${rm(half)}. You won't see it again.`; label = "Never paid back"; tone = "wa"; }
+    } else { rel("family", -15); text = "You say no. Family dinners are quiet for a while."; label = "Refused"; tone = "bd"; }
+  }
+  return { text, tone, label };
+}
+
+/* ---------- breaking-news page wrapper ---------- */
+function BreakingEventScreen({ player, event, onDone }) {
+  return <SpecialEventScreen player={player} event={event} onDone={onDone} breaking />;
 }
 
 const PR_CSS = `.pr{color-scheme:dark;--bg:#0a0b0e;--bg2:#0f1115;--p1:#14171c;--p2:#1a1e25;--p3:#222731;--ln:rgba(255,255,255,.07);--ln2:rgba(255,255,255,.12);--ink:#f3f4f6;--mu:#a3a9b4;--di:#737a86;--or:#ff7a1a;--or2:#ff9a4d;--gd:#e2b65a;--ok:#34c37a;--bd:#f05252;--in:#4aa8ff;--r1:6px;--r2:10px;--r3:14px;--r4:20px;--tc:#ff7a1a;--td:#1a1208;--cd:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;--sn:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;--ease:cubic-bezier(.2,.8,.2,1)}
@@ -11896,6 +12241,7 @@ const PR_CSS = `.pr{color-scheme:dark;--bg:#0a0b0e;--bg2:#0f1115;--p1:#14171c;--
 .pr[data-l=phone] .mu .mid small{display:none}
 .pr .wrap:has(.live){height:100%;display:flex;flex-direction:column}
 .pr .live{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 340px;grid-template-rows:auto minmax(0,1fr) auto;gap:14px;height:100%}
+.pr .bump{animation:pr-bump .5s var(--ease)}
 @keyframes pr-bump{30%{transform:scale(1.25);color:var(--or2)}}
 .pr .shot{transform-box:fill-box;transform-origin:center;animation:pr-shot .5s var(--ease) both}
 @keyframes pr-shot{from{transform:scale(2.4);opacity:0}}
@@ -16568,6 +16914,13 @@ export default function App() {
       if (kind !== "mbl") { comp.seasonOut = true; comp.injuredCarry = true; }
       else { const mineG = comp.games.filter(g => g.h === myClub || g.a === myClub); const g6 = mineG[Math.min(mineG.length - 1, 5)]; if (g6) comp.injuredUntil = g6.i; }
     }
+    // The knee from last year's playoffs: out for the first half of this season.
+    if (p.halfOutNext && p.halfOutNext <= p.year && kind === (Y.legs.includes("mbl") ? "mbl" : Y.legs[Y.legs.length - 1])) {
+      const mineG = comp.games.filter(g => g.h === myClub || g.a === myClub);
+      const gh = mineG[Math.max(0, Math.ceil(mineG.length / 2) - 1)];
+      if (gh) comp.injuredUntil = Math.max(comp.injuredUntil, gh.i);
+      delete p.halfOutNext;
+    }
     // Same season-long injury risk as before, spread across your games.
     let injuryChance = 0.06 + Math.max(0, p.age - 30) * 0.015 + Math.max(0, p.fatigue - 60) * 0.002;
     injuryChance = clamp(injuryChance, 0.04, 0.28);
@@ -16647,14 +17000,97 @@ export default function App() {
     const comp = mdClone(p.mdComp);
     let guard = 0;
     while (!comp.done && guard++ < 600) {
-      const n = mdSimUntilMine(comp, p, true);
+      const n = mdSimNext(comp, p);
+      if (comp.brkPending) break;
       mdCheckMid(comp);
       if (comp.midPending) break;
+      mdBrkCheck(comp, p);
+      if (comp.brkPending) break;
       if (!n.length && !comp.done) mdSimUntilMine(comp, p, true);
     }
     const q = { ...p, mdComp: comp };
+    const eb = mdEarnCheck(comp, q);
+    if (eb) setBanner(eb);
     if (comp.midPending) { mdMidseason(q); return; }
+    if (comp.brkPending) { mdBreaking(q); return; }
     mdFinishLeague(q);
+  };
+  /* ---------- breaking news: 30% of seasons get one extra event ---------- */
+  const mdEvLeg = (p, comp) => p.mdYear ? (p.mdYear.legs.includes("mbl") ? "mbl" : p.mdYear.legs[p.mdYear.legs.length - 1]) : comp.kind;
+  const mdRsDone = (comp) => comp.games.filter(g => g.ph === "rs" && mdIsMine(comp, g) && g.res).length;
+  const mdBrkPlan = (p, comp) => {
+    if (comp.brk !== undefined) return comp.brk;
+    const ok = comp.type === "league" && p.stage === "pro" && !!p.clubId && !p.abroad && comp.kind === mdEvLeg(p, comp) && !comp.banned && !comp.notRegistered && !comp.injuredCarry && !comp.seasonOut;
+    if (!ok || Math.random() >= 0.30) { comp.brk = null; return null; }
+    if (Math.random() < 0.25) { comp.brk = { kind: "po" }; return comp.brk; }
+    const rsN = comp.games.filter(g => g.ph === "rs" && mdIsMine(comp, g)).length;
+    const mid = Math.ceil(rsN / 2);
+    let at = 2;
+    for (let k = 0; k < 20; k++) { at = 2 + Math.floor(Math.random() * Math.max(1, rsN - 3)); if (Math.abs(at - mid) > 1) break; }
+    comp.brk = { kind: "rs", at };
+    return comp.brk;
+  };
+  const mdBrkCheck = (comp, p) => {
+    if (comp.brkPending || comp.brkLive || comp.midPending) return;
+    const b = mdBrkPlan(p, comp);
+    if (!b || b.done) return;
+    if (b.kind === "rs") {
+      if (mdRsDone(comp) >= b.at) { b.done = true; const ev = ms2PickBreaking(p, comp, "rs"); if (ev) comp.brkPending = ev; }
+      return;
+    }
+    if (comp.games.some(g => g.ph === "rs" && !g.res)) return;
+    mdExtend(comp);
+    const po = comp.games.filter(g => g.ph !== "rs" && mdIsMine(comp, g));
+    b.done = true;
+    if (!po.length || po.some(g => g.res) || comp.seasonOut) return;
+    const ev = ms2PickBreaking(p, comp, "po");
+    if (ev) comp.brkPending = ev;
+  };
+  /* Coach fired, "earn it back": six games to change his mind. */
+  const mdEarnCheck = (comp, p) => {
+    const e = comp.earn;
+    if (!e) return null;
+    const gp = (comp.stats && comp.stats[MD_ME]) ? comp.stats[MD_ME].g : 0;
+    if (gp - e.g0 < e.n && !comp.done) return null;
+    const f = (comp.myForm || []).slice(-Math.min(e.n, Math.max(1, gp - e.g0)));
+    const avg = f.length ? f.reduce((a, b) => a + b, 0) / f.length : 0;
+    delete comp.earn;
+    if (avg >= 1.0) {
+      comp.myRole = e.prev; p.starterStatus = e.prev;
+      p.relationships = { ...p.relationships, coach: clamp((p.relationships.coach || 0) + 15) };
+      return `You won him over. The new coach gives you your ${e.prev.toLowerCase()} role back.`;
+    }
+    return "Six games in, the new coach still isn't convinced.";
+  };
+  /* Sim up to your next game, check for breaking news, then play it (unless the news stops the sim). */
+  const mdSimNext = (comp, p) => {
+    const pre = mdSimUntilMine(comp, p, false);
+    mdCheckMid(comp);
+    mdBrkCheck(comp, p);
+    if (comp.brkPending || comp.midPending || comp.done) return pre;
+    return pre.concat(mdSimUntilMine(comp, p, true));
+  };
+  const mdBreaking = (p) => { setPlayer(p); save(p); setBanner(null); setScreen("md_breaking"); };
+  const mdLiveBreak = () => {
+    const p = { ...player };
+    const comp = mdClone(p.mdComp);
+    if (!comp.brkLive) return;
+    comp.brkPending = comp.brkLive; delete comp.brkLive;
+    p.mdComp = comp;
+    mdBreaking(p);
+  };
+  const mdBreakDone = (p0, out) => {
+    const p = { ...p0 };
+    const comp = mdClone(p.mdComp);
+    const ev = comp.brkPending || {};
+    delete comp.brkPending;
+    p.mdComp = comp;
+    p.history = [...(p.history || []), { age: p.age, tierLabel: "Breaking · " + (MS_LABEL[ev.id] || "News"), note: out.text }];
+    setPlayer(p); save(p); setBanner(null);
+    if (ev.liveGi != null && mdLive && mdLive.g && mdLive.gi === ev.liveGi && comp.games[ev.liveGi] && !comp.games[ev.liveGi].res) { setScreen("md_live"); return; }
+    if (comp.midPending) { mdMidseason(p); return; }
+    if (p.highlightMode) { mdAutoSeason(p); return; }
+    setScreen("comp");
   };
   const mdCheckMid = (comp) => {
     if (comp.type !== "league" || comp.midDone || comp.midPending) return;
@@ -16701,6 +17137,7 @@ export default function App() {
     setMidseasonEvent(null);
     setPlayer(p);
     save(p);
+    if (comp.brkPending) { mdBreaking(p); return; }
     if (p.highlightMode) { mdAutoSeason(p); return; }
     setScreen("comp");
   };
@@ -16870,11 +17307,15 @@ export default function App() {
       }
     });
     mdCheckMid(comp);
+    const eb = mdEarnCheck(comp, p);
+    if (eb) banner = banner ? banner + " " + eb : eb;
+    mdBrkCheck(comp, p);
     p.mdComp = comp;
     setPlayer(p);
     save(p);
     setBanner(banner);
     if (nextScreen === "comp" && comp.midPending) { mdMidseason(p); return p; }
+    if (nextScreen === "comp" && comp.brkPending) { mdBreaking(p); return p; }
     if (nextScreen) setScreen(nextScreen);
     return p;
   };
@@ -16884,16 +17325,34 @@ export default function App() {
     return comp;
   };
   const handleMdPreGame = (gi) => { setMdLive({ gi, g: null }); setScreen("md_pregame"); };
+  const mdPreCheck = (comp) => {
+    mdBrkCheck(comp, player);
+    if (!comp.brkPending) return false;
+    setMdLive(null);
+    mdBreaking({ ...player, mdComp: comp });
+    return true;
+  };
   const handleMdTip = (plan) => {
     const comp = mdReady();
+    if (mdPreCheck(comp)) return;
     const gi = comp.cursor;
     if (!comp.games[gi] || comp.games[gi].res) { setScreen("comp"); return; }
     const g = mdStartGame(comp, gi, player, { plan });
     mdGameRun(g);
+    let brkAt = null;
+    const b = mdBrkPlan(player, comp);
+    if (b && b.kind === "rs" && !b.done && !comp.brkPending && !comp.midPending && comp.games[gi].ph === "rs" && mdRsDone(comp) + 1 >= b.at) {
+      b.done = true;
+      const ev = ms2PickBreaking(player, comp, "rs", gi);
+      const qb = 1 + Math.floor(Math.random() * 3);
+      const at = g.ev.findIndex(e => e.q >= qb);
+      if (ev && at > 0) { comp.brkLive = ev; brkAt = at; }
+      else if (ev) { delete ev.liveGi; comp.brkPending = ev; }
+    }
     const p = { ...player, mdComp: comp };
     setPlayer(p);
     save(p);
-    setMdLive({ gi, g, v: 0 });
+    setMdLive({ gi, g, v: 0, brkAt });
     setScreen("md_live");
   };
   const handleMdClutch = (optId) => {
@@ -16907,12 +17366,14 @@ export default function App() {
     const comp = mdClone(player.mdComp);
     const { gi, g } = mdLive;
     if (!g.final) { while (mdGameRun(g) === "clutch") mdClutchResolve(g, g.clutch.options[0].id); }
+    if (comp.brkLive) { const ev = comp.brkLive; delete comp.brkLive; delete ev.liveGi; comp.brkPending = ev; }
     const notes = mdRecord(comp, gi, g, player);
     comp.cursor = gi + 1;
     mdAfterGames(player, comp, [{ gi, ...notes, clutch: g.clutchResult }], "md_box");
   };
   const handleMdSimFinal = (plan) => {
     const comp = mdReady();
+    if (mdPreCheck(comp)) return;
     const gi = comp.cursor;
     if (!comp.games[gi] || comp.games[gi].res) { setScreen("comp"); return; }
     const g = mdSimOne(comp, gi, player, { plan });
@@ -16923,7 +17384,8 @@ export default function App() {
   };
   const handleMdSim = () => {
     const comp = mdClone(player.mdComp);
-    const notes = mdSimUntilMine(comp, player, true);
+    const notes = mdSimNext(comp, player);
+    if (comp.brkPending) { mdAfterGames(player, comp, notes.map(n => ({ ...n, g: null })), "comp"); return; }
     const last = notes[notes.length - 1];
     if (last && last.g && !last.dnp) {
       setMdLive({ gi: last.gi, g: last.g });
@@ -16939,11 +17401,14 @@ export default function App() {
       mdExtend(comp);
       if (comp.done) break;
       const nx = mdNextMine(comp);
-      if (!nx) { notes = notes.concat(mdSimUntilMine(comp, player, true)); continue; }
+      if (!nx) { notes = notes.concat(mdSimUntilMine(comp, player, false)); mdBrkCheck(comp, player); if (comp.brkPending) break; continue; }
       if (k > 0 && mdIsBig(comp, nx) && mdCanPlay(comp, nx)) break;
-      notes = notes.concat(mdSimUntilMine(comp, player, true));
+      notes = notes.concat(mdSimNext(comp, player));
+      if (comp.brkPending) break;
       mdCheckMid(comp);
       if (comp.midPending) break;
+      mdBrkCheck(comp, player);
+      if (comp.brkPending) break;
       if (comp.format === "fiba" && mdFibaFinishedForMe(comp)) break;
     }
     mdAfterGames(player, comp, notes.map(n => ({ ...n, g: null })), "comp");
@@ -16953,6 +17418,7 @@ export default function App() {
     const p = player;
     setMdLive(null);
     if (p.mdComp && p.mdComp.midPending) { mdMidseason(p); return; }
+    if (p.mdComp && p.mdComp.brkPending) { mdBreaking(p); return; }
     setScreen("comp");
   };
   const handleMdFinish = () => {
@@ -18088,7 +18554,7 @@ export default function App() {
       // Release / bankruptcy can cut a contract short (drama or money troubles).
       if (ev.type === "released" || ev.type === "bankrupt") {
         const oldClub = getClub(p.clubId);
-        const offers = generateClubOffers(p, { count: 3, excludeId: p.clubId });
+        const offers = generateClubOffers(p, { count: ev.fold || 3, excludeId: p.clubId });
         p.clubId = null;
         p.starterStatus = null;
         p.contractSalary = 0;
@@ -18212,6 +18678,19 @@ export default function App() {
     // player already qualifies for some tier. Read from the player object
     // rather than a local `choice` — the choice that set this flag was made
     // on a different click, in a different function's scope.
+    // the overseas trial went well: their offer is waiting
+    if (p.trialOffer && p.stage === "pro" && !p.abroad) {
+      const team = OVERSEAS_TRIAL_TIER.teams.find(t => t.name === p.trialOffer);
+      delete p.trialOffer;
+      if (team) {
+        const band = overseasRoleBand(OVERSEAS_TRIAL_TIER, computeOverall(p.stats, p.position));
+        p.pendingOverseasOffer = { tier: OVERSEAS_TRIAL_TIER, teams: [team], role: band.role, awardChance: band.awardChance, years: 2 };
+        setPlayer(p);
+        save(p);
+        setScreen("overseas_offers");
+        return;
+      }
+    }
     if (p.stage === "pro" && !p.abroad && p.clubId) {
       const overallD = computeOverall(p.stats, p.position);
       // An elite agent gets a borderline player in front of the right people,
@@ -18514,7 +18993,7 @@ export default function App() {
         <MdPregameScreen player={player} comp={player.mdComp} gi={mdLive.gi} onTip={handleMdTip} onSimFinal={handleMdSimFinal} onBack={() => setScreen("comp")} />
       )}
       {screen === "md_live" && player && player.mdComp && mdLive && mdLive.g && (
-        <MdLiveScreen player={player} comp={player.mdComp} game={mdLive.g} onClutch={handleMdClutch} onDone={handleMdLiveDone} />
+        <MdLiveScreen player={player} comp={player.mdComp} game={mdLive.g} onClutch={handleMdClutch} onDone={handleMdLiveDone} brkAt={mdLive.brkAt} onBreak={mdLiveBreak} />
       )}
       {screen === "md_box" && player && player.mdComp && mdLive && (
         <MdBoxScreen player={player} comp={player.mdComp} gi={mdLive.gi} game={mdLive.g} onContinue={handleMdBoxContinue} />
@@ -18617,6 +19096,9 @@ export default function App() {
       )}
       {screen === "midseason_checkpoint" && player && midseasonEvent && midseasonEvent.type === "special" && (
         <SpecialEventScreen key={midseasonEvent.id + player.year} player={player} event={midseasonEvent} onDone={mdSpecialDone} />
+      )}
+      {screen === "md_breaking" && player && player.mdComp && player.mdComp.brkPending && (
+        <BreakingEventScreen key={"brk" + player.mdComp.brkPending.id + player.year} player={player} event={player.mdComp.brkPending} onDone={mdBreakDone} />
       )}
       {screen === "midseason_checkpoint" && player && midseasonEvent && midseasonEvent.type === "recap" && (
         <MidseasonRecapScreen player={player} onContinue={handleMidseasonRecapContinue} />
