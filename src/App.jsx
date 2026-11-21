@@ -4893,7 +4893,7 @@ function useLayoutMode() {
   return lay;
 }
 
-const RD_FREE = new Set(["hub", "league", "pathway", "lifestyle_spending", "career_highlights", "investments", "legacy", "teams"]);
+const RD_FREE = new Set(["hub", "league", "pathway", "lifestyle_spending", "career_highlights", "investments", "legacy", "teams", "social"]);
 const RD_NO_SHELL = new Set(["start", "look", "body_setup", "hall_of_fame", "achievement_gallery", "retired"]);
 const RD_ICONS = {
   hub: (s) => <Home size={s} />, league: (s) => <Trophy size={s} />, pathway: (s) => <Flag size={s} />,
@@ -6525,7 +6525,8 @@ function mdTeamFor(comp, id, p) {
     if (kit && me.look && (comp.type === "tourney")) me.look = { ...me.look, jersey: kit.jersey, trim: kit.trim, panel: kit.panel, shorts: kit.shorts };
     if (comp.meDebuff && comp.meDebuff.games > 0) me.a = me.a.map(v => mdClamp(v - comp.meDebuff.amt, 1, 99));
     if (comp.meBoost) me.a = me.a.map(v => mdClamp(v + comp.meBoost, 1, 99));
-    if (comp.meDebuff || comp.meBoost) me.ovr = mdOvr(me.a, me.pos);
+    if (comp.meAdj) me.a = me.a.map(v => mdClamp(v + comp.meAdj, 1, 99));
+    if (comp.meDebuff || comp.meBoost || comp.meAdj) me.ovr = mdOvr(me.a, me.pos);
     roster = roster.filter(x => x.id !== MD_ME);
     roster.push(me);
   }
@@ -7710,7 +7711,7 @@ function prCrumb(p) {
   return `Season ${p.year || ""}${lg ? " · " + lg : ""}${p.teamName ? " · " + p.teamName : ""}`;
 }
 const PR_TITLES = {
-  legacy: "Legacy", teams: "Teams", investments: "Investments", hall_of_fame: "Hall of Fame", achievement_gallery: "Achievements", leg_offers: "League-only offers", dl_invite: "D-League invite",
+  legacy: "Legacy", teams: "Teams", investments: "Investments", social: "Social", hall_of_fame: "Hall of Fame", achievement_gallery: "Achievements", leg_offers: "League-only offers", dl_invite: "D-League invite",
   offseason_plan: "Off-season", training: "Training", creation_build: "Build your player", event: "Career event", result: "Season result",
   u15_result: "State selection", u15_tournament: "Tournament result", u15_shortlist: "Youth shortlist", u15_bootcamp_result: "Bukit Jalil",
   age16_u16_result: "Age 16", age16_u17_result: "Age 16", a17_result: "Age 17", a17_shortlist: "U18 shortlist", a17_bootcamp_result: "Bukit Jalil",
@@ -7743,7 +7744,7 @@ function prChips(p) {
   }
   return out;
 }
-function PrTop({ screen, player }) {
+function PrTop({ screen, player, onSearch }) {
   return (
     <header className="top">
       <div style={{ minWidth: 0 }}>
@@ -7751,6 +7752,7 @@ function PrTop({ screen, player }) {
         <div className="crumb hide-p" style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{prCrumb(player)}</div>
       </div>
       <span className="grow" />
+      {onSearch && <button className="chip pr-srch" onClick={onSearch} title="Search players and teams ( / )"><Ic n="eye" /><span className="hide-p">Search</span></button>}
       {prChips(player).map(c => <span key={c.key} className={"chip" + (c.hide ? " hide-s hide-l" : "")}>{c.node}</span>)}
       <span style={{ width: 40, flex: "none" }} aria-hidden="true" />
     </header>
@@ -7910,12 +7912,17 @@ function prLeaguesFor(p, all) {
 /* =====================================================================
    SHELL — prototype side menu, top bar and phone tabs
 ===================================================================== */
-const PR_NAV_IC = { hub: "home", league: "table", pathway: "route", lifestyle_spending: "cash", career_highlights: "star", legacy: "crown", teams: "users", investments: "chart" };
-function Shell({ show, screen, player, onNav, children }) {
+const PR_NAV_IC = { hub: "home", league: "table", pathway: "route", lifestyle_spending: "cash", career_highlights: "star", legacy: "crown", teams: "users", investments: "chart", social: "phone" };
+function Shell({ show, screen, player, onNav, onUpdate, children }) {
   const lay = useLayoutMode();
   const [rotSeen, setRotSeen] = useState(() => { try { return window.localStorage.getItem("hl_rot_seen") === "1"; } catch (e) { return true; } });
   useEffect(() => { try { window.scrollTo(0, 0); } catch (e) { /* ignore */ } }, [screen]);
   const [npc, setNpc] = useState(null);
+  const [srch, setSrch] = useState(false);
+  useEffect(() => {
+    const f = ev => { const t = ev.target && ev.target.tagName; if (ev.key === "/" && t !== "INPUT" && t !== "TEXTAREA" && player) { ev.preventDefault(); setSrch(true); } };
+    window.addEventListener("keydown", f); return () => window.removeEventListener("keydown", f);
+  }, [!!player]);
   useEffect(() => {
     const f = ev => setNpc(ev.detail);
     const g = ev => { PR_TEAMS_OPEN = ev.detail; onNav("teams"); };
@@ -7926,7 +7933,7 @@ function Shell({ show, screen, player, onNav, children }) {
   if (!show || !player) return <div data-l={lay} className="rd-root pr">{children}</div>;
   const free = RD_FREE.has(screen);
   const adult = player.age >= 18;
-  const items = [["hub", "Hub", true], ["league", "League", true], ["teams", "Teams", true], ["pathway", "Pathway", true], ["lifestyle_spending", "Lifestyle", adult], ["investments", "Investments", adult], ["career_highlights", "Highlights", adult], ["legacy", "Legacy", true]].filter(i => i[2]);
+  const items = [["hub", "Hub", true], ["league", "League", true], ["teams", "Teams", true], ["pathway", "Pathway", true], ["lifestyle_spending", "Lifestyle", adult], ["investments", "Investments", adult], ["social", "Social", true], ["career_highlights", "Highlights", adult], ["legacy", "Legacy", true]].filter(i => i[2]);
   const look = playerLook(player);
   const dismissRot = () => { setRotSeen(true); try { window.localStorage.setItem("hl_rot_seen", "1"); } catch (e) { /* ignore */ } };
   const nav = (b) => items.map(([id, label]) => (
@@ -7947,11 +7954,15 @@ function Shell({ show, screen, player, onNav, children }) {
         </div>
       </aside>
       <main className="rd-main">
-        <PrTop screen={screen} player={player} />
+        <PrTop screen={screen} player={player} onSearch={() => setSrch(true)} />
         {children}
       </main>
       <nav className="bnav rd-bottom">{nav(true)}</nav>
-      {npc && <NpcModal player={player} k={npc.k} y={npc.y} onClose={() => setNpc(null)} />}
+      {npc && <NpcModal player={player} k={npc.k} y={npc.y} onClose={() => setNpc(null)} onUpdate={onUpdate} />}
+      {srch && <SearchModal player={player} onClose={() => setSrch(false)}
+        onPlayer={(k) => { setSrch(false); setNpc({ k, y: player.year }); }}
+        onTeam={(x) => { setSrch(false); PR_TEAMS_OPEN = { cat: x.cat, team: x.id, y: player.year }; onNav("teams"); }}
+        onLegacy={() => { setSrch(false); onNav("legacy"); }} />}
       {lay === "phone" && !rotSeen && (
         <div className="rd-rotate" role="status">
           <Ic n="rot" />
@@ -8198,7 +8209,7 @@ function PrLeaders({ L, player, onOpenLeague }) {
     </section>
   );
 }
-function Hub({ player, onPlaySeason, onRetireConsider, onManageInvestments, onRequestTrade, onOpenLifestyle, onOpenCareerHighlights, onOpenLeague, onOpenPathway, banner, summary }) {
+function Hub({ player, onPlaySeason, onRetireConsider, onManageInvestments, onRequestTrade, onOpenLifestyle, onOpenCareerHighlights, onOpenLeague, onOpenPathway, onOpenSocial, banner, summary }) {
   const p = player;
   const overall = computeOverall(p.stats, p.position);
   const youth = prIsYouth(p);
@@ -8217,6 +8228,7 @@ function Hub({ player, onPlaySeason, onRetireConsider, onManageInvestments, onRe
     showInvest && ["cash", "Investments", investmentPct(p) > 0 ? `${Object.keys(INVESTMENTS).filter(k => p.investments && p.investments[k]).length} active` : "Not started", onManageInvestments],
     ["heart", "Lifestyle", p.homeTier ? HOME_TIERS.find(t => t.id === p.homeTier).label : "No home yet", onOpenLifestyle],
     showTrade && ["swap", "Request a trade", p.tradeRequestCooldown > 0 ? `${p.tradeRequestCooldown} season${p.tradeRequestCooldown === 1 ? "" : "s"} until you can ask` : `${p.seasonsAtClub} season${p.seasonsAtClub === 1 ? "" : "s"} at ${p.teamName}`, p.tradeRequestCooldown > 0 ? null : onRequestTrade],
+    ["phone", "Social", `${fmtK(socialOf(p).tt + socialOf(p).ig)} followers · ${SOCIAL_LV[socialOf(p).level].label}`, onOpenSocial],
     ["star", "Career highlights", (p.careerHighlights || []).length ? `${p.careerHighlights.length} standout game${p.careerHighlights.length === 1 ? "" : "s"}` : "No standout games yet", onOpenCareerHighlights],
     p.age >= 30 && ["x", "Retire", "End your professional career", onRetireConsider],
   ].filter(Boolean) : [];
@@ -8258,6 +8270,12 @@ function Hub({ player, onPlaySeason, onRetireConsider, onManageInvestments, onRe
             <button className="cta" style={{ width: "100%" }} onClick={onPlaySeason}>{opener ? "Start the season" : `Play season ${sn}`} <Ic n="play" /></button>
             {opener && <PrSrc>Fixture from the simulated {lgShort} schedule</PrSrc>}
           </section>
+        )}
+        {p.invNote && p.invNoteY === p.year && (
+          <div className="alert c12" data-a="" style={{ cursor: "default" }}>
+            <span className="ini-b" style={{ background: "var(--p3)" }}><Ic n="chart" /></span>
+            <span style={{ flex: 1 }}><b>Money & socials · last year</b><small>{p.invNote}</small></span>
+          </div>
         )}
         {banner && (
           <div className="alert c12" data-a="" style={{ cursor: "default" }}>
@@ -9545,7 +9563,7 @@ const PR_INV = {
   family: { scene: "home", sub: "Send money home and fly them out to see you.", eff: ["No settling-in dip when you move abroad", "A bad season stops spiralling"] },
   agent: { scene: "office", sub: "Real representation. Gets you seen, gets you in the room.", eff: ["Scouts rate you 3 higher for overseas moves"], risk: true },
 };
-function InvestmentsScreen({ player, onConfirm, onBack }) {
+function InvestmentsScreen({ player, onConfirm, onBack, onUpdate }) {
   const p = player;
   const [sel, setSel] = useState(() => ({ ...(p.investments || {}) }));
   const salary = p.contractSalary || 0;
@@ -9593,6 +9611,8 @@ function InvestmentsScreen({ player, onConfirm, onBack }) {
               );
             })}
           </div>
+          {onUpdate && <PrStocks player={p} onUpdate={onUpdate} />}
+          {onUpdate && <section className="pn" data-a="" style={{ marginTop: 16 }}><h3><Ic n="phone" /> Social media<small>{fmtK(socialOf(p).tt + socialOf(p).ig)} followers</small></h3><PrSocialLevel player={p} onUpdate={onUpdate} /></section>}
         </div>
         <section className="pn c4 l12" data-a="">
           <h3><Ic n="bolt" /> This month</h3>
@@ -10327,6 +10347,7 @@ function RetiredScreen({ player, onPlayAgain, onViewHallOfFame, onViewAchievemen
             {p.natCode && <Tg cls="or"><PrFlag code={p.natCode} w={20} /> Played for {nat}</Tg>}
             {p.tainted && <Tg cls="neg">Tainted · failed a drug test</Tg>}
             {banned && <Tg cls="neg">Life ban · match-fixing</Tg>}
+            {p.bankrupt ? <Tg cls="neg">Went bankrupt</Tg> : null}
           </div>
         </div>
         <div className="pk"><b className="num">{p.peakOverall}</b><small>Peak OVR</small></div>
@@ -10796,7 +10817,7 @@ function npcCareer(p, k) {
 }
 
 /* ---------- the profile ---------- */
-function NpcProfile({ player, k, y, onClose, onTeam }) {
+function NpcProfile({ player, k, y, onClose, onTeam, onUpdate }) {
   const p = player;
   const year = y || p.year;
   const e = useMemo(() => npcFind(k, year) || npcFind(k, p.year), [k, year]);
@@ -10804,7 +10825,7 @@ function NpcProfile({ player, k, y, onClose, onTeam }) {
   useEffect(() => { setCar(null); const t = setTimeout(() => setCar(npcCareer(p, k)), 30); return () => clearTimeout(t); }, [k]);
   if (!e) return <section className="pn" data-a=""><p style={{ margin: 0, color: "var(--di)" }}>This player isn't in the world this year.</p>{onClose && <button className="ghost" onClick={onClose}>Back</button>}</section>;
   const now = npcFind(k, p.year) || e;
-  const where = (() => { try { return mdWhereIs(k, p.year, MD_NAMES); } catch (er) { return null; } })();
+  const where = (() => { const mv = npcMovesFor(p, p.year).find(m => m.k === k); if (mv) return { lvl: mv.kind === "mbl" ? "mbl" : (p.age <= 20 ? "u20" : "u23"), club: mv.club }; try { return mdWhereIs(k, p.year, MD_NAMES); } catch (er) { return null; } })();
   const age = now.by ? p.year - now.by : null;
   const a = mdAttrs(now);
   const c = p.conn && p.conn[k];
@@ -10836,6 +10857,7 @@ function NpcProfile({ player, k, y, onClose, onTeam }) {
           {bond ? <div className="dec"><span className="k you"><Ic n="heart" /></span><div><b>{CONN_BOND[bond][0]}</b><small>{connHow(c)}</small></div></div>
             : <div className="dec"><span className="k chance"><Ic n="user" /></span><div><b>No history yet</b><small>You haven't shared a team.</small></div></div>}
           <PrSline items={[["Games together", tg], ["Head to head", h ? `${h[1]}–${h[2]}` : "—"], ["His PPG vs you", h ? (h[3] / h[0]).toFixed(1) : "—"], ["Your PPG vs him", h ? (h[4] / h[0]).toFixed(1) : "—"]]} />
+          <NpcSuggest player={p} k={k} onUpdate={onUpdate} />
           <h3 style={{ marginTop: 16 }}><Ic n="bolt" /> Attributes</h3>
           <div className="pr-attrs">{["Shooting", "Playmaking", "Defense", "Rebounding", "Athleticism", "IQ"].map((n, i) => <div key={n}><small>{n}</small><i><b style={{ width: `${a[i]}%` }} /></i><span className="num">{a[i]}</span></div>)}</div>
         </section>
@@ -10874,18 +10896,18 @@ function PrMiniArc({ pts }) {
 }
 /* Open a profile from anywhere (league tables, box scores, people). */
 function npcOpen(k, y) { if (!k || k === MD_ME) return; try { window.dispatchEvent(new CustomEvent("pr-npc", { detail: { k, y } })); } catch (er) { /* ignore */ } }
-function NpcModal({ player, k, y, onClose }) {
+function NpcModal({ player, k, y, onClose, onUpdate }) {
   useEffect(() => { const f = ev => { if (ev.key === "Escape") onClose(); }; window.addEventListener("keydown", f); return () => window.removeEventListener("keydown", f); }, []);
   return (
     <div className="pr-modal" onClick={onClose}>
-      <div className="pr-modal-in" onClick={ev => ev.stopPropagation()}><NpcProfile player={player} k={k} y={y} onClose={onClose} /></div>
+      <div className="pr-modal-in" onClick={ev => ev.stopPropagation()}><NpcProfile player={player} k={k} y={y} onClose={onClose} onUpdate={onUpdate} /></div>
     </div>
   );
 }
 
 /* ---------- the Teams page ---------- */
 let PR_TEAMS_OPEN = null;
-function TeamsScreen({ player }) {
+function TeamsScreen({ player, onUpdate }) {
   const p = player;
   const init = PR_TEAMS_OPEN; PR_TEAMS_OPEN = null;
   const years = []; for (let y = MD_BASE_YEAR; y <= Math.max(MD_BASE_YEAR, p.year); y++) years.push(y);
@@ -10897,7 +10919,7 @@ function TeamsScreen({ player }) {
   const teams = useMemo(() => npcTeamsFor(cat, y, sub), [cat, y, sub]);
   const season = useMemo(() => (["mbl", "u20", "u23"].includes(cat) ? npcLeagueSeason(p, cat, y) : p.npcLog && p.npcLog[`${cat === "youth" ? sub : (team === "senior" ? "sea" : team)}:${y}`]) || null, [cat, y, sub, team]);
   const tm = team ? teams.find(t => t.id === team) : null;
-  const roster = useMemo(() => tm ? npcRoster(cat, tm, y) : [], [tm, cat, y]);
+  const roster = useMemo(() => tm ? npcRosterMoved(p, cat, tm.id, y, npcRoster(cat, tm, y)) : [], [tm, cat, y, p.moves]);
   const nr = cat === "mbl" ? npcMbLNr(roster) : new Set();
   const rec = id => { const r = season && season.table && season.table.find(x => x.id === id); return r ? `${r.w}–${r.l}` : null; };
   const go = (c) => { setCat(c); setTeam(null); setK(null); };
@@ -10905,7 +10927,7 @@ function TeamsScreen({ player }) {
   if (k) return (
     <PrPage>
       <button className="ghost" style={{ width: "auto", marginBottom: 12 }} onClick={() => setK(null)}><Ic n="left" /> {tm ? tm.name : "Back"}</button>
-      <NpcProfile player={p} k={k} y={y} onTeam={(lvl, club) => { setK(null); setCat(lvl); setTeam(club); setY(p.year); }} />
+      <NpcProfile player={p} k={k} y={y} onUpdate={onUpdate} onTeam={(lvl, club) => { setK(null); setCat(lvl); setTeam(club); setY(p.year); }} />
     </PrPage>
   );
   return (
@@ -10950,6 +10972,369 @@ function TeamsScreen({ player }) {
           <PrSrc>{season ? (season.src === "you" ? "Stats from your own season" : "Stats from the simulated season") : "No games simulated for this team this year"} · tap a player</PrSrc>
         </section>
       )}
+    </PrPage>
+  );
+}
+
+/* =====================================================================
+   SUGGEST A SIGNING — tell your club who to sign. Once a season; the
+   club weighs your standing, the need and the money. A yes moves him
+   to your club for the next two seasons in this career's world.
+===================================================================== */
+function npcMovesFor(p, y) { return (p.moves || []).filter(m => y >= m.y0 && y <= m.y1); }
+function npcApplyMoves(p, comp) {
+  npcMovesFor(p, comp.year).forEach(m => {
+    if (!comp.entries[m.club]) return;
+    const e = npcFind(m.k, comp.year);
+    if (!e) return;
+    if (comp.kind !== "mbl" && (e.imp || comp.year - (e.by || 0) > (comp.kind === "u20" ? 20 : 23))) return;
+    Object.keys(comp.entries).forEach(c => { comp.entries[c] = comp.entries[c].filter(x => (x.k || x.id) !== m.k); });
+    let list = comp.entries[m.club].slice();
+    if (e.imp && comp.kind === "mbl") { const imps = list.filter(x => x.imp).sort((a, b) => a.o - b.o); if (imps.length >= 4) list = list.filter(x => x !== imps[0]); }
+    comp.entries[m.club] = list.concat([{ ...e }]);
+  });
+}
+function npcRosterMoved(p, cat, teamId, y, list) {
+  const mv = npcMovesFor(p, y);
+  if (!mv.length) return list;
+  let out = list.filter(e => !mv.some(m => m.k === e.k && m.club !== teamId));
+  mv.filter(m => m.club === teamId && (cat === "mbl" ? m.kind === "mbl" : m.kind !== "mbl" || cat !== "mbl")).forEach(m => {
+    if (out.some(e => e.k === m.k)) return;
+    const e = npcFind(m.k, y);
+    if (!e || (cat !== "mbl" && (e.imp || y - (e.by || 0) > (cat === "u20" ? 20 : 23)))) return;
+    out = out.concat([{ ...e }]);
+  });
+  return out;
+}
+/* After your league season: a signing you pushed for who didn't play up to it costs you. */
+function npcFlopCheck(p0, comp) {
+  const mv = npcMovesFor(p0, comp.year).filter(m => m.club === comp.myTeam && !m.judged);
+  if (!mv.length) return p0;
+  const p = { ...p0, relationships: { ...p0.relationships }, moves: (p0.moves || []).map(m => ({ ...m })) };
+  const teamG = Math.max(1, Math.max(...Object.values(comp.stats).filter(s => s.t === comp.myTeam).map(s => s.g)));
+  mv.forEach(m => {
+    const s = comp.stats[m.k];
+    const e = npcFind(m.k, comp.year);
+    const exp = e ? Math.max(3, (e.o - 55) * 0.55) : 6;
+    const ppg = s && s.g ? s.pts / s.g : 0;
+    const flop = !s || s.g < teamG * 0.35 || ppg < exp * 0.5;
+    const pm = p.moves.find(x => x.k === m.k && x.y0 === m.y0);
+    if (pm) pm.judged = true;
+    if (flop) {
+      p.relationships.coach = clamp((p.relationships.coach || 50) - 5);
+      p.history = [...(p.history || []), { age: p.age, tierLabel: "Signing flopped", note: `${m.n}, the player you pushed ${comp.teams[comp.myTeam] ? comp.teams[comp.myTeam].name : "the club"} to sign, didn't deliver (${ppg.toFixed(1)} PPG). The coach remembers whose idea it was.` }];
+    } else p.history = [...(p.history || []), { age: p.age, tierLabel: "Signing paid off", note: `${m.n}, the player you pushed for, averaged ${ppg.toFixed(1)} PPG.` }];
+  });
+  return p;
+}
+/* Your club, its roster this year, and how a suggestion would go. */
+function npcSuggestCase(p, k) {
+  if (p.stage !== "pro" || !p.clubId || p.abroad) return { ok: false, why: "You need to be at a Malaysian club to suggest signings." };
+  if (p.suggestY === p.year) return { ok: false, why: "You've already made a suggestion this season." };
+  const y = p.year;
+  const e = npcFind(k, y);
+  if (!e) return { ok: false, why: "He isn't playing this year." };
+  const mbl = p.league === "mbl";
+  let mine;
+  try { mine = mbl ? (mdWorldAt(null, y, MD_NAMES).clubs[p.clubId] || []) : mdDLeagueRoster(p.clubId, y, p.age <= 20 ? 20 : 23, MD_NAMES); } catch (er) { mine = []; }
+  mine = npcRosterMoved(p, mbl ? "mbl" : (p.age <= 20 ? "u20" : "u23"), p.clubId, y, mine);
+  if (mine.some(x => x.k === k)) return { ok: false, why: "He already plays for your club." };
+  if (e.imp && !mbl) return { ok: false, why: "Only MBL clubs sign imports." };
+  if (!mbl && y - (e.by || 0) > 23) return { ok: false, why: "He's too old for your club's D-League sides." };
+  const pool = mine.filter(x => !!x.imp === !!e.imp && (e.imp || x.pos === e.pos));
+  const weakest = (pool.length ? pool : mine).slice().sort((a, b) => a.o - b.o)[0];
+  const diff = e.o - (weakest ? weakest.o : 50);
+  if (e.imp && diff <= 0) return { ok: false, why: "Your club's four imports are all at least as good. There's no free slot for him." };
+  const coach = (p.relationships && p.relationships.coach) || 50;
+  const role = p.firstOption ? 0.15 : p.starterStatus === "Starter" ? 0.1 : p.starterStatus === "Rotation" ? 0.04 : 0;
+  const club = getClub(p.clubId) || {};
+  const need = diff > 0 ? Math.min(0.25, diff * 0.025) : -0.3;
+  const money = ((club.prestige || 50) - 50) * 0.003 - (e.imp ? 0.05 : 0);
+  const odds = Math.max(0.05, Math.min(0.9, 0.18 + coach * 0.004 + role + (p.popularity || 0) * 0.002 + need + money));
+  return { ok: true, odds, e, weakest, diff, club, coach };
+}
+function npcSuggest(p0, k) {
+  const c = npcSuggestCase(p0, k);
+  if (!c.ok) return { p: p0, text: c.why, yes: false };
+  const p = { ...p0, relationships: { ...p0.relationships } };
+  p.suggestY = p.year;
+  const yes = Math.random() < c.odds;
+  if (yes) {
+    p.moves = [...(p.moves || []), { k, n: c.e.n, club: p.clubId, kind: p.league === "mbl" ? "mbl" : "dl", y0: p.year + 1, y1: p.year + 2 }];
+    p.suggestNo = 0;
+    const conn = { ...(p.conn || {}) };
+    const cc = conn[k] ? { ...conn[k], teams: conn[k].teams.slice() } : { n: c.e.n, teams: [], titles: 0, by: c.e.by || null, imp: !!c.e.imp, met: p.year + 1 };
+    cc.signedFor = p.year + 1; conn[k] = cc; p.conn = conn;
+    p.history = [...(p.history || []), { age: p.age, tierLabel: "Suggested a signing", note: `${c.club.name || "Your club"} took your advice and signed ${c.e.n} for next season.` }];
+    return { p, yes, text: `${c.club.name || "Your club"} agreed. ${c.e.n} joins you next season.` };
+  }
+  p.suggestNo = (p.suggestNo || 0) + 1;
+  let text = `${c.club.name || "Your club"} passed on ${c.e.n}.`;
+  if (p.suggestNo >= 3) { p.relationships.coach = clamp((p.relationships.coach || 50) - 3); text += " Three seasons of suggestions in a row: the coach is getting tired of them (coach −3)."; }
+  return { p, yes, text };
+}
+function NpcSuggest({ player, k, onUpdate }) {
+  const p = player;
+  const c = useMemo(() => npcSuggestCase(p, k), [p.year, p.suggestY, p.clubId, k]);
+  const [res, setRes] = useState(null);
+  if (p.stage !== "pro") return null;
+  const go = () => { const r = npcSuggest(p, k); setRes(r); if (onUpdate) onUpdate(r.p); };
+  return (
+    <div className="pr-sugg">
+      <h3 style={{ marginTop: 16 }}><Ic n="swap" /> Suggest to my club</h3>
+      {res ? <div className={"injb" + (res.yes ? " ok" : "")}><Ic n={res.yes ? "check" : "x"} /> {res.text}</div>
+        : !c.ok ? <p style={{ color: "var(--di)", margin: 0, fontSize: 13 }}>{c.why}</p>
+        : <>
+          <p style={{ color: "var(--mu)", margin: "0 0 8px", fontSize: 13 }}>{c.diff > 0 ? `He'd be an upgrade of ${c.diff} on ${c.weakest ? c.weakest.n : "your weakest player"}.` : "He wouldn't be an upgrade on your roster."} Once a season. If he flops, the coach will remember (−5).</p>
+          <div className="pr-odds" style={{ marginBottom: 10 }}><i className="ok" style={{ width: `${Math.round(c.odds * 100)}%` }}>{Math.round(c.odds * 100)}% yes</i><i style={{ width: `${100 - Math.round(c.odds * 100)}%` }}>{100 - Math.round(c.odds * 100)}% no</i></div>
+          <button className="cta" style={{ width: "100%" }} onClick={go}>Suggest {c.e.n.split(" ")[0]} to {c.club.short || c.club.name || "your club"}</button>
+        </>}
+    </div>
+  );
+}
+
+/* =====================================================================
+   SEARCH — every team and every player in this year's world.
+===================================================================== */
+function npcSearchIndex(p) {
+  const y = p.year || MD_BASE_YEAR;
+  const out = [];
+  MD_MBL_CLUBS.forEach(id => out.push({ t: "team", id, n: npcTeamName(id), cat: "mbl", sub: "MBL club" }));
+  DLEAGUE_CLUBS.filter(c => !MD_MBL_CLUBS.includes(c.id)).forEach(c => out.push({ t: "team", id: c.id, n: c.name, cat: "u23", sub: "D-League club" }));
+  MD_STATES.forEach(st => out.push({ t: "team", id: st, n: st, cat: "youth", sub: "State youth teams" }));
+  [["senior", "Malaysia (senior)"], ["u18", "Malaysia U18"], ["u16", "Malaysia U16"]].forEach(([id, n]) => out.push({ t: "team", id, n, cat: "nat", sub: "National team" }));
+  const seen = new Set();
+  try { mdActiveLocals(y, MD_NAMES).forEach(e => { if (!seen.has(e.k)) { seen.add(e.k); out.push({ t: "player", k: e.k, n: e.n, e }); } }); } catch (er) { /* none */ }
+  try { const w = mdWorldAt(null, y, MD_NAMES); MD_MBL_CLUBS.forEach(c => w.clubs[c].forEach(e => { if (!seen.has(e.k)) { seen.add(e.k); out.push({ t: "player", k: e.k, n: e.n, e }); } })); } catch (er) { /* none */ }
+  try { loadHallOfFame().forEach(h => out.push({ t: "hof", id: h.id, n: h.name, sub: `Your career · peak ${h.peakOverall}` })); } catch (er) { /* none */ }
+  return out;
+}
+function SearchModal({ player, onClose, onTeam, onPlayer, onLegacy }) {
+  const p = player;
+  const idx = useMemo(() => npcSearchIndex(p), [p.year]);
+  const [q, setQ] = useState("");
+  const ref = useRef(null);
+  useEffect(() => { if (ref.current) ref.current.focus(); const f = ev => { if (ev.key === "Escape") onClose(); }; window.addEventListener("keydown", f); return () => window.removeEventListener("keydown", f); }, []);
+  const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const hits = words.length ? idx.filter(x => { const n = x.n.toLowerCase(); return words.every(w => n.includes(w)); }).sort((a, b) => (a.t === "team" ? 0 : 1) - (b.t === "team" ? 0 : 1) || (b.e ? b.e.o : 0) - (a.e ? a.e.o : 0)).slice(0, 30) : [];
+  const where = (x) => { try { const w = mdWhereIs(x.k, p.year, MD_NAMES); const mv = npcMovesFor(p, p.year).find(m => m.k === x.k); if (mv) return `${npcTeamName(mv.club)} · signed on your word`; return w ? `${npcTeamName(w.club)} · ${NPC_KIND_LBL[w.lvl]}` : (x.e.imp ? "Abroad" : p.year - (x.e.by || p.year) < 17 ? "Youth" : "Not in a league"); } catch (er) { return ""; } };
+  return (
+    <div className="pr-modal" onClick={onClose}>
+      <div className="pr-modal-in pr-search" onClick={ev => ev.stopPropagation()}>
+        <div className="pn" style={{ padding: 0 }}>
+          <div className="pr-sbox"><Ic n="eye" /><input ref={ref} value={q} onChange={ev => setQ(ev.target.value)} placeholder="Search a player or team" /><button className="ghost sm" style={{ width: "auto", marginTop: 0 }} onClick={onClose}><Ic n="x" /></button></div>
+          <div className="pr-shits">
+            {!words.length && <p style={{ color: "var(--di)", margin: 16, fontSize: 13 }}>{idx.filter(x => x.t === "player").length.toLocaleString()} players and {idx.filter(x => x.t === "team").length} teams in {p.year}. Type a name.</p>}
+            {words.length > 0 && hits.length === 0 && <p style={{ color: "var(--di)", margin: 16, fontSize: 13 }}>No one by that name this year.</p>}
+            {hits.map((x, i) => (
+              <button key={i} className="pr-shit" onClick={() => x.t === "team" ? onTeam(x) : x.t === "hof" ? onLegacy() : onPlayer(x.k)}>
+                {x.t === "team" ? (MD_MBL_CLUBS.includes(x.id) || x.cat === "u23" ? <PrTeamLogo team={{ name: x.n, logo: x.id }} s={34} /> : x.cat === "youth" ? <PrFlag state={x.id} w={34} /> : <PrLogo k="c_harimau" s={34} />)
+                  : x.t === "hof" ? <span className="ic"><Ic n="crown" /></span>
+                  : <span className="fc"><Sprite look={npcLook(x.e)} /></span>}
+                <span className="tx"><b>{x.n}</b><small>{x.t === "player" ? `${x.e.pos} · ${x.e.by ? p.year - x.e.by : "?"} yrs · OVR ${x.e.o} · ${where(x)}` : x.sub}</small></span>
+                <Tg style={{ height: 20 }}>{x.t === "team" ? "Team" : x.t === "hof" ? "Hall of Fame" : x.e.imp ? "Import" : "Player"}</Tg>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+/* =====================================================================
+   STOCK MARKET & SOCIAL MEDIA — two more ways to use your money and
+   your name. Both settle once a year, at year end.
+===================================================================== */
+const STOCK_RISK = {
+  steady: { label: "Steady", sub: "Index fund", odds: [[80, 3, 8], [18, -6, -2], [2, -25, -25]] },
+  growth: { label: "Growth", sub: "Blue chips and tech", odds: [[70, 6, 15], [25, -12, -5], [5, -40, -40]] },
+  high: { label: "High risk", sub: "Small caps and crypto", odds: [[60, 15, 40], [30, -30, -15], [10, -70, -70]] },
+};
+const STOCK_COLLAPSE = 0.015;
+const SOCIAL_LV = {
+  off: { label: "Off", pop: 0, fat: 0, adj: 0, coach: 0, mult: 1, pay: 0 },
+  casual: { label: "Casual", pop: 3, fat: 6, adj: -1, coach: 0, mult: 3, pay: 1 },
+  full: { label: "Full-time creator", pop: 8, fat: 15, adj: -3, coach: -4, mult: 7, pay: 3 },
+};
+function socialInit(p) {
+  const pop = p.popularity || 10;
+  const r = mdRng(mdHash("soc:" + (p.name || "") + (p.jersey || "")));
+  return { level: "off", tt: Math.round(pop * pop * 6 + r() * 800), ig: Math.round(pop * pop * 5 + r() * 600), hist: [], log: [] };
+}
+function socialOf(p) { return p.social && p.social.tt != null ? p.social : socialInit(p); }
+const fmtK = n => n >= 1e6 ? (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + "M" : n >= 1e3 ? (n / 1e3).toFixed(n >= 1e5 ? 0 : 1) + "K" : String(Math.round(n));
+
+/* Year end: the portfolio moves, the channels grow. Returns the new player. */
+function invYearEnd(p0) {
+  const p = { ...p0, relationships: { ...p0.relationships } };
+  const notes = [];
+  const Y = (p.year || 2027) - 1, A = (p.age || 19) - 1;   // called after the year has ticked over
+  delete p.invNote;
+  // ---- stocks
+  const st = p.stocks;
+  if (st && st.value > 0) {
+    const risk = STOCK_RISK[st.risk] || STOCK_RISK.steady;
+    const wealth = (p.money || 0) + st.value;
+    const share = st.value / Math.max(1, wealth);
+    let pct, what;
+    if (Math.random() < STOCK_COLLAPSE) { pct = -100; what = "collapse"; }
+    else {
+      const r = Math.random() * 100; let acc = 0, band = risk.odds[risk.odds.length - 1];
+      for (const b of risk.odds) { acc += b[0]; if (r < acc) { band = b; break; } }
+      pct = band[1] + Math.random() * (band[2] - band[1]);
+      what = pct >= 0 ? "up" : band === risk.odds[2] ? "crash" : "down";
+    }
+    const before = st.value;
+    const after = Math.max(0, Math.round(before * (1 + pct / 100)));
+    p.stocks = { ...st, value: after, hist: [...(st.hist || []), { y: Y, pct: Math.round(pct * 10) / 10, v: after, what }].slice(-30) };
+    if (what === "collapse") {
+      notes.push(`The market collapsed. Your ${rm(before)} portfolio is gone.`);
+      if (share > 0.5) {
+        p.money = 0; p.homeTier = null; p.vehicleTier = null; p.bankrupt = (p.bankrupt || 0) + 1;
+        p.morale = clamp((p.morale || 50) - 15); p.relationships.family = clamp((p.relationships.family || 50) - 10);
+        p.history = [...(p.history || []), { age: A, tierLabel: "Bankrupt", note: `The market collapse wiped out ${rm(before)} in shares, more than half of everything you had. Bankrupt: the bank account is empty and the house is sold.` }];
+        notes.push("You're bankrupt.");
+      } else p.history = [...(p.history || []), { age: A, tierLabel: "Market collapse", note: `Lost the whole ${rm(before)} portfolio in a market collapse.` }];
+    } else notes.push(`Shares ${pct >= 0 ? "up" : "down"} ${Math.abs(pct).toFixed(1)}%: portfolio ${rm(after)}.`);
+  }
+  // ---- social media
+  const so = socialOf(p);
+  const lv = SOCIAL_LV[so.level] || SOCIAL_LV.off;
+  const pro = p.stage === "pro";
+  const level = !pro && so.level !== "off" ? "off" : so.level;
+  const L = SOCIAL_LV[level];
+  const pop = p.popularity || 10;
+  const r = Math.random;
+  let viral = false, backlash = false;
+  if (level !== "off") { viral = r() < 0.10; backlash = !viral && r() < 0.04; }
+  const grow = (base) => Math.round(base * (0.7 + r() * 0.6) * L.mult * (viral ? 1.8 : 1) * (backlash ? 0.6 : 1));
+  const tt = so.tt + grow(pop * 90 + 200), ig = so.ig + grow(pop * 60 + 150);
+  let pay = 0;
+  if (L.pay) {
+    pay = Math.round((tt + ig) / 1000 * 60 * L.pay);
+    if (level === "full" && tt + ig >= 100000) pay += 20000;
+    if (viral) pay += 5000 * L.pay;
+  }
+  if (level !== "off") {
+    p.popularity = clamp((p.popularity || 0) + L.pop + (viral ? 10 : 0) - (backlash ? 12 : 0));
+    p.fatigue = clamp((p.fatigue || 0) + L.fat);
+    if (L.coach) p.relationships.coach = clamp((p.relationships.coach || 50) + L.coach);
+    if (backlash) p.relationships.coach = clamp((p.relationships.coach || 50) - 6);
+    if (pay) { p.money = (p.money || 0) + pay; p.totalEarnings = (p.totalEarnings || 0) + pay; }
+    if (viral) notes.push("A clip of yours went viral.");
+    if (backlash) notes.push("A post caused a backlash online.");
+  }
+  p.social = { ...so, level, tt, ig, hist: [...(so.hist || []), { y: Y, tt, ig, pop: p.popularity, pay, level }].slice(-30),
+    log: [...(so.log || []), ...(viral ? [{ y: Y, t: "viral" }] : []), ...(backlash ? [{ y: Y, t: "backlash" }] : [])].slice(-20) };
+  if (viral || backlash) p.history = [...(p.history || []), { age: A, tierLabel: viral ? "Went viral" : "Online backlash", note: viral ? "A clip you posted went viral. Popularity up, and the sponsors noticed." : "A post went down badly online. The club wasn't happy." }];
+  if (notes.length) { p.invNote = notes.join(" "); p.invNoteY = p.year; }
+  return p;
+}
+
+/* ---------- stocks panel (on the Investments page) ---------- */
+function PrStocks({ player, onUpdate }) {
+  const p = player;
+  const st = p.stocks || { value: 0, risk: "steady", hist: [] };
+  const [risk, setRisk] = useState(st.risk || "steady");
+  const [msg, setMsg] = useState(null);
+  const bank = p.money || 0;
+  const put = (amt) => {
+    amt = Math.min(bank, Math.round(amt));
+    if (amt <= 0) return;
+    onUpdate({ ...p, money: bank - amt, stocks: { ...st, risk, value: (st.value || 0) + amt, put: (st.put || 0) + amt, hist: st.hist || [] } });
+    setMsg(`Invested ${rm(amt)} (${STOCK_RISK[risk].label}).`);
+  };
+  const out = () => {
+    if (!st.value) return;
+    onUpdate({ ...p, money: bank + st.value, stocks: { ...st, value: 0, put: 0 } });
+    setMsg(`Withdrew ${rm(st.value)}.`);
+  };
+  const setR = (k) => { setRisk(k); if (st.value) onUpdate({ ...p, stocks: { ...st, risk: k } }); };
+  const share = st.value ? st.value / Math.max(1, bank + st.value) : 0;
+  return (
+    <section className="pn" data-a="" style={{ marginTop: 16 }}>
+      <h3><Ic n="chart" /> Stock market<small>Settled once a year at year end</small></h3>
+      <PrSline items={[["Portfolio", rm(st.value || 0)], ["Risk", STOCK_RISK[st.risk || risk].label], ["Of your wealth", Math.round(share * 100) + "%"], ["Last year", st.hist && st.hist.length ? `${st.hist[st.hist.length - 1].pct > 0 ? "+" : ""}${st.hist[st.hist.length - 1].pct}%` : "—"]]} />
+      <div className="choices" style={{ gridTemplateColumns: "repeat(3,minmax(0,1fr))", marginTop: 12 }}>
+        {Object.entries(STOCK_RISK).map(([k, r]) => (
+          <button key={k} className={"ch " + (risk === k ? "on" : "")} onClick={() => setR(k)} style={{ padding: 12, textAlign: "left" }}>
+            <b className="t">{r.label}</b><p style={{ margin: "2px 0 8px" }}>{r.sub}</p>
+            <div className="fx">{r.odds.map((o, i) => <div key={i}><span>{o[0]}% · {i === 0 ? "gains" : i === 1 ? "down year" : "crash"}</span><b className={i ? "dn" : "up"}>{o[1] === o[2] ? `${o[1]}%` : `${o[1] > 0 ? "+" : ""}${o[1]} to ${o[2] > 0 ? "+" : ""}${o[2]}%`}</b></div>)}</div>
+          </button>
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+        {[["RM 10,000", 10000], ["RM 50,000", 50000], ["25% of bank", bank * 0.25], ["Everything", bank]].map(([l, v]) => <button key={l} className="ghost" style={{ width: "auto", marginTop: 0 }} disabled={bank < 1000 || v < 1000 || v > bank + 1} onClick={() => put(v)}>Invest {l}</button>)}
+        <button className="ghost" style={{ width: "auto", marginTop: 0 }} disabled={!st.value} onClick={out}>Withdraw all</button>
+      </div>
+      {msg && <PrSrc color="var(--or)">{msg}</PrSrc>}
+      <div className="injb" style={{ marginTop: 12 }}><Ic n="x" /> In any year there's a {STOCK_COLLAPSE * 100}% chance of a market collapse that wipes the portfolio. If more than half your wealth is in shares when it happens, you go bankrupt: bank to RM 0, home sold.</div>
+      {st.hist && st.hist.length > 0 && <div className="ticks" style={{ marginTop: 10 }}>{st.hist.slice(-8).map((h, i) => <Tg key={i} cls={h.pct >= 0 ? "pos" : "neg"}>{h.y}: {h.pct > 0 ? "+" : ""}{h.pct}%</Tg>)}</div>}
+    </section>
+  );
+}
+/* ---------- social level picker (Investments page and Social page) ---------- */
+function PrSocialLevel({ player, onUpdate }) {
+  const p = player;
+  const so = socialOf(p);
+  const pro = p.stage === "pro";
+  const set = (k) => onUpdate({ ...p, social: { ...so, level: k } });
+  return (
+    <div className="choices" style={{ gridTemplateColumns: "repeat(3,minmax(0,1fr))" }}>
+      {Object.entries(SOCIAL_LV).map(([k, L]) => {
+        const locked = k !== "off" && (!pro || (k === "full" && p.age < 21));
+        return (
+          <button key={k} className={"ch " + (so.level === k ? "on" : "")} disabled={locked} style={{ padding: 12, textAlign: "left", opacity: locked ? 0.45 : 1 }} onClick={() => !locked && set(k)}>
+            <b className="t">{L.label}</b>
+            <p style={{ margin: "2px 0 8px" }}>{k === "off" ? "Just basketball. Followers still grow slowly." : k === "casual" ? "A few posts a week." : "Vlogs, collabs, sponsors. A second job."}{locked ? (pro ? " Opens at 21." : " Opens when you turn pro.") : ""}</p>
+            {k !== "off" && <div className="fx">
+              <div><span>Popularity / season</span><b className="up">+{L.pop}</b></div>
+              <div><span>Income</span><b className="up">{L.pay}× followers rate</b></div>
+              <div><span>Fatigue / season</span><b className="dn">+{L.fat}</b></div>
+              <div><span>Rating in games</span><b className="dn">{L.adj}</b></div>
+              {L.coach ? <div><span>Coach / season</span><b className="dn">{L.coach}</b></div> : null}
+            </div>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+/* ---------- the Social page ---------- */
+function SocialScreen({ player, onUpdate }) {
+  const p = player;
+  const so = socialOf(p);
+  const hist = so.hist || [];
+  const last = hist[hist.length - 1];
+  const prev = hist[hist.length - 2];
+  const eng = (n) => Math.max(1.2, Math.min(14, 9 - Math.log10(Math.max(10, n)) + (p.popularity || 0) / 25)).toFixed(1);
+  const rank = (p.popularity || 0) >= 85 ? "One of the most followed athletes in Malaysia" : (p.popularity || 0) >= 65 ? "A household name in Malaysian basketball" : (p.popularity || 0) >= 40 ? "Known around the league" : "Known mostly at home";
+  const plat = [["TikTok", so.tt, prev ? so.tt - prev.tt : null, "#ff2d55"], ["Instagram", so.ig, prev ? so.ig - prev.ig : null, "#c13584"]];
+  const pts = hist.map(h => [h.y, Math.round((h.tt + h.ig) / 1000)]);
+  return (
+    <PrPage>
+      <PrHead lbl={`${p.name} · Season ${p.year}`} title="Social" desc={`${rank}. Followers grow with your popularity and with how much you post.`} right={<span className="chip"><Ic n="heart" />Popularity <b>{p.popularity || 0}</b></span>} />
+      <div className="g">
+        {plat.map(([n, v, d, c]) => (
+          <section key={n} className="pn c4 l12 pr-plat" data-a="" style={{ "--pc": c }}>
+            <div className="lbl" style={{ color: c }}>{n}</div>
+            <b className="num">{fmtK(v)}</b><small>followers</small>
+            <div className="ticks" style={{ marginTop: 10 }}>{d != null && <Tg cls={d >= 0 ? "pos" : "neg"}>{d >= 0 ? "+" : ""}{fmtK(d)} last season</Tg>}<Tg>{eng(v)}% engagement</Tg></div>
+          </section>
+        ))}
+        <section className="pn c4 l12" data-a="">
+          <div className="lbl">Popularity</div>
+          <div className="meter" style={{ marginTop: 8 }}><span>Fans</span><div className="bar"><i style={{ "--w": (p.popularity || 0) + "%", "--bc": "#ff9a4d" }} /></div><b>{p.popularity || 0}</b></div>
+          <PrSline items={[["Mode", SOCIAL_LV[so.level].label], ["Last season", last && last.pay ? rm(last.pay) : "RM 0"], ["Went viral", (so.log || []).filter(x => x.t === "viral").length], ["Backlash", (so.log || []).filter(x => x.t === "backlash").length]]} />
+        </section>
+        <section className="pn c12" data-a="">
+          <h3><Ic n="phone" /> How much you post<small>Changes apply from the next season</small></h3>
+          <PrSocialLevel player={p} onUpdate={onUpdate} />
+          <PrSrc>Each season while posting: 10% chance a clip goes viral (popularity +10, a bonus), 4% chance of a backlash (popularity −12, coach −6).</PrSrc>
+        </section>
+        {pts.length > 1 && <section className="pn c7 l12" data-a=""><h3><Ic n="fire" /> Followers by year<small>thousands, both platforms</small></h3><PrMiniArc pts={pts} /></section>}
+        {(so.log || []).length > 0 && <section className="pn c5 l12" data-a=""><h3><Ic n="star" /> Moments</h3>{so.log.slice().reverse().map((x, i) => <div key={i} className="dec"><span className={"k " + (x.t === "viral" ? "you" : "chance")}><Ic n={x.t === "viral" ? "fire" : "x"} /></span><div><b>{x.t === "viral" ? "Went viral" : "Backlash"}</b><small>{x.y}</small></div></div>)}</section>}
+      </div>
     </PrPage>
   );
 }
@@ -11225,6 +11610,14 @@ const PR_CSS = `.pr{color-scheme:dark;--bg:#0a0b0e;--bg2:#0f1115;--p1:#14171c;--
 @keyframes pr-sl{from{opacity:0;transform:translateX(-60px)}}
 @keyframes pr-sr{from{opacity:0;transform:translateX(60px)}}
 .pr .five{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.pr .pc{border-radius:14px;overflow:hidden;background:var(--p2);border:1px solid var(--ln);position:relative}
+.pr .pc .ph{border-radius:0;aspect-ratio:296/300}
+.pr .pc .cap{padding:8px 10px}
+.pr .pc .cap b{display:block;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pr .pc .cap small{color:var(--di);font-size:11.5px}
+.pr .pc .no{position:absolute;top:6px;left:8px;font:800 20px/1 var(--cd);z-index:2;text-shadow:0 2px 6px rgba(0,0,0,.6)}
+.pr .pc.you{border-color:var(--or)}
+.pr .pc.you .tag{position:absolute;top:8px;right:8px;z-index:2}
 .pr[data-l=phone] .mu{grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);padding:18px 12px;min-height:0;gap:8px}
 .pr[data-l=phone] .five{grid-template-columns:repeat(5,minmax(96px,1fr));overflow-x:auto;padding-bottom:4px}
 .pr[data-l=land] .mu{min-height:0;padding:14px}
@@ -11329,6 +11722,24 @@ const PR_CSS = `.pr{color-scheme:dark;--bg:#0a0b0e;--bg2:#0f1115;--p1:#14171c;--
 .pr[data-l=phone] .fxr .dt,.pr[data-l=land] .fxr .dt{grid-column:1/4;grid-row:1}
 .pr[data-l=phone] .fxr .vn,.pr[data-l=land] .fxr .vn{display:none}
 .pr .mvp{display:flex;flex-direction:column;gap:8px}
+.pr .mv{display:grid;grid-template-columns:34px 64px minmax(0,1fr) repeat(3,64px) 80px;gap:12px;align-items:center;padding:10px 12px;border-radius:14px;background:var(--p1);border:1px solid var(--ln);animation:pr-rise .5s var(--ease) both;animation-delay:calc(var(--i)*70ms)}
+.pr .mv.y{border-color:rgba(255,122,26,.5);background:linear-gradient(90deg,rgba(255,122,26,.12),var(--p1))}
+.pr .mv .rk{font:800 30px/1 var(--cd);color:var(--di);text-align:center}
+.pr .mv:first-child .rk{color:var(--gd)}
+.pr .mv .ph{width:64px;height:64px;border-radius:12px}
+.pr .mv b{font-size:15px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pr .mv small{color:var(--di);font-size:12px;display:flex;gap:6px;align-items:center}
+.pr .mv .s{text-align:center}
+.pr .mv .s b{font:800 22px/1 var(--cd)}
+.pr .mv .s small{justify-content:center;font-size:10.5px}
+.pr .mv .odds{text-align:right}
+.pr .mv .odds b{font:800 22px/1 var(--cd);color:var(--or2)}
+.pr[data-l=phone] .mv{grid-template-columns:24px 48px minmax(0,1fr) 54px;gap:8px}
+.pr[data-l=phone] .mv .s{display:none}
+.pr[data-l=phone] .mv .ph{width:48px;height:48px}
+.pr[data-l=phone] .mv .rk{font-size:22px}
+.pr[data-l=land] .mv{grid-template-columns:28px 44px minmax(0,1fr) repeat(3,52px) 60px;padding:6px 10px}
+.pr[data-l=land] .mv .ph{width:44px;height:44px}
 .pr .aw{display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;padding:20px}
 .pr .aw .medal{width:88px;height:88px;border-radius:50%;display:grid;place-items:center;background:radial-gradient(circle at 35% 30%,#ffe7a8,#e2b65a 45%,#8a6420);box-shadow:0 14px 30px -10px rgba(226,182,90,.6),inset 0 2px 0 rgba(255,255,255,.5);color:#3a2808}
 .pr .aw .medal svg{width:40px;height:40px}
@@ -11754,6 +12165,24 @@ const PR_CSS = `.pr{color-scheme:dark;--bg:#0a0b0e;--bg2:#0f1115;--p1:#14171c;--
 .pr[data-l=phone] .pr-roster td:first-child{max-width:168px;width:168px}
 .pr[data-l=phone] .pr-roster .pcell .tg{display:none}
 .pr[data-l=phone] .pr-roster .pcell b{font-size:12.5px}
+.pr .pr-srch{cursor:pointer;gap:6px}.pr .pr-srch:hover{border-color:var(--or)}
+.pr .pr-search{max-width:680px;margin-top:6vh}
+.pr .pr-sbox{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--ln)}
+.pr .pr-sbox input{flex:1;background:transparent;border:0;outline:0;color:var(--tx);font:600 17px/1.2 Inter,sans-serif}
+.pr .pr-sbox svg{width:20px;height:20px;color:var(--mu)}
+.pr .pr-shits{max-height:60vh;overflow-y:auto;padding:6px}
+.pr .pr-shit{display:flex;align-items:center;gap:12px;width:100%;padding:8px 10px;border-radius:10px;background:transparent;border:0;color:var(--tx);text-align:left;cursor:pointer}
+.pr .pr-shit:hover{background:var(--p2)}
+.pr .pr-shit .tx{flex:1;min-width:0}.pr .pr-shit b{display:block;font-size:14px}.pr .pr-shit small{display:block;color:var(--mu);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pr .pr-shit .fc{width:34px;height:36px;border-radius:9px;overflow:hidden;background:linear-gradient(160deg,#2a2f3a,#14171c);flex:none;display:flex;align-items:flex-end}
+.pr .pr-shit .ic{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;background:rgba(226,182,90,.18);color:var(--gd);flex:none}
+.pr .pr-shit>.lg,.pr .pr-shit>.flag{flex:none}
+.pr .pr-plat b.num{display:block;font:800 44px/1 var(--cd);margin-top:6px}.pr .pr-plat small{color:var(--mu)}
+.pr .pr-plat{border-top:3px solid var(--pc)}
+.pr .pr-odds{display:flex;height:28px;border-radius:9px;overflow:hidden;background:var(--p3);font-size:11.5px;font-weight:800}
+.pr .pr-odds i{display:flex;align-items:center;justify-content:center;font-style:normal;color:var(--mu);white-space:nowrap;overflow:hidden}
+.pr .pr-odds i.ok{background:rgba(52,195,122,.22);color:#7fe0ad}
+.pr .injb.ok{background:rgba(52,195,122,.12);border-color:rgba(52,195,122,.35);color:#7fe0ad}
 `;
 function PrStyle() { return <style>{PR_CSS}</style>; }
 
@@ -15839,6 +16268,10 @@ export default function App() {
     const myClub = mdLegClub(p, kind);
     const comp = mdNewLeague({ kind, year: p.year, p, world, names: MD_NAMES, clubsMeta: mdClubsMeta(kind), myClub, myRole: p.starterStatus || "Bench" });
     comp.myRole = mdLegRole(p, comp);
+    // social media time costs a little sharpness on court
+    if (p.social && p.social.level && p.social.level !== "off") comp.meAdj = p.social.level === "full" ? -3 : -1;
+    // players your club signed on your word
+    try { npcApplyMoves(p, comp); } catch (e) { /* moves are extras */ }
     comp.leg = { i: Y.i, n: Y.legs.length, legs: Y.legs.slice() };
     // Left off the MBL list after poor D-League tournaments.
     if (kind === "mbl" && Y.notRegistered) { comp.seasonOut = true; comp.notRegistered = true; comp.injuryPerGame = 0; }
@@ -16061,6 +16494,7 @@ export default function App() {
     const ctx = comp.ctx || {};
     try { p.conn = connRecord(p, comp); } catch (e) { /* connections are extras */ }
     try { p = npcMerge(p, comp, aw); } catch (e) { /* profiles are extras */ }
+    try { p = npcFlopCheck(p, comp); } catch (e) { /* moves are extras */ }
     try { p.mdLeagueLast = prLeagueSummary(comp, rookies); p.mdLeagues = { ...(p.mdLeagues || {}), [kind]: p.mdLeagueLast }; } catch (e) { /* the table page falls back to the simulated MBL */ }
     delete p.mdComp;
     delete p.pendingSecondHalf;
@@ -17012,6 +17446,7 @@ export default function App() {
     p.seasonNum += 1;
     p.year = (p.year || (2011 + player.age)) + 1;
     p.fatigue = clamp(p.fatigue - 10);
+    try { p = invYearEnd(p); } catch (e) { /* money extras never block a season */ }
     // Every authored rival advances one season here, unconditionally — this
     // is the ONE point every season passes through regardless of the
     // player's own league, age or overseas status, which is what lets Next
@@ -17777,7 +18212,7 @@ export default function App() {
         <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="#f3f4f6" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{muted ? <><path d="M4 9v6h4l5 4V5L8 9z" /><path d="M17 9l5 6M22 9l-5 6" /></> : <><path d="M4 9v6h4l5 4V5L8 9z" /><path d="M17 8.5a5 5 0 0 1 0 7M19.5 6a8.5 8.5 0 0 1 0 12" /></>}</svg>
       </button>
       {(RD_ME.look = player ? playerLook(player) : null, null)}
-      <Shell show={!!player && !RD_NO_SHELL.has(screen)} screen={screen} player={player} onNav={(id) => { setBanner(null); setScreen(id); }}>
+      <Shell show={!!player && !RD_NO_SHELL.has(screen)} screen={screen} player={player} onNav={(id) => { setBanner(null); setScreen(id); }} onUpdate={(q) => { setPlayer(q); save(q); }}>
       <Stage screen={screen} player={player} event={currentEvent}>
       <ScreenFade key={screen}>
       {screen === "start" && <StartHero><StartScreen onStart={handleStart} savedGame={savedGame} onContinue={handleContinue} onViewHallOfFame={() => setScreen("hall_of_fame")} onViewAchievements={() => setScreen("achievement_gallery")} /></StartHero>}
@@ -17945,6 +18380,7 @@ export default function App() {
           onRequestTrade={handleRequestTrade}
           onOpenLifestyle={handleOpenLifestyle}
           onOpenCareerHighlights={handleOpenCareerHighlights}
+          onOpenSocial={() => setScreen("social")}
           summary={summary}
         />
       )}
@@ -17953,7 +18389,7 @@ export default function App() {
       {screen === "name_rival" && player && <NameRivalScreen player={player} onConfirm={handleNameRival} />}
       {screen === "creation_build" && player && <AttributeBuilder player={player} points={player.seasonPoints || 0} creation onConfirm={handleConfirmCreationBuild} />}
       {screen === "investments" && player && (
-        <InvestmentsScreen player={player} onConfirm={handleConfirmInvestments} onBack={() => setScreen("hub")} />
+        <InvestmentsScreen player={player} onConfirm={handleConfirmInvestments} onBack={() => setScreen("hub")} onUpdate={(q) => { setPlayer(q); save(q); }} />
       )}
       {screen === "offseason_plan" && player && <OffseasonPlanScreen player={player} onChoose={handleOffseasonPlan} />}
       {screen === "training" && player && <AttributeBuilder player={player} points={player.seasonPoints || 0} onConfirm={handleConfirmTraining} />}
@@ -17980,7 +18416,8 @@ export default function App() {
           onBack={() => setScreen(player && player.retired ? "retired" : "start")} onPlayAgain={handlePlayAgain} />
       )}
       {screen === "legacy" && player && <LegacyScreen player={player} />}
-      {screen === "teams" && player && <TeamsScreen key={(player.year || 0) + ":" + Date.now() % 1} player={player} />}
+      {screen === "teams" && player && <TeamsScreen player={player} onUpdate={(q) => { setPlayer(q); save(q); }} />}
+      {screen === "social" && player && <SocialScreen player={player} onUpdate={(q) => { setPlayer(q); save(q); }} />}
       </ScreenFade>
       </Stage>
       </Shell>
