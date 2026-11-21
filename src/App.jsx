@@ -4893,7 +4893,7 @@ function useLayoutMode() {
   return lay;
 }
 
-const RD_FREE = new Set(["hub", "league", "pathway", "lifestyle_spending", "career_highlights", "investments", "legacy"]);
+const RD_FREE = new Set(["hub", "league", "pathway", "lifestyle_spending", "career_highlights", "investments", "legacy", "teams"]);
 const RD_NO_SHELL = new Set(["start", "look", "body_setup", "hall_of_fame", "achievement_gallery", "retired"]);
 const RD_ICONS = {
   hub: (s) => <Home size={s} />, league: (s) => <Trophy size={s} />, pathway: (s) => <Flag size={s} />,
@@ -6567,6 +6567,16 @@ function mdRecord(comp, gi, g, p) {
     if (gm.ph === "f") s.fin += b.pts + b.reb + b.ast + b.stl + b.blk;
   });
   const notes = {};
+  // who you played with and against, game by game (for the player profiles)
+  if (g.myTeam != null && g.box[MD_ME] && g.box[MD_ME].min > 0) {
+    const me = g.box[MD_ME], mySide = me.side, won = gm.res.s[mySide] > gm.res.s[1 - mySide];
+    comp.h2h = comp.h2h || {}; comp.tm = comp.tm || {};
+    Object.values(g.box).forEach(b => {
+      if (b.me || b.min <= 0) return;
+      if (b.side === mySide) comp.tm[b.id] = (comp.tm[b.id] || 0) + 1;
+      else { const h = comp.h2h[b.id] || (comp.h2h[b.id] = [0, 0, 0, 0, 0]); h[0]++; h[won ? 1 : 2]++; h[3] += b.pts; h[4] += me.pts; }
+    });
+  }
   if (g.myTeam != null && comp.meDebuff && comp.meDebuff.games > 0) comp.meDebuff.games--;
   if (g.myTeam != null && g.box[MD_ME] && g.box[MD_ME].min > 0) {
     const b = g.box[MD_ME];
@@ -7556,6 +7566,8 @@ cup:'<path d="M5 8h11v6a5 5 0 0 1-5 5h-1a5 5 0 0 1-5-5z"/><path d="M16 10h2a2 2 
 bed:'<path d="M3 18V7M3 13h18v5M21 13a3 3 0 0 0-3-3h-7v3"/><circle cx="7" cy="10.5" r="1.6"/>',
 pill:'<rect x="3" y="9" width="18" height="6" rx="3" transform="rotate(-35 12 12)"/><path d="M9.5 8.5l5 7"/>',
 left:'<path d="M15 18l-6-6 6-6"/>',
+users:'<circle cx="9" cy="8" r="3.2"/><path d="M3 20a6 6 0 0 1 12 0"/><circle cx="17" cy="9" r="2.6"/><path d="M15.5 14.2A5 5 0 0 1 21 19"/>',
+chart:'<path d="M4 20V10M10 20V4M16 20v-7M21 20H3"/>',
 ball:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3v18M5.6 5.6c3.5 3 3.5 9.8 0 12.8M18.4 5.6c-3.5 3-3.5 9.8 0 12.8"/>',
 table:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M3 14h18M9 9v11"/>',
 route:'<circle cx="6" cy="19" r="2"/><circle cx="18" cy="5" r="2"/><path d="M8 19h7a3.5 3.5 0 0 0 0-7H9a3.5 3.5 0 0 1 0-7h7"/>',
@@ -7698,7 +7710,7 @@ function prCrumb(p) {
   return `Season ${p.year || ""}${lg ? " · " + lg : ""}${p.teamName ? " · " + p.teamName : ""}`;
 }
 const PR_TITLES = {
-  legacy: "Legacy", hall_of_fame: "Hall of Fame", achievement_gallery: "Achievements", leg_offers: "League-only offers", dl_invite: "D-League invite",
+  legacy: "Legacy", teams: "Teams", investments: "Investments", hall_of_fame: "Hall of Fame", achievement_gallery: "Achievements", leg_offers: "League-only offers", dl_invite: "D-League invite",
   offseason_plan: "Off-season", training: "Training", creation_build: "Build your player", event: "Career event", result: "Season result",
   u15_result: "State selection", u15_tournament: "Tournament result", u15_shortlist: "Youth shortlist", u15_bootcamp_result: "Bukit Jalil",
   age16_u16_result: "Age 16", age16_u17_result: "Age 16", a17_result: "Age 17", a17_shortlist: "U18 shortlist", a17_bootcamp_result: "Bukit Jalil",
@@ -7872,7 +7884,7 @@ function prBgSeason(year, kind) {
     const comp = mdNewLeague({ kind: kind || "mbl", year, p, world, names: MD_NAMES, clubsMeta: prClubsMeta(kind || "mbl"), myClub: null, myRole: "Bench" });
     let guard = 0;
     while (!comp.done && guard++ < 900) mdSimUntilMine(comp, p, true);
-    PR_BG[k] = prLeagueSummary(comp);
+    PR_BG[k] = { ...prLeagueSummary(comp), lines: npcLines(comp), aw: mdAwards(comp, { rookies: new Set(comp.rookies || []) }) };
   } catch (e) { PR_BG[k] = null; }
   return PR_BG[k];
 }
@@ -7898,15 +7910,23 @@ function prLeaguesFor(p, all) {
 /* =====================================================================
    SHELL — prototype side menu, top bar and phone tabs
 ===================================================================== */
-const PR_NAV_IC = { hub: "home", league: "table", pathway: "route", lifestyle_spending: "cash", career_highlights: "star", legacy: "crown" };
+const PR_NAV_IC = { hub: "home", league: "table", pathway: "route", lifestyle_spending: "cash", career_highlights: "star", legacy: "crown", teams: "users", investments: "chart" };
 function Shell({ show, screen, player, onNav, children }) {
   const lay = useLayoutMode();
   const [rotSeen, setRotSeen] = useState(() => { try { return window.localStorage.getItem("hl_rot_seen") === "1"; } catch (e) { return true; } });
   useEffect(() => { try { window.scrollTo(0, 0); } catch (e) { /* ignore */ } }, [screen]);
+  const [npc, setNpc] = useState(null);
+  useEffect(() => {
+    const f = ev => setNpc(ev.detail);
+    const g = ev => { PR_TEAMS_OPEN = ev.detail; onNav("teams"); };
+    window.addEventListener("pr-npc", f); window.addEventListener("pr-team", g);
+    return () => { window.removeEventListener("pr-npc", f); window.removeEventListener("pr-team", g); };
+  }, [onNav]);
+  useEffect(() => { setNpc(null); }, [screen]);
   if (!show || !player) return <div data-l={lay} className="rd-root pr">{children}</div>;
   const free = RD_FREE.has(screen);
   const adult = player.age >= 18;
-  const items = [["hub", "Hub", true], ["league", "League", true], ["pathway", "Pathway", true], ["lifestyle_spending", "Lifestyle", adult], ["career_highlights", "Highlights", adult], ["legacy", "Legacy", true]].filter(i => i[2]);
+  const items = [["hub", "Hub", true], ["league", "League", true], ["teams", "Teams", true], ["pathway", "Pathway", true], ["lifestyle_spending", "Lifestyle", adult], ["investments", "Investments", adult], ["career_highlights", "Highlights", adult], ["legacy", "Legacy", true]].filter(i => i[2]);
   const look = playerLook(player);
   const dismissRot = () => { setRotSeen(true); try { window.localStorage.setItem("hl_rot_seen", "1"); } catch (e) { /* ignore */ } };
   const nav = (b) => items.map(([id, label]) => (
@@ -7931,6 +7951,7 @@ function Shell({ show, screen, player, onNav, children }) {
         {children}
       </main>
       <nav className="bnav rd-bottom">{nav(true)}</nav>
+      {npc && <NpcModal player={player} k={npc.k} y={npc.y} onClose={() => setNpc(null)} />}
       {lay === "phone" && !rotSeen && (
         <div className="rd-rotate" role="status">
           <Ic n="rot" />
@@ -9032,7 +9053,7 @@ const ResultScreen = memo(function ResultScreen({ summary, player, onContinue })
             {["ppg", "rpg", "apg"].map(k => {
               const x = last.lead[k][0];
               if (!x) return null;
-              return <div key={k} className="pr-ldr"><span className="rk num">{k.slice(0, 1).toUpperCase()}</span><span className="fc"><Sprite look={x.me && p ? playerLook(p) : (last.looks[x.id] || DEFLOOK)} /></span><span style={{ minWidth: 0 }}><b>{x.me && p ? p.name : x.n}</b><small><PrTeamLogo team={last.teams[x.t]} s={16} /> {(last.teams[x.t] || {}).name}</small></span><span className="v"><b className="num">{x.v}</b><small>{k.toUpperCase()}</small></span></div>;
+              return <div key={k} className={"pr-ldr" + (x.me ? "" : " click")} onClick={() => !x.me && npcOpen(x.id, last.year)}><span className="rk num">{k.slice(0, 1).toUpperCase()}</span><span className="fc"><Sprite look={x.me && p ? playerLook(p) : (last.looks[x.id] || DEFLOOK)} /></span><span style={{ minWidth: 0 }}><b>{x.me && p ? p.name : x.n}</b><small><PrTeamLogo team={last.teams[x.t]} s={16} /> {(last.teams[x.t] || {}).name}</small></span><span className="v"><b className="num">{x.v}</b><small>{k.toUpperCase()}</small></span></div>;
             })}
           </section>
         )}
@@ -9278,7 +9299,7 @@ function LeagueScreen({ player, onBack }) {
           <table className="mini-t">
             <thead><tr><th>#</th><th>Team</th><th className="hide-p">GP</th><th>W–L</th><th className="hide-p">PF</th><th className="hide-p">PA</th><th>Diff</th></tr></thead>
             <tbody>{s.table.map((r, i) => (
-              <tr key={r.id} className={r.id === s.myTeam ? "mine" : ""} style={i === cut - 1 ? { boxShadow: "inset 0 -2px 0 rgba(255,122,26,.35)" } : undefined}>
+              <tr key={r.id} className={(r.id === s.myTeam ? "mine " : "") + "click-n"} onClick={() => { try { window.dispatchEvent(new CustomEvent("pr-team", { detail: { cat: s.kind, team: r.id, y: s.year } })); } catch (er) { /* ignore */ } }} style={i === cut - 1 ? { boxShadow: "inset 0 -2px 0 rgba(255,122,26,.35)" } : undefined}>
                 <td className="num">{i + 1}</td><td><span className="tcell"><PrTeamLogo team={s.teams[r.id]} s={24} /><b>{nm(r.id)}</b>{s.champion === r.id && <Tg cls="or hide-p" style={{ height: 20 }}>Champions</Tg>}</span></td>
                 <td className="num hide-p">{r.gp}</td><td className="num"><b>{r.w}–{r.l}</b></td><td className="num hide-p">{r.pf}</td><td className="num hide-p">{r.pa}</td>
                 <td className={"num " + (r.pf - r.pa > 0 ? "up" : r.pf - r.pa < 0 ? "dn" : "")}>{r.pf - r.pa > 0 ? "+" : ""}{r.pf - r.pa}</td>
@@ -9303,7 +9324,7 @@ function LeagueScreen({ player, onBack }) {
           <section className="pn c8 l12" data-a="">
             <div className="tabs">{CATS.map(([k, l]) => <button key={k} className={cat === k ? "on" : ""} onClick={() => setCat(k)}>{l}</button>)}</div>
             {lead.map((x, i) => (
-              <div key={x.id} className={"pr-ldr" + (x.me ? " me" : "")}>
+              <div key={x.id} className={"pr-ldr" + (x.me ? " me" : " click")} onClick={() => !x.me && npcOpen(x.id, s.year)}>
                 <span className="rk num">{i + 1}</span>
                 <span className="fc"><Sprite look={x.me ? playerLook(p) : (s.looks[x.id] || DEFLOOK)} /></span>
                 <span style={{ minWidth: 0 }}><b>{x.me ? p.name : x.n}</b><small><PrTeamLogo team={s.teams[x.t]} s={16} /> {nm(x.t)}</small></span>
@@ -9371,7 +9392,7 @@ function PrAwardRace({ s, p, nm }) {
             </div>
             {rows.length === 0 && <p style={{ color: "var(--di)", margin: 0 }}>{k === "roty" ? "No first-year players have played enough games yet." : "Not enough games yet."}</p>}
             {rows.map((x, i) => (
-              <div key={x.id} className={"pr-ldr" + (x.me ? " me" : "")}>
+              <div key={x.id} className={"pr-ldr" + (x.me ? " me" : " click")} onClick={() => !x.me && npcOpen(x.id, s.year)}>
                 <span className="rk num">{k === "team" ? "★" : i + 1}</span>
                 <span className="fc"><Sprite look={x.me ? playerLook(p) : (s.looks[x.id] || DEFLOOK)} /></span>
                 <span style={{ minWidth: 0 }}><b>{x.me ? p.name : x.n}</b><small><PrTeamLogo team={s.teams[x.t]} s={16} /> {nm(x.t)} · {lineOf(x, k)}</small></span>
@@ -9439,7 +9460,7 @@ function MdBoxScreen({ player, comp, gi, game, onContinue }) {
       <table className="box">
         <thead><tr><th>Player</th><th>MIN</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>FG</th><th>3PT</th><th>FT</th><th>TO</th></tr></thead>
         <tbody>{box.filter(b => b.side === s).sort((a, b) => b.min - a.min).map(b => (
-          <tr key={b.id} className={b.me ? "y" : ""}>
+          <tr key={b.id} className={b.me ? "y" : "click-n"} onClick={() => !b.me && npcOpen(b.id, comp.year)}>
             <td><span className="pcell"><span className="ph" style={{ background: "linear-gradient(160deg,#2a2f3a,#14171c)", overflow: "hidden", display: "inline-block", flex: "none" }}><Sprite look={look(b)} still style={{ width: 34, height: 36 }} /></span><b>{b.me ? player.name : b.name}</b>{b.imp ? <small style={{ color: "var(--di)" }}>Import</small> : null}</span></td>
             <td>{b.min || "DNP"}</td><td><b>{b.pts}</b></td><td>{b.reb}</td><td>{b.ast}</td><td>{b.stl}</td><td>{b.blk}</td>
             <td>{b.fgm}/{b.fga}</td><td>{b.tpm}/{b.tpa}</td><td>{b.ftm}/{b.fta}</td><td>{b.tov}</td>
@@ -9762,7 +9783,7 @@ function PrConnections({ player, n }) {
         const [bl, bc] = CONN_BOND[c.bond];
         const mine = w.club && w.club === p.clubId;
         return (
-          <div key={c.k} className="pr-ldr c3">
+          <div key={c.k} className="pr-ldr c3 click" onClick={() => npcOpen(c.k, p.year)}>
             <span className="fc"><Sprite look={connLook(c.k)} /></span>
             <span style={{ minWidth: 0 }}>
               <b>{c.n}</b>
@@ -10652,6 +10673,286 @@ function LegacyScreen({ player, focus, onBack, onPlayAgain }) {
     </PrPage>
   );
 }
+/* =====================================================================
+   TEAMS & PLAYER PROFILES — every NPC in this career's world: browse a
+   team's roster for any year, open a player, see his seasons, clubs,
+   rating and his history with you.
+===================================================================== */
+const NPC_KIND_LBL = { mbl: "MBL", u20: "U20 D-League", u23: "U23 D-League", u15: "U15 Nationals", u17: "U17 Nationals", mssm: "MSSM", u16: "FIBA U16", u18: "FIBA U18", sea: "SEA Games", fiba: "FIBA" };
+/* Every player's line from a finished competition, kept small. */
+function npcLines(comp) {
+  const out = {};
+  Object.entries(comp.stats || {}).forEach(([k, s]) => { if (k === MD_ME || !s.g) return; out[k] = [s.t, s.g, s.pts, s.reb, s.ast, s.stl, s.blk, Math.round(s.min)]; });
+  return out;
+}
+function npcPack(comp, aw) {
+  const teams = {};
+  Object.keys(comp.teams || {}).forEach(id => { teams[id] = comp.teams[id].name; });
+  const a = aw || {};
+  let table = null;
+  if (comp.type === "league") try { table = mdTable(comp, Object.keys(comp.teams), ["rs"]).map(r => ({ id: r.id, w: r.w, l: r.l })); } catch (er) { table = null; }
+  return { y: comp.year, kind: comp.kind, label: comp.label, teams, table, lines: npcLines(comp), champ: comp.champion || null, aw: { mvp: a.mvp || null, dpoy: a.dpoy || null, roty: a.roty || null, sixth: a.sixth || null, tot: a.tot || [] } };
+}
+/* After a competition you played: its lines, plus who you played with and against. */
+function npcMerge(p0, comp, aw) {
+  const p = { ...p0 };
+  if (!comp || !comp.stats) return p;
+  const tag = `${comp.kind}:${comp.year}`;
+  p.npcLog = { ...(p.npcLog || {}), [tag]: npcPack(comp, aw) };
+  const h2h = { ...(p.h2h || {}) };
+  Object.entries(comp.h2h || {}).forEach(([k, v]) => { const o = h2h[k] || [0, 0, 0, 0, 0]; h2h[k] = o.map((x, i) => x + v[i]); });
+  p.h2h = h2h;
+  const tmg = { ...(p.tmg || {}) };
+  Object.entries(comp.tm || {}).forEach(([k, v]) => { tmg[k] = (tmg[k] || 0) + v; });
+  p.tmg = tmg;
+  return p;
+}
+/* The background league for a year, with every player's line (memory only). */
+function npcBgLines(kind, y) {
+  const s = prBgSeason(y, kind);
+  return s && s.lines ? s : null;
+}
+const npcLine = (a) => a ? { t: a[0], g: a[1], ppg: +(a[2] / a[1]).toFixed(1), rpg: +(a[3] / a[1]).toFixed(1), apg: +(a[4] / a[1]).toFixed(1), spg: +(a[5] / a[1]).toFixed(1), bpg: +(a[6] / a[1]).toFixed(1), mpg: Math.round(a[7] / a[1]) } : null;
+/* A league season as it happened in this career: your own leagues from the save, the rest simulated. */
+function npcLeagueSeason(p, kind, y) {
+  const mine = p.npcLog && p.npcLog[`${kind}:${y}`];
+  if (mine) return { ...mine, src: "you" };
+  if (["mbl", "u20", "u23"].includes(kind) && y <= (p.year || MD_BASE_YEAR)) {
+    const bg = npcBgLines(kind, y);
+    if (bg) return { y, kind, label: NPC_KIND_LBL[kind], teams: Object.fromEntries(Object.entries(bg.teams).map(([id, t]) => [id, t.name])), lines: bg.lines, champ: bg.champion, aw: bg.aw || {}, table: bg.table, src: "sim" };
+  }
+  return null;
+}
+/* Find a player (world entry) in a given year. */
+function npcFind(k, y) {
+  if (!k) return null;
+  if (k[0] === "r") {
+    const e = mdRealEntry(k.slice(1), y);
+    if (!e) return null;
+    try { const x = mdActiveLocals(y, MD_NAMES).find(z => z.k === k); if (x) return x; } catch (er) { /* fall through */ }
+    return e;
+  }
+  try {
+    const a = mdActiveLocals(y, MD_NAMES).find(z => z.k === k); if (a) return a;
+    const w = mdWorldAt(null, y, MD_NAMES); for (const c of MD_MBL_CLUBS) { const e = w.clubs[c].find(z => z.k === k); if (e) return e; }
+    const dl = mdDLeagueAll(y, MD_NAMES); for (const kind of ["u20", "u23"]) for (const c of Object.keys(dl[kind])) { const e = dl[kind][c].find(z => z.k === k); if (e) return e; }
+    for (const kind of ["u15", "u17", "mssm"]) for (const st of MD_STATES) { const e = mdYouthTeam(kind, st, y, MD_NAMES).find(z => z.k === k); if (e) return e; }
+  } catch (er) { /* not found */ }
+  return null;
+}
+function npcLook(e, teamId) {
+  if (!e) return DEFLOOK;
+  try { return mdLookFor(e, teamId ? mdKitFor(teamId) : null); } catch (er) { return DEFLOOK; }
+}
+function npcTeamName(id) {
+  const c = typeof getClub === "function" ? getClub(id) : null;
+  return c ? c.name : (MD_NAT_KITS[id] && MS_NATIONS[id]) || id;
+}
+
+/* ---------- team lists for a year ---------- */
+const NPC_CATS = [["mbl", "MBL"], ["u20", "U20 D-League"], ["u23", "U23 D-League"], ["youth", "State youth"], ["nat", "Malaysia"]];
+function npcTeamsFor(cat, y, sub) {
+  if (cat === "mbl") return MD_MBL_CLUBS.map(id => ({ id, name: npcTeamName(id), logo: id, kind: "mbl" }));
+  if (cat === "u20" || cat === "u23") return DLEAGUE_CLUBS.map(c => ({ id: c.id, name: c.name, logo: c.id, kind: cat, state: c.state }));
+  if (cat === "youth") return MD_STATES.map(st => ({ id: st, name: st, flag: st, kind: sub || "u17" }));
+  return [["senior", "Malaysia (senior)"], ["u18", "Malaysia U18"], ["u16", "Malaysia U16"]].map(([id, name]) => ({ id, name, nat: true, kind: id }));
+}
+function npcRoster(cat, team, y) {
+  try {
+    if (cat === "mbl") return (mdWorldAt(null, y, MD_NAMES).clubs[team.id] || []).map(e => ({ ...e }));
+    if (cat === "u20" || cat === "u23") return mdDLeagueRoster(team.id, y, cat === "u20" ? 20 : 23, MD_NAMES);
+    if (cat === "youth") return mdYouthTeam(team.kind, team.id, y, MD_NAMES);
+    if (team.id === "senior") return mdSeniorPool(mdWorldAt(null, y, MD_NAMES));
+    return mdYouthNationalPool(y, team.id);
+  } catch (er) { return []; }
+}
+function npcMbLNr(list) { const imps = list.filter(e => e.imp).sort((a, b) => b.o - a.o); return new Set(imps.slice(3).map(e => e.k)); }
+
+/* ---------- a player's career in this save ---------- */
+function npcCareer(p, k) {
+  const y1 = Math.max(MD_BASE_YEAR, p.year || MD_BASE_YEAR);
+  const rows = [], rating = [], clubs = [], awards = [];
+  for (let y = MD_BASE_YEAR; y <= y1; y++) {
+    const e = npcFind(k, y);
+    if (e) rating.push([y, e.o, y - (e.by || y)]);
+    ["u20", "u23", "mbl"].forEach(kind => {
+      const s = npcLeagueSeason(p, kind, y);
+      if (!s || !s.lines || !s.lines[k]) return;
+      const l = npcLine(s.lines[k]);
+      const aw = [];
+      if (s.aw) { if (s.aw.mvp === k) aw.push("MVP"); if (s.aw.dpoy === k) aw.push("DPOY"); if (s.aw.roty === k) aw.push("ROTY"); if (s.aw.sixth === k) aw.push("Sixth Man"); if ((s.aw.tot || []).includes(k)) aw.push(kind === "mbl" ? "All-MBL" : "All-D-League"); }
+      if (s.champ && s.champ === l.t) aw.push("Champion");
+      rows.push({ y, kind, lbl: NPC_KIND_LBL[kind], team: l.t, teamName: s.teams[l.t] || npcTeamName(l.t), ...l, aw, src: s.src });
+      aw.forEach(a => awards.push(`${a} · ${NPC_KIND_LBL[kind]} ${y}`));
+    });
+    Object.values(p.npcLog || {}).filter(s => s.y === y && !["u20", "u23", "mbl"].includes(s.kind)).forEach(s => {
+      if (!s.lines[k]) return;
+      const l = npcLine(s.lines[k]);
+      rows.push({ y, kind: s.kind, lbl: s.label || NPC_KIND_LBL[s.kind], team: l.t, teamName: s.teams[l.t] || l.t, ...l, aw: s.champ === l.t ? ["Champion"] : [], src: "you" });
+    });
+    try { const w = mdWhereIs(k, y, MD_NAMES); if (w) clubs.push({ y, lvl: w.lvl, club: w.club }); } catch (er) { /* none */ }
+  }
+  return { rows, rating, clubs, awards };
+}
+
+/* ---------- the profile ---------- */
+function NpcProfile({ player, k, y, onClose, onTeam }) {
+  const p = player;
+  const year = y || p.year;
+  const e = useMemo(() => npcFind(k, year) || npcFind(k, p.year), [k, year]);
+  const [car, setCar] = useState(null);
+  useEffect(() => { setCar(null); const t = setTimeout(() => setCar(npcCareer(p, k)), 30); return () => clearTimeout(t); }, [k]);
+  if (!e) return <section className="pn" data-a=""><p style={{ margin: 0, color: "var(--di)" }}>This player isn't in the world this year.</p>{onClose && <button className="ghost" onClick={onClose}>Back</button>}</section>;
+  const now = npcFind(k, p.year) || e;
+  const where = (() => { try { return mdWhereIs(k, p.year, MD_NAMES); } catch (er) { return null; } })();
+  const age = now.by ? p.year - now.by : null;
+  const a = mdAttrs(now);
+  const c = p.conn && p.conn[k];
+  const bond = c ? connBond(c) : null;
+  const h = p.h2h && p.h2h[k];
+  const tg = (p.tmg && p.tmg[k]) || 0;
+  const look = npcLook(now, where && where.club);
+  const tot = car ? car.rows.reduce((s, r) => ({ g: s.g + r.g, pts: s.pts + r.ppg * r.g }), { g: 0, pts: 0 }) : null;
+  return (
+    <div className="pr-npc">
+      <section className="pn pr-npc-hd" data-a="">
+        <span className="fc big"><Sprite look={look} /></span>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div className="lbl" style={{ color: "var(--or2)" }}>{now.imp ? `Import${now.nat ? " · " + now.nat : ""}` : now.gen ? "Generated player" : "Real player · HoopStatsMY"}</div>
+          <h2>{now.n}</h2>
+          <div className="ticks">
+            {now.st && !now.imp && <Tg><PrFlag state={now.st} w={18} /> {shortHome(now.st)}</Tg>}
+            <Tg>{now.pos}</Tg>{age != null && <Tg>Age {age}</Tg>}{now.ht ? <Tg>{now.ht}cm</Tg> : null}{now.no ? <Tg>#{now.no}</Tg> : null}
+            {where && <Tg cls="or" onClick={onTeam ? () => onTeam(where.lvl, where.club) : undefined} style={onTeam ? { cursor: "pointer" } : undefined}>{npcTeamName(where.club)} · {NPC_KIND_LBL[where.lvl]}</Tg>}
+            {!where && <Tg>{now.imp ? "Abroad" : age != null && age < 17 ? "Youth" : "Not in a league"}</Tg>}
+          </div>
+        </div>
+        <div className="pr-npc-ovr"><b className="num">{now.o}</b><small>OVR {p.year}</small></div>
+        {onClose && <button className="ghost sm" style={{ position: "absolute", top: 12, right: 12, width: "auto", marginTop: 0 }} onClick={onClose}><Ic n="x" /></button>}
+      </section>
+      <div className="g">
+        <section className="pn c5 l12" data-a="">
+          <h3><Ic n="user" /> With you</h3>
+          {bond ? <div className="dec"><span className="k you"><Ic n="heart" /></span><div><b>{CONN_BOND[bond][0]}</b><small>{connHow(c)}</small></div></div>
+            : <div className="dec"><span className="k chance"><Ic n="user" /></span><div><b>No history yet</b><small>You haven't shared a team.</small></div></div>}
+          <PrSline items={[["Games together", tg], ["Head to head", h ? `${h[1]}–${h[2]}` : "—"], ["His PPG vs you", h ? (h[3] / h[0]).toFixed(1) : "—"], ["Your PPG vs him", h ? (h[4] / h[0]).toFixed(1) : "—"]]} />
+          <h3 style={{ marginTop: 16 }}><Ic n="bolt" /> Attributes</h3>
+          <div className="pr-attrs">{["Shooting", "Playmaking", "Defense", "Rebounding", "Athleticism", "IQ"].map((n, i) => <div key={n}><small>{n}</small><i><b style={{ width: `${a[i]}%` }} /></i><span className="num">{a[i]}</span></div>)}</div>
+        </section>
+        <section className="pn c7 l12" data-a="">
+          <h3><Ic n="table" /> Seasons in this career{tot && tot.g ? <small>{tot.g} games · {(tot.pts / tot.g).toFixed(1)} PPG</small> : null}</h3>
+          {!car && <p style={{ color: "var(--di)", margin: 0 }}>Loading his seasons…</p>}
+          {car && car.rows.length === 0 && <p style={{ color: "var(--di)", margin: 0 }}>No league or tournament games yet in this career.</p>}
+          {car && car.rows.length > 0 && (
+            <div className="pr-tblw"><table className="pr-tbl">
+              <thead><tr><th>Year</th><th>Competition</th><th>Team</th><th>G</th><th>PPG</th><th>RPG</th><th>APG</th><th className="ph-hide">SPG</th><th className="ph-hide">BPG</th><th className="ph-hide">MIN</th></tr></thead>
+              <tbody>{car.rows.slice().reverse().map((r, i) => (
+                <tr key={i}><td className="num">{r.y}</td><td>{r.lbl}{r.aw.length ? <span className="aw">{r.aw.join(" · ")}</span> : null}</td><td><span className="tm"><PrTeamLogo team={{ name: r.teamName, logo: r.team }} s={18} />{r.teamName}</span></td>
+                  <td className="num">{r.g}</td><td className="num">{r.ppg}</td><td className="num">{r.rpg}</td><td className="num">{r.apg}</td><td className="num ph-hide">{r.spg}</td><td className="num ph-hide">{r.bpg}</td><td className="num ph-hide">{r.mpg}</td></tr>
+              ))}</tbody>
+            </table></div>
+          )}
+          {car && car.rating.length > 1 && <><h3 style={{ marginTop: 16 }}><Ic n="fire" /> Rating by year</h3><PrMiniArc pts={car.rating} /></>}
+          {car && car.awards.length > 0 && <><h3 style={{ marginTop: 16 }}><Ic n="trophy" /> Honours</h3><div className="ticks">{car.awards.map((x, i) => <Tg key={i} cls={/MVP|Champion/.test(x) ? "or" : ""}>{x}</Tg>)}</div></>}
+        </section>
+      </div>
+    </div>
+  );
+}
+function PrMiniArc({ pts }) {
+  const W = 560, H = 150, pad = 26;
+  const x0 = pts[0][0], x1 = pts[pts.length - 1][0];
+  const lo = Math.min(...pts.map(p => p[1])) - 4, hi = Math.max(...pts.map(p => p[1])) + 4;
+  const X = v => pad + (v - x0) / Math.max(1, x1 - x0) * (W - pad * 2), Y = v => H - pad - (v - lo) / Math.max(1, hi - lo) * (H - pad * 2);
+  let d = `M${X(pts[0][0])},${Y(pts[0][1])}`; pts.slice(1).forEach(p => { d += ` H${X(p[0])} V${Y(p[1])}`; });
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block", shapeRendering: "crispEdges" }} role="img" aria-label="Rating by year">
+      <path d={d} fill="none" stroke="#ff9a4d" strokeWidth="3" />
+      {pts.map((p, i) => <g key={i}><rect x={X(p[0]) - 3} y={Y(p[1]) - 3} width="6" height="6" fill="#ff7a1a" /><text x={X(p[0])} y={Y(p[1]) - 8} fill="#c9d2dc" fontSize="11" textAnchor="middle">{p[1]}</text><text x={X(p[0])} y={H - 6} fill="#737a86" fontSize="11" textAnchor="middle">{p[0]}</text></g>)}
+    </svg>
+  );
+}
+/* Open a profile from anywhere (league tables, box scores, people). */
+function npcOpen(k, y) { if (!k || k === MD_ME) return; try { window.dispatchEvent(new CustomEvent("pr-npc", { detail: { k, y } })); } catch (er) { /* ignore */ } }
+function NpcModal({ player, k, y, onClose }) {
+  useEffect(() => { const f = ev => { if (ev.key === "Escape") onClose(); }; window.addEventListener("keydown", f); return () => window.removeEventListener("keydown", f); }, []);
+  return (
+    <div className="pr-modal" onClick={onClose}>
+      <div className="pr-modal-in" onClick={ev => ev.stopPropagation()}><NpcProfile player={player} k={k} y={y} onClose={onClose} /></div>
+    </div>
+  );
+}
+
+/* ---------- the Teams page ---------- */
+let PR_TEAMS_OPEN = null;
+function TeamsScreen({ player }) {
+  const p = player;
+  const init = PR_TEAMS_OPEN; PR_TEAMS_OPEN = null;
+  const years = []; for (let y = MD_BASE_YEAR; y <= Math.max(MD_BASE_YEAR, p.year); y++) years.push(y);
+  const [y, setY] = useState((init && init.y) || p.year);
+  const [cat, setCat] = useState((init && init.cat) || (p.league === "mbl" ? "mbl" : p.league === "u20" || p.league === "u23" ? p.league : p.age < 18 ? "youth" : "mbl"));
+  const [sub, setSub] = useState("u17");
+  const [team, setTeam] = useState((init && init.team) || null);
+  const [k, setK] = useState((init && init.k) || null);
+  const teams = useMemo(() => npcTeamsFor(cat, y, sub), [cat, y, sub]);
+  const season = useMemo(() => (["mbl", "u20", "u23"].includes(cat) ? npcLeagueSeason(p, cat, y) : p.npcLog && p.npcLog[`${cat === "youth" ? sub : (team === "senior" ? "sea" : team)}:${y}`]) || null, [cat, y, sub, team]);
+  const tm = team ? teams.find(t => t.id === team) : null;
+  const roster = useMemo(() => tm ? npcRoster(cat, tm, y) : [], [tm, cat, y]);
+  const nr = cat === "mbl" ? npcMbLNr(roster) : new Set();
+  const rec = id => { const r = season && season.table && season.table.find(x => x.id === id); return r ? `${r.w}–${r.l}` : null; };
+  const go = (c) => { setCat(c); setTeam(null); setK(null); };
+  const youAt = tm && ((cat === "mbl" && p.league === "mbl" && p.clubId === tm.id && y === p.year) || ((cat === "u20" || cat === "u23") && y === p.year && (p.clubId === tm.id || (p.legDeals && p.legDeals[cat] && p.legDeals[cat].y === y && p.legDeals[cat].clubId === tm.id)) && p.age <= (cat === "u20" ? 20 : 23)) || (cat === "youth" && y === p.year && p.hometown === tm.id && p.age < 19));
+  if (k) return (
+    <PrPage>
+      <button className="ghost" style={{ width: "auto", marginBottom: 12 }} onClick={() => setK(null)}><Ic n="left" /> {tm ? tm.name : "Back"}</button>
+      <NpcProfile player={p} k={k} y={y} onTeam={(lvl, club) => { setK(null); setCat(lvl); setTeam(club); setY(p.year); }} />
+    </PrPage>
+  );
+  return (
+    <PrPage>
+      <PrHead lbl={`${y} · ${tm ? tm.name : "Every team in your world"}`} title={tm ? tm.name : "Teams"} desc={tm ? `${NPC_KIND_LBL[cat === "youth" ? sub : cat === "nat" ? (tm.id === "senior" ? "sea" : tm.id) : cat] || ""} squad ${y}. Tap a player for his profile.` : "Pick a league and a team to see its players. Tap a player for his profile and his history with you."}
+        right={tm ? <button className="ghost" style={{ width: "auto" }} onClick={() => setTeam(null)}><Ic n="left" /> All teams</button> : null} />
+      <div className="pr-teamctl">
+        <div className="tabs">{NPC_CATS.map(([c, l]) => <button key={c} className={cat === c ? "on" : ""} onClick={() => go(c)}>{l}</button>)}</div>
+        {cat === "youth" && <div className="tabs">{[["u15", "U15"], ["u17", "U17"], ["mssm", "MSSM"]].map(([c, l]) => <button key={c} className={sub === c ? "on" : ""} onClick={() => { setSub(c); setTeam(null); }}>{l}</button>)}</div>}
+        <div className="tabs pr-years">{years.slice(-8).map(v => <button key={v} className={y === v ? "on" : ""} onClick={() => setY(v)}>{v}</button>)}</div>
+      </div>
+      {!tm && (
+        <div className="pr-teamgrid">
+          {teams.map(t => (
+            <button key={t.id} className="pr-team" onClick={() => setTeam(t.id)}>
+              {t.logo ? <PrTeamLogo team={{ name: t.name, logo: t.logo }} s={44} /> : t.flag ? <PrFlag state={t.flag} w={44} /> : <PrLogo k="c_harimau" s={44} />}
+              <span><b>{t.name}</b><small>{rec(t.id) ? `${rec(t.id)} · ${season && season.src === "you" ? "your season" : "simulated"}` : t.state || (cat === "youth" ? `${sub.toUpperCase()} state team` : "")}</small></span>
+              {season && season.champ === t.id && <Tg cls="or" style={{ height: 22 }}><Ic n="trophy" /></Tg>}
+            </button>
+          ))}
+        </div>
+      )}
+      {tm && (
+        <section className="pn" data-a="">
+          <div className="pr-tblw"><table className="pr-tbl pr-roster">
+            <thead><tr><th>Player</th><th>Pos</th><th>Age</th><th className="ph-hide">Ht</th><th>OVR</th><th>G</th><th>PPG</th><th className="ph-hide">RPG</th><th className="ph-hide">APG</th></tr></thead>
+            <tbody>
+              {youAt && <tr className="me"><td><span className="pcell" style={{ display: "flex", alignItems: "center", gap: 8 }}><span className="fc" style={{ width: 34, height: 36, flex: "none" }}><Sprite look={playerLook(p)} style={{ width: 34, height: 36 }} /></span><b>{p.name}</b><Tg cls="or" style={{ height: 20 }}>You</Tg></span></td><td>{p.position}</td><td className="num">{p.age}</td><td className="num ph-hide">{p.height}</td><td className="num">{computeOverall(p.stats, p.position)}</td><td colSpan={4} /></tr>}
+              {roster.slice().sort((a, b) => b.o - a.o).map(e => {
+                const l = season && season.lines && npcLine(season.lines[e.k]);
+                const c = p.conn && p.conn[e.k];
+                return (
+                  <tr key={e.k} onClick={() => setK(e.k)} className="click">
+                    <td><span className="pcell" style={{ display: "flex", alignItems: "center", gap: 8 }}><span className="fc" style={{ width: 34, height: 36, flex: "none" }}><Sprite look={npcLook(e, tm.logo || null)} style={{ width: 34, height: 36 }} /></span><b>{e.n}</b>{e.imp && <Tg style={{ height: 20 }}>Import</Tg>}{nr.has(e.k) && <Tg cls="neg" style={{ height: 20 }}>Not registered</Tg>}{c && <Tg cls={CONN_BOND[connBond(c)][1]} style={{ height: 20 }}>{CONN_BOND[connBond(c)][0]}</Tg>}</span></td>
+                    <td>{e.pos}</td><td className="num">{e.by ? y - e.by : "—"}</td><td className="num ph-hide">{e.ht || "—"}</td><td className="num"><b>{e.o}</b></td>
+                    <td className="num">{l ? l.g : "—"}</td><td className="num">{l ? l.ppg : "—"}</td><td className="num ph-hide">{l ? l.rpg : "—"}</td><td className="num ph-hide">{l ? l.apg : "—"}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table></div>
+          <PrSrc>{season ? (season.src === "you" ? "Stats from your own season" : "Stats from the simulated season") : "No games simulated for this team this year"} · tap a player</PrSrc>
+        </section>
+      )}
+    </PrPage>
+  );
+}
 
 const PR_CSS = `.pr{color-scheme:dark;--bg:#0a0b0e;--bg2:#0f1115;--p1:#14171c;--p2:#1a1e25;--p3:#222731;--ln:rgba(255,255,255,.07);--ln2:rgba(255,255,255,.12);--ink:#f3f4f6;--mu:#a3a9b4;--di:#737a86;--or:#ff7a1a;--or2:#ff9a4d;--gd:#e2b65a;--ok:#34c37a;--bd:#f05252;--in:#4aa8ff;--r1:6px;--r2:10px;--r3:14px;--r4:20px;--tc:#ff7a1a;--td:#1a1208;--cd:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;--sn:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;--ease:cubic-bezier(.2,.8,.2,1)}
 .pr .i{width:18px;height:18px;flex:none}
@@ -11028,6 +11329,10 @@ const PR_CSS = `.pr{color-scheme:dark;--bg:#0a0b0e;--bg2:#0f1115;--p1:#14171c;--
 .pr[data-l=phone] .fxr .dt,.pr[data-l=land] .fxr .dt{grid-column:1/4;grid-row:1}
 .pr[data-l=phone] .fxr .vn,.pr[data-l=land] .fxr .vn{display:none}
 .pr .mvp{display:flex;flex-direction:column;gap:8px}
+.pr .aw{display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;padding:20px}
+.pr .aw .medal{width:88px;height:88px;border-radius:50%;display:grid;place-items:center;background:radial-gradient(circle at 35% 30%,#ffe7a8,#e2b65a 45%,#8a6420);box-shadow:0 14px 30px -10px rgba(226,182,90,.6),inset 0 2px 0 rgba(255,255,255,.5);color:#3a2808}
+.pr .aw .medal svg{width:40px;height:40px}
+.pr .aw b{font:800 22px/1 var(--cd);text-transform:uppercase}
 .pr .ccard{position:relative;border-radius:24px;overflow:hidden;aspect-ratio:4/5;max-height:560px;margin:auto;width:100%;max-width:440px;background:linear-gradient(165deg,#2b2112,#0f0d09 60%);border:1px solid rgba(226,182,90,.35);box-shadow:0 30px 60px -20px rgba(0,0,0,.8)}
 .pr .ccard .ph{position:absolute;inset:0 0 34% 0;background:radial-gradient(260px 260px at 50% 70%,rgba(226,182,90,.35),transparent 70%);border-radius:0}
 .pr .ccard .ph::after{background:linear-gradient(180deg,transparent 60%,#120f0a)}
@@ -11405,6 +11710,50 @@ const PR_CSS = `.pr{color-scheme:dark;--bg:#0a0b0e;--bg2:#0f1115;--p1:#14171c;--
 .pr .ac .ic svg{width:22px;height:22px}
 .pr .ccard .ph svg,.pr .ccard .ph canvas{image-rendering:pixelated}
 .pr[data-l=phone] .tabs{overflow-x:auto;max-width:100%!important;scrollbar-width:none}.pr[data-l=phone] .tabs button{flex:none}
+.pr .pr-npc-hd{position:relative;display:flex;align-items:center;gap:18px;margin-bottom:16px;flex-wrap:wrap}
+.pr .pr-npc-hd h2{font:800 clamp(28px,4vw,42px)/1 var(--cd);text-transform:uppercase;margin:4px 0 10px}
+.pr .fc.big{width:110px;height:118px;border-radius:18px;overflow:hidden;background:linear-gradient(160deg,#2a2f3a,#14171c);display:flex;align-items:flex-end;justify-content:center;flex:none}
+.pr .fc.big svg,.pr .fc.big canvas{width:100%;height:auto}
+.pr .pr-npc-ovr{display:flex;flex-direction:column;align-items:center;justify-content:center;width:84px;height:84px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#ffcf7a,#ff7a1a 55%,#8a3a06);color:#1a0b00;flex:none;margin-right:44px}
+.pr .pr-npc-ovr b{font:800 32px/1 var(--cd)}.pr .pr-npc-ovr small{font-size:9.5px;font-weight:800;text-transform:uppercase}
+.pr[data-l=phone] .pr-npc-ovr{width:62px;height:62px;margin-right:0}.pr[data-l=phone] .pr-npc-ovr b{font-size:24px}.pr[data-l=phone] .fc.big{width:80px;height:86px}
+.pr .pr-attrs{display:flex;flex-direction:column;gap:8px}
+.pr .pr-attrs>div{display:grid;grid-template-columns:92px 1fr 34px;gap:10px;align-items:center}
+.pr .pr-attrs small{color:var(--mu);font-size:12px}.pr .pr-attrs i{height:8px;border-radius:99px;background:var(--p3);overflow:hidden}
+.pr .pr-attrs i b{display:block;height:100%;background:linear-gradient(90deg,#ff8a2e,#e2b65a);border-radius:99px}
+.pr .pr-attrs span{text-align:right;font:800 15px/1 var(--cd)}
+.pr .pr-tblw{overflow-x:auto;margin:0 -4px}
+.pr .pr-tbl{width:100%;border-collapse:collapse;font-size:13px}
+.pr .pr-tbl th{color:var(--di);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.04em;text-align:left;padding:8px 6px;border-bottom:1px solid var(--ln)}
+.pr .pr-tbl td{padding:8px 6px;border-bottom:1px solid var(--ln);vertical-align:middle}
+.pr .pr-tbl td.num,.pr .pr-roster th:nth-child(n+3),.pr .pr-tbl:not(.pr-roster) th:nth-child(n+4){text-align:right}
+.pr .pr-tbl .aw{display:block;color:var(--gd);font-size:11px}
+.pr .pr-tbl .tm{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.pr .pr-tbl tr.click{cursor:pointer}.pr .pr-tbl tr.click:hover td{background:rgba(255,255,255,.03)}
+.pr .pr-tbl tr.me td{background:rgba(255,122,26,.08)}
+.pr .pr-roster .pcell .fc{width:34px;height:36px;border-radius:9px;overflow:hidden;background:linear-gradient(160deg,#2a2f3a,#14171c);flex:none;display:flex;align-items:flex-end}
+.pr .pr-roster .pcell{flex-wrap:wrap;gap:8px}
+.pr[data-l=phone] .ph-hide{display:none}
+.pr .pr-teamctl{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+.pr .pr-teamctl .tabs{margin:0}
+.pr .pr-sel{height:38px;border-radius:10px;background:var(--p2);color:var(--tx);border:1px solid var(--ln2);padding:0 12px;font-weight:700}
+.pr .pr-teamgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+.pr .pr-team{display:flex;align-items:center;gap:12px;padding:12px;border-radius:14px;background:var(--p1);border:1px solid var(--ln);text-align:left;color:var(--tx);cursor:pointer;transition:border-color .2s,transform .2s}
+.pr .pr-team:hover{border-color:var(--or);transform:translateY(-1px)}
+.pr .pr-team b{display:block;font-size:14px}.pr .pr-team small{color:var(--mu);font-size:12px}.pr .pr-team>span{flex:1;min-width:0}
+.pr .pr-modal{position:fixed;inset:0;z-index:80;background:rgba(5,6,9,.72);backdrop-filter:blur(4px);display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:28px 16px}
+.pr .pr-modal-in{width:100%;max-width:1080px}
+.pr .pr-ldr.click,.pr .click-n{cursor:pointer}.pr .click-n:hover{color:var(--or2)}
+.pr .pr-roster .pcell{flex-wrap:nowrap!important;min-width:0}
+.pr .pr-roster .pcell b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.pr .pr-roster td:first-child{max-width:340px}
+.pr .pr-teamctl .tabs{width:auto;max-width:100%;overflow-x:auto;flex-wrap:nowrap}
+.pr .pr-teamctl .tabs button{flex:none}
+.pr[data-l=phone] .bnav{overflow-x:auto;justify-content:flex-start}
+.pr[data-l=phone] .bnav button{flex:none;min-width:64px}
+.pr[data-l=phone] .pr-roster td:first-child{max-width:168px;width:168px}
+.pr[data-l=phone] .pr-roster .pcell .tg{display:none}
+.pr[data-l=phone] .pr-roster .pcell b{font-size:12.5px}
 `;
 function PrStyle() { return <style>{PR_CSS}</style>; }
 
@@ -15711,6 +16060,7 @@ export default function App() {
     if (leagueAwards.length) p.popularity = clamp(p.popularity + leagueAwards.length * 3 + (leagueAwards.includes("mvp") ? 8 : 0));
     const ctx = comp.ctx || {};
     try { p.conn = connRecord(p, comp); } catch (e) { /* connections are extras */ }
+    try { p = npcMerge(p, comp, aw); } catch (e) { /* profiles are extras */ }
     try { p.mdLeagueLast = prLeagueSummary(comp, rookies); p.mdLeagues = { ...(p.mdLeagues || {}), [kind]: p.mdLeagueLast }; } catch (e) { /* the table page falls back to the simulated MBL */ }
     delete p.mdComp;
     delete p.pendingSecondHalf;
@@ -15903,6 +16253,7 @@ export default function App() {
         base = { ...b0, mdRecaps: recs, mdLast: recap };
       }
       try { base = { ...base, conn: connRecord(base, comp) }; } catch (e) { /* connections are extras */ }
+      try { base = npcMerge(base, comp, null); } catch (e) { /* profiles are extras */ }
       const pend = { ...p.mdPend, base, overrides: { ...p.mdPend.overrides, [p.mdPend.need]: out } };
       mdRun(pend.key, { ...pend.base, mdPend: pend });
       return;
@@ -17629,6 +17980,7 @@ export default function App() {
           onBack={() => setScreen(player && player.retired ? "retired" : "start")} onPlayAgain={handlePlayAgain} />
       )}
       {screen === "legacy" && player && <LegacyScreen player={player} />}
+      {screen === "teams" && player && <TeamsScreen key={(player.year || 0) + ":" + Date.now() % 1} player={player} />}
       </ScreenFade>
       </Stage>
       </Shell>
