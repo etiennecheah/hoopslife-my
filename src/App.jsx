@@ -4416,15 +4416,15 @@ function drawSprite(ctx,L,o={}){const f=o.frame||0,blink=o.blink,ox=o.ox||0,oy=o
  if(o.full!==false){const lx1=10-bw,lx2=17;P(lx1,37,OL,6,1);P(lx2,37,OL,6+bw,1);
   P(lx1+1,37,skin,4,5);P(lx2+1,37,skin,4+bw,5);P(lx1+1,37,sk2,1,5);P(lx2+1,37,sk2,1,5);
   P(lx1,37,OL,1,8);P(lx1+5,37,OL,1,8);P(lx2,37,OL,1,8);P(lx2+5+bw,37,OL,1,8);
-  P(lx1+1,42,'#f3f4f6',4,2);P(lx2+1,42,'#f3f4f6',4+bw,2);P(lx1+1,43,T,4,1);P(lx2+1,43,T,4+bw,1);
+  {const sH={none:0,ankle:1,crew:2,mid:4,knee:6}[L.socks||'crew'],sc=L.sockC||'#f3f4f6',ac=L.accent||T;if(sH>0){P(lx1+1,44-sH,sc,4,sH);P(lx2+1,44-sH,sc,4+bw,sH);if(L.stripes==null||L.stripes){const sy=L.socks?44-sH:43;P(lx1+1,sy,ac,4,1);P(lx2+1,sy,ac,4+bw,1)}}}
   P(lx1-1,44,OL,7,4);P(lx2-1,44,OL,8+bw,4);P(lx1,44,L.shoes,5,2);P(lx2,44,L.shoes,6+bw,2);P(lx1,46,sh(L.shoes,.6),5,1);P(lx2,46,sh(L.shoes,.6),6+bw,1);P(lx1+1,44,sh(L.shoes,1.3),2,1);P(lx2+1,44,sh(L.shoes,1.3),2,1);
   if(L.acc&&L.acc.shoe==='sig'){P(lx1+2,45,'#ffd34d',2,1);P(lx2+2,45,'#ffd34d',2,1)}}
  const y0=bob; // upper body bobs
  // ---- shorts
  if(o.full!==false){P(8-bw,30+y0,OL,16+2*bw,1);P(8-bw,30+y0,OL,1,8-y0);P(23+bw,30+y0,OL,1,8-y0);P(9-bw,31+y0,S,14+2*bw,6-y0);P(9-bw,31+y0,S2,2,6-y0);P(15,33+y0,S2,2,4-y0);P(21+bw,31+y0,L.panel||T,1,6-y0);P(10-bw,31+y0,L.panel||T,1,6-y0);P(11-bw,36,L.panel||T,10+2*bw,1)}
  // ---- arms
- const ax1=5-bw,ax2=24+bw;if(o.span){const tx0=9-bw,tw0=14+2*bw,a=Math.max(4,Math.round((o.span-(tw0+2))/2));[[tx0-1-a,0],[tx0+tw0+1,1]].forEach(([x,r])=>{P(x,18+y0,OL,a,1);P(x,22+y0,OL,a,1);P(x,19+y0,skin,a,3);P(x,21+y0,sk2,a,1);P(r?x+a-1:x,19+y0,OL,1,3);P(r?x+a-3:x+1,18+y0,sk1,2,4);P(r?x+a-3:x+1,18+y0,OL,2,1);P(r?x+a-3:x+1,22+y0,OL,2,1)})}else [[ax1,0],[ax2,1]].forEach(([x,r])=>{P(x,18+y0,OL,4,1);P(x,18+y0,OL,1,13);P(x+3,18+y0,OL,1,13);P(x+1,19+y0,skin,2,10);P(x+(r?2:1),19+y0,sk2,1,10);P(x,31+y0,OL,4,1);P(x+1,29+y0,sk1,2,2);
-  if(L.sleeve&&!r){P(x+1,19+y0,'#16181d',2,6)}});
+ const ax1=5-bw,ax2=24+bw;if(o.span){const tx0=9-bw,tw0=14+2*bw,a=Math.max(4,Math.round((o.span-(tw0+2))/2));[[tx0-1-a,0],[tx0+tw0+1,1]].forEach(([x,r])=>{P(x,18+y0,OL,a,1);P(x,22+y0,OL,a,1);P(x,19+y0,skin,a,3);P(x,21+y0,sk2,a,1);P(r?x+a-1:x,19+y0,OL,1,3);P(r?x+a-3:x+1,18+y0,sk1,2,4);P(r?x+a-3:x+1,18+y0,OL,2,1);P(r?x+a-3:x+1,22+y0,OL,2,1)})}else [[ax1,0],[ax2,1]].forEach(([x,r])=>{P(x,18+y0,OL,4,1);P(x,18+y0,OL,1,13);P(x+3,18+y0,OL,1,13);P(x+1,19+y0,skin,2,10);P(x+(r?2:1),19+y0,sk2,1,10);P(x,31+y0,OL,4,1);P(x+1,29+y0,sk1,2,2);if(L.wrist)P(x+1,27+y0,L.accent||T,2,1);
+  if(L.sleeve&&L.sleeve!=='none'&&(L.sleeve==='right')===!!r){P(x+1,19+y0,L.sleeveC||'#16181d',2,6)}});
  // ---- torso (jersey)
  const tx=9-bw,tw=14+2*bw;P(tx-1,17+y0,OL,tw+2,1);P(tx-1,17+y0,OL,1,14);P(tx+tw,17+y0,OL,1,14);
  P(tx,18+y0,J,tw,13);P(tx,18+y0,J2,2,13);P(tx+tw-1,18+y0,J3,1,13);if(L.panel){P(tx,20+y0,L.panel,1,11);P(tx+tw-1,20+y0,L.panel,1,11);P(tx+1,30+y0,L.panel,tw-2,1)}
@@ -4466,8 +4466,20 @@ function drawSprite(ctx,L,o={}){const f=o.frame||0,blink=o.blink,ox=o.ox||0,oy=o
  if(H==='bun'){P(13,hy-5,OL,6,1);P(13,hy-4,hc,6,3);P(14,hy-4,hcL,2,1);P(10,hy-1,OL,12,1);P(10,hy,hc,12,2);P(10,hy+2,hc,1,2);P(21,hy+2,hc,1,2)}
  if(H==='spiky'){[[9,-3],[12,-5],[15,-6],[18,-5],[21,-3]].forEach(([x,y])=>{P(x,hy+y,hc,2,-y+2);P(x,hy+y-1,OL,2,1)});P(9,hy-1,hc,14,3);P(10,hy+2,hc,2,2);P(20,hy+2,hc,2,2);P(14,hy-4,hcL,1,3)}
  if(H==='bald'){P(13,hy+1,sk1,3,1)}
+ if(H==='sidepart'){P(9,hy-1,OL,14,1);P(9,hy-1,OL,1,6);P(22,hy-1,OL,1,6);P(10,hy,hc,12,3);P(10,hy+3,hc,2,3);P(20,hy+3,hc,2,3);P(12,hy+3,hc,9,1);P(13,hy,hcL,1,3);P(16,hy+1,hcL,4,1)}
+ if(H==='waves'){P(10,hy-1,OL,12,1);P(10,hy,hc,12,3);for(let j=0;j<3;j++)for(let i=0;i<12;i+=2)P(10+i+(j%2),hy+j,hcL);P(10,hy+3,hc,1,2);P(21,hy+3,hc,1,2)}
+ if(H==='twists'){P(9,hy-4,OL,14,1);for(let i=0;i<14;i+=2){const t=i%4===0?1:0;P(9+i,hy-3-t,hc,2,6+t);P(9+i,hy-3-t,hcL,1,1)}P(10,hy+3,hc,2,2);P(20,hy+3,hc,2,2)}
+ if(H==='frohawk'){P(12,hy-5,OL,8,1);P(12,hy-4,hc,8,6);tex(12,hy-4,8,6);P(10,hy+1,hc2,1,3);P(21,hy+1,hc2,1,3);P(13,hy-4,hcL,2,1)}
+ if(H==='hightop'){P(9,hy-7,OL,14,1);P(9,hy-6,hc,14,8);P(9,hy-7,OL,1,9);P(22,hy-7,OL,1,9);P(10,hy-6,hcL,12,1);tex(9,hy-5,14,6);P(10,hy+2,hc2,1,2);P(21,hy+2,hc2,1,2)}
+ if(H==='cornrows'||H==='braids'){P(10,hy,hc,12,2);for(let i=0;i<12;i+=2)P(10+i,hy,hc2,1,2);P(10,hy+2,hc,1,3);P(21,hy+2,hc,1,3);P(9,hy+1,OL,1,1);P(22,hy+1,OL,1,1);if(H==='braids'){P(8,hy+4,hc,1,10);P(23,hy+4,hc,1,10);for(let j=0;j<10;j+=2){P(8,hy+4+j,hc2);P(23,hy+4+j,hc2)}}}
+ if(H==='manbun'){P(10,hy-1,OL,12,1);P(10,hy,hc,12,2);P(10,hy+2,hc,1,2);P(21,hy+2,hc,1,2);P(11,hy,hcL,6,1);P(22,hy-1,hc,3,3);P(22,hy-2,OL,3,1);P(25,hy-1,OL,1,3)}
+ if(H==='undercut'){P(10,hy-3,OL,12,1);P(10,hy-2,hc,12,3);P(11,hy-2,hcL,5,1);P(10,hy+1,hc2,1,2);P(21,hy+1,hc2,1,2);P(9,hy-2,OL,1,3);P(22,hy-2,OL,1,3)}
  // headband
  if(L.band){P(9,hy+3,L.band,14,2);P(9,hy+3,sh(L.band,1.25),14,1)}
+ // glasses
+ {const G=L.glasses;if(G&&G!=='none'){const fr=G==='gold'?'#d8b35a':'#14161c';
+  if(G==='sport'){P(9,ey-1,fr,14,1);P(9,ey+2,fr,14,1);P(10,ey,'#ffb347',12,2);P(10,ey,'#ffd08a',12,1)}
+  else{const ln=G==='shades'?'#0d0f14':G==='gold'?'#cfe8ff':'#bfe3ff';[11,16].forEach(x=>{P(x,ey-1,fr,5,1);P(x,ey+2,fr,5,1);P(x,ey,fr,1,2);P(x+4,ey,fr,1,2);if(G==='shades')P(x+1,ey,ln,3,2);else{ctx.globalAlpha=.35;P(x+1,ey,ln,3,2);ctx.globalAlpha=1}});P(10,ey,fr,1,1);P(21,ey,fr,1,1)}}}
  // ---- accessories
  const A=L.acc||{};const G='#ffd34d',G2='#c99320',D='#e9f6ff';const tw2=(o.t||0)%8<1;
  if(A.ear==='stud'){P(8,hy+9,D);P(23,hy+9,D);if(tw2)P(23,hy+8,'#ffffff')}
@@ -4897,7 +4909,7 @@ function useLayoutMode() {
   return lay;
 }
 
-const RD_FREE = new Set(["hub", "league", "pathway", "lifestyle_spending", "career_highlights", "investments", "legacy", "teams", "social", "agent"]);
+const RD_FREE = new Set(["hub", "league", "pathway", "lifestyle_spending", "career_highlights", "investments", "legacy", "teams", "social", "agent", "locker"]);
 const RD_NO_SHELL = new Set(["start", "look", "body_setup", "hall_of_fame", "achievement_gallery", "retired"]);
 const RD_ICONS = {
   hub: (s) => <Home size={s} />, league: (s) => <Trophy size={s} />, pathway: (s) => <Flag size={s} />,
@@ -6567,7 +6579,7 @@ function mdRecord(comp, gi, g, p) {
     const key = b.id;
     const s = comp.stats[key] || (comp.stats[key] = { t: team, n: b.name, imp: b.imp ? 1 : 0, g: 0, min: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, fgm: 0, fga: 0, tpm: 0, tpa: 0, ftm: 0, fta: 0, tov: 0, fin: 0 });
     if (b.min <= 0) return;
-    s.t = team; s.g++; s.min += b.min;
+    s.t = team; s.g++; s.min += b.min; s.l5 = (s.l5 || []).concat(b.pts).slice(-5);
     ["pts", "reb", "ast", "stl", "blk", "fgm", "fga", "tpm", "tpa", "ftm", "fta", "tov"].forEach(k => { s[k] += b[k]; });
     if (gm.ph === "f") s.fin += b.pts + b.reb + b.ast + b.stl + b.blk;
   });
@@ -7726,7 +7738,7 @@ function prCrumb(p) {
   return `Season ${p.year || ""}${lg ? " · " + lg : ""}${p.teamName ? " · " + p.teamName : ""}`;
 }
 const PR_TITLES = {
-  legacy: "Legacy", teams: "Teams", investments: "Investments", social: "Social", agent: "Agent", md_breaking: "Breaking news", hall_of_fame: "Hall of Fame", achievement_gallery: "Achievements", leg_offers: "League-only offers", dl_invite: "D-League invite",
+  legacy: "Legacy", teams: "Teams", investments: "Investments", social: "Social", agent: "Agent", locker: "Locker room", md_breaking: "Breaking news", hall_of_fame: "Hall of Fame", achievement_gallery: "Achievements", leg_offers: "League-only offers", dl_invite: "D-League invite",
   offseason_plan: "Off-season", training: "Training", creation_build: "Build your player", event: "Career event", result: "Season result",
   u15_result: "State selection", u15_tournament: "Tournament result", u15_shortlist: "Youth shortlist", u15_bootcamp_result: "Bukit Jalil",
   age16_u16_result: "Age 16", age16_u17_result: "Age 16", a17_result: "Age 17", a17_shortlist: "U18 shortlist", a17_bootcamp_result: "Bukit Jalil",
@@ -7918,7 +7930,10 @@ function prLeaguesFor(p, all) {
     const done = (p.mdLeagues && p.mdLeagues[kind]) || (last && last.kind === kind ? last : null);
     if (done && done.year >= p.year - 1 && (!live || done.year === live.year)) { out.push({ id: kind, kind, label: `${PR_LG_SHORT[kind]} ${done.year}`, s: done, mine: true, live: false }); return; }
     if (!all && kind !== "mbl") return;
-    const y = mine && !live ? mine.year : p.year;
+    let y = mine && !live ? mine.year : p.year;
+    // a league that hasn't started yet this year: show last season instead
+    if (npcLeagueStatus(p, kind, y) === "next") y -= 1;
+    if (y < MD_BASE_YEAR) return;
     const bg = prBgSeason(y, kind);
     if (bg) out.push({ id: kind, kind, label: `${PR_LG_SHORT[kind]} ${y}`, s: { ...bg, myTeam: p.league === kind ? p.clubId : null } });
   });
@@ -7928,7 +7943,7 @@ function prLeaguesFor(p, all) {
    SHELL — prototype side menu, top bar and phone tabs
 ===================================================================== */
 const PR_COMP_SCREENS = new Set(["comp", "md_pregame", "md_live", "md_box"]);
-const PR_NAV_IC = { hub: "home", league: "table", pathway: "route", lifestyle_spending: "cash", career_highlights: "star", legacy: "crown", teams: "users", investments: "chart", social: "phone", agent: "user", matchday: "play" };
+const PR_NAV_IC = { hub: "home", league: "table", pathway: "route", lifestyle_spending: "cash", career_highlights: "star", legacy: "crown", teams: "users", investments: "chart", social: "phone", agent: "user", matchday: "play", locker: "pen" };
 function Shell({ show, screen, player, onNav, onUpdate, children }) {
   const lay = useLayoutMode();
   const [rotSeen, setRotSeen] = useState(() => { try { return window.localStorage.getItem("hl_rot_seen") === "1"; } catch (e) { return true; } });
@@ -7949,11 +7964,11 @@ function Shell({ show, screen, player, onNav, onUpdate, children }) {
   if (!show || !player) return <div data-l={lay} className="rd-root pr">{children}</div>;
   const free = RD_FREE.has(screen) || (!!player.mdComp && PR_COMP_SCREENS.has(screen));
   const adult = player.age >= 18;
-  const items = [["matchday", "Matchday", !!player.mdComp], ["hub", "Hub", true], ["league", "League", true], ["teams", "Teams", true], ["pathway", "Pathway", true], ["lifestyle_spending", "Lifestyle", adult], ["investments", "Investments", adult], ["social", "Social", true], ["agent", "Agent", adult && player.stage === "pro"], ["career_highlights", "Highlights", adult], ["legacy", "Legacy", true]].filter(i => i[2]);
+  const items = [["matchday", "Matchday", !!player.mdComp], ["hub", "Hub", true], ["league", "League", true], ["teams", "Teams", true], ["pathway", "Pathway", true], ["lifestyle_spending", "Lifestyle", adult], ["investments", "Investments", adult], ["social", "Social", true], ["agent", "Agent", adult && player.stage === "pro"], ["career_highlights", "Highlights", adult], ["locker", "Locker room", true], ["legacy", "Legacy", true]].filter(i => i[2]);
   const look = playerLook(player);
   const dismissRot = () => { setRotSeen(true); try { window.localStorage.setItem("hl_rot_seen", "1"); } catch (e) { /* ignore */ } };
   const nav = (b) => items.map(([id, label]) => (
-    <button key={id} className={(b ? "" : "nav rd-nav-x ") + ((screen === id || (id === "matchday" && PR_COMP_SCREENS.has(screen))) ? "on" : "") + (id === "matchday" ? " pr-md" : "")} disabled={!free} onClick={() => free && onNav(id)} title={free ? label : "Finish this step first"}>
+    <button key={id} className={(b ? "" : "nav rd-nav-x ") + ((screen === id || (id === "matchday" && PR_COMP_SCREENS.has(screen))) ? "on" : "") + (id === "matchday" ? " pr-md" : "")} disabled={!free || (id === "locker" && !!player.mdComp)} onClick={() => free && !(id === "locker" && player.mdComp) && onNav(id)} title={!free ? "Finish this step first" : id === "locker" && player.mdComp ? "Open the Locker room between competitions" : label}>
       <Ic n={PR_NAV_IC[id]} /><span>{label}</span>
     </button>
   ));
@@ -10672,6 +10687,10 @@ function LegacyScreen({ player, focus, onBack, onPlayAgain }) {
       <PrHead lbl={p ? `${p.name} · ${p.retired ? "Retired" : `Age ${p.age}`}` : "Every career on this device"} title="Legacy & Hall of Fame"
         desc={p ? (p.retired ? `${title}. Your card, your place among every career you've played, and every badge.` : `On course for: ${title}. The card updates as you play.`) : "Your best careers and every achievement you've unlocked."}
         right={onBack ? <button className="ghost" onClick={onBack}><Ic n="left" /> Back</button> : null} />
+      {p && <div className="vx-legacy">
+        <div className="pn" style={{ padding: 0, overflow: "hidden" }}><Vox3D look={playerLook(p)} height={p.height} h={440} chip={p.retired ? "Retired" : p.teamName || null} /></div>
+        <PrPlayerCard player={p} />
+      </div>}
       <div className="g">
         <section className="c5 l12" data-a="">
           {p ? <PrCareerCard p={p} /> : top ? <PrCareerCard entry={top} /> : <div className="pn"><p style={{ color: "var(--di)", margin: 0 }}>Finish a career to put a card here.</p></div>}
@@ -10741,7 +10760,7 @@ const NPC_KIND_LBL = { mbl: "MBL", u20: "U20 D-League", u23: "U23 D-League", u15
 /* Every player's line from a finished competition, kept small. */
 function npcLines(comp) {
   const out = {};
-  Object.entries(comp.stats || {}).forEach(([k, s]) => { if (k === MD_ME || !s.g) return; out[k] = [s.t, s.g, s.pts, s.reb, s.ast, s.stl, s.blk, Math.round(s.min)]; });
+  Object.entries(comp.stats || {}).forEach(([k, s]) => { if (k === MD_ME || !s.g) return; out[k] = [s.t, s.g, s.pts, s.reb, s.ast, s.stl, s.blk, Math.round(s.min), s.l5 || null]; });
   return out;
 }
 function npcPack(comp, aw) {
@@ -10750,7 +10769,9 @@ function npcPack(comp, aw) {
   const a = aw || {};
   let table = null;
   if (comp.type === "league") try { table = mdTable(comp, Object.keys(comp.teams), ["rs"]).map(r => ({ id: r.id, w: r.w, l: r.l })); } catch (er) { table = null; }
-  return { y: comp.year, kind: comp.kind, label: comp.label, teams, table, lines: npcLines(comp), champ: comp.champion || null, aw: { mvp: a.mvp || null, dpoy: a.dpoy || null, roty: a.roty || null, sixth: a.sixth || null, tot: a.tot || [] } };
+  const m = comp.stats && comp.stats[MD_ME];
+  const me = m && m.g ? [m.t, m.g, m.pts, m.reb, m.ast, m.stl, m.blk, Math.round(m.min), m.l5 || null] : null;
+  return { y: comp.year, kind: comp.kind, label: comp.label, teams, table, lines: npcLines(comp), me, champ: comp.champion || null, aw: { mvp: a.mvp || null, dpoy: a.dpoy || null, roty: a.roty || null, sixth: a.sixth || null, tot: a.tot || [] } };
 }
 /* After a competition you played: its lines, plus who you played with and against. */
 function npcMerge(p0, comp, aw) {
@@ -10772,11 +10793,38 @@ function npcBgLines(kind, y) {
   return s && s.lines ? s : null;
 }
 const npcLine = (a) => a ? { t: a[0], g: a[1], ppg: +(a[2] / a[1]).toFixed(1), rpg: +(a[3] / a[1]).toFixed(1), apg: +(a[4] / a[1]).toFixed(1), spg: +(a[5] / a[1]).toFixed(1), bpg: +(a[6] / a[1]).toFixed(1), mpg: Math.round(a[7] / a[1]) } : null;
-/* A league season as it happened in this career: your own leagues from the save, the rest simulated. */
+/* Where a league stands on this career's calendar: U20 (Jun–Jul), then U23 (Sep–Nov), then MBL (Nov–Jan). */
+const NPC_ORDER = { u20: 0, u23: 1, mbl: 2 };
+function npcLeagueStatus(p, kind, y) {
+  if (!(kind in NPC_ORDER)) return "done";
+  const Y = p.year || MD_BASE_YEAR;
+  if (y < Y) return "done";
+  if (y > Y) return "next";
+  if (p.mdYearLast && p.mdYearLast.y === Y) return "done";
+  const yr = p.mdYear && p.mdYear.y === Y ? p.mdYear : null;
+  if (!yr || !yr.legs || !yr.legs.length) return "next";
+  const cur = yr.legs[Math.min(yr.i || 0, yr.legs.length - 1)];
+  const o = NPC_ORDER[kind], oc = NPC_ORDER[cur];
+  if (o < oc) return "done";
+  if (o > oc) return "next";
+  if ((yr.done || []).some(d => d.kind === kind)) return "done";
+  if (p.mdComp && p.mdComp.kind === kind && p.mdComp.year === Y) return "live";
+  return "next";
+}
+/* A league season as it happened in this career, only as far as the calendar has got:
+   your own leagues from the save (the one you're in, so far), the rest simulated once played. */
 function npcLeagueSeason(p, kind, y) {
   const mine = p.npcLog && p.npcLog[`${kind}:${y}`];
   if (mine) return { ...mine, src: "you" };
-  if (["mbl", "u20", "u23"].includes(kind) && y <= (p.year || MD_BASE_YEAR)) {
+  if (!["mbl", "u20", "u23"].includes(kind)) return null;
+  const st = npcLeagueStatus(p, kind, y);
+  if (st === "next") return null;
+  if (st === "live") {
+    const c = p.mdComp;
+    if (c && c.kind === kind && c.year === y) return { ...npcPack(c, null), champ: null, aw: {}, src: "live" };
+    return null;
+  }
+  if (y <= (p.year || MD_BASE_YEAR)) {
     const bg = npcBgLines(kind, y);
     if (bg) return { y, kind, label: NPC_KIND_LBL[kind], teams: Object.fromEntries(Object.entries(bg.teams).map(([id, t]) => [id, t.name])), lines: bg.lines, champ: bg.champion, aw: bg.aw || {}, table: bg.table, src: "sim" };
   }
@@ -10841,7 +10889,7 @@ function npcCareer(p, k) {
       const aw = [];
       if (s.aw) { if (s.aw.mvp === k) aw.push("MVP"); if (s.aw.dpoy === k) aw.push("DPOY"); if (s.aw.roty === k) aw.push("ROTY"); if (s.aw.sixth === k) aw.push("Sixth Man"); if ((s.aw.tot || []).includes(k)) aw.push(kind === "mbl" ? "All-MBL" : "All-D-League"); }
       if (s.champ && s.champ === l.t) aw.push("Champion");
-      rows.push({ y, kind, lbl: NPC_KIND_LBL[kind], team: l.t, teamName: s.teams[l.t] || npcTeamName(l.t), ...l, aw, src: s.src });
+      rows.push({ y, kind, lbl: NPC_KIND_LBL[kind] + (s.src === "live" ? " (so far)" : ""), team: l.t, teamName: s.teams[l.t] || npcTeamName(l.t), ...l, aw, src: s.src });
       aw.forEach(a => awards.push(`${a} · ${NPC_KIND_LBL[kind]} ${y}`));
     });
     Object.values(p.npcLog || {}).filter(s => s.y === y && !["u20", "u23", "mbl"].includes(s.kind)).forEach(s => {
@@ -10874,8 +10922,8 @@ function NpcProfile({ player, k, y, onClose, onTeam, onUpdate }) {
   const tot = car ? car.rows.reduce((s, r) => ({ g: s.g + r.g, pts: s.pts + r.ppg * r.g }), { g: 0, pts: 0 }) : null;
   return (
     <div className="pr-npc">
+      <div className="pr-npc-vx"><Vox3D look={look} height={now.ht || 186} h={320} zoom={1} controls={false} chip={where ? `${npcTeamName(where.club)} kit` : null} label={`${now.n} on a turntable. Drag or scroll to spin.`} /></div>
       <section className="pn pr-npc-hd" data-a="">
-        <span className="fc big"><Sprite look={look} /></span>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div className="lbl" style={{ color: "var(--or2)" }}>{now.imp ? `Import${now.nat ? " · " + now.nat : ""}` : now.gen ? "Generated player" : "Real player · HoopStatsMY"}</div>
           <h2>{now.n}</h2>
@@ -10935,79 +10983,186 @@ function PrMiniArc({ pts }) {
 /* Open a profile from anywhere (league tables, box scores, people). */
 function npcOpen(k, y) { if (!k || k === MD_ME) return; try { window.dispatchEvent(new CustomEvent("pr-npc", { detail: { k, y } })); } catch (er) { /* ignore */ } }
 function NpcModal({ player, k, y, onClose, onUpdate }) {
-  useEffect(() => { const f = ev => { if (ev.key === "Escape") onClose(); }; window.addEventListener("keydown", f); return () => window.removeEventListener("keydown", f); }, []);
+  const box = useRef(null);
+  useEffect(() => { const f = ev => { if (ev.key === "Escape") onClose(); }; window.addEventListener("keydown", f); try { box.current && box.current.focus(); } catch (er) { /* ignore */ } return () => window.removeEventListener("keydown", f); }, []);
+  const toTeam = (lvl, club) => { onClose(); try { window.dispatchEvent(new CustomEvent("pr-team", { detail: { cat: lvl, team: club, y: player.year } })); } catch (er) { /* ignore */ } };
   return (
-    <div className="pr-modal" onClick={onClose}>
-      <div className="pr-modal-in" onClick={ev => ev.stopPropagation()}><NpcProfile player={player} k={k} y={y} onClose={onClose} onUpdate={onUpdate} /></div>
+    <div className="pr-drawer" onClick={onClose}>
+      <div className="pr-drawer-in" ref={box} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Player profile" onClick={ev => ev.stopPropagation()}><NpcProfile key={k} player={player} k={k} y={y} onClose={onClose} onUpdate={onUpdate} onTeam={toTeam} /></div>
     </div>
   );
 }
 
 /* ---------- the Teams page ---------- */
 let PR_TEAMS_OPEN = null;
+/* This year's road: which leagues have been played, which one is on, which are still to come. */
+function PrSeasonStrip({ player }) {
+  const p = player;
+  const legs = [["u20", "U20 D-League", "Jun – Jul"], ["u23", "U23 D-League", "Sep – Nov"], ["mbl", "MBL", "Nov – Jan"]];
+  return (
+    <div className="pr-strip" aria-label={`Season ${p.year}`}>
+      {legs.map(([k, n, w]) => {
+        const st = npcLeagueStatus(p, k, p.year);
+        let pct = 0, sub = `${w} ${p.year}`;
+        if (st === "live" && p.mdComp) { const mine = p.mdComp.games.filter(g => g.h === p.mdComp.myTeam || g.a === p.mdComp.myTeam); const d = mine.filter(g => g.res).length; pct = mine.length ? d / mine.length : 0; sub = `${w} · your game ${Math.min(d + 1, mine.length)} of ${mine.length}`; }
+        return (
+          <div key={k} className={"sleg " + (st === "live" ? "is-live" : st === "done" ? "is-done" : "")} style={{ "--pct": `${Math.round(pct * 100)}%` }}>
+            <b>{n}</b><small>{sub}</small>
+            <Tg cls={st === "live" ? "or" : st === "done" ? "pos" : ""} style={{ height: 22 }}>{st === "live" ? "In progress" : st === "done" ? "Played" : "Not played yet"}</Tg>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+function PrSpark({ f }) {
+  if (!f || !f.length) return <span className="rl-na">—</span>;
+  const m = Math.max(...f, 1), w = 92, h = 30;
+  const pts = f.map((v, i) => [f.length === 1 ? w / 2 : i * (w - 8) / (f.length - 1) + 4, h - 4 - (v / m) * (h - 10)]);
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} style={{ width: 92, height: 30 }} role="img" aria-label={`Last ${f.length} games: ${f.join(", ")} points`}>
+      <polyline points={pts.map(q => q.join(",")).join(" ")} fill="none" stroke="#ff9a4d" strokeWidth="2" strokeLinejoin="round" />
+      {pts.map((q, i) => <circle key={i} cx={q[0]} cy={q[1]} r={i === pts.length - 1 ? 3 : 2} fill={i === pts.length - 1 ? "#ff7a1a" : "#5b4030"} />)}
+    </svg>
+  );
+}
+const RL_COLS = [["jn", "#"], ["name", "Player"], ["ovr", "OVR"], ["ppg", "PTS"], ["rpg", "REB"], ["apg", "AST"], ["mpg", "MIN"], ["gp", "GP"], ["form", "Last 5"], ["tags", ""]];
+const rlOvrCol = v => v >= 80 ? ["#ffd34d", "#2a2208"] : v >= 72 ? ["#ff7a1a", "#2a1606"] : v >= 64 ? ["#4aa8ff", "#0c1b2b"] : ["#a3a9b4", "#1c1f25"];
 function TeamsScreen({ player, onUpdate }) {
   const p = player;
+  const lay = useLayoutMode();
   const init = PR_TEAMS_OPEN; PR_TEAMS_OPEN = null;
   const years = []; for (let y = MD_BASE_YEAR; y <= Math.max(MD_BASE_YEAR, p.year); y++) years.push(y);
   const [y, setY] = useState((init && init.y) || p.year);
   const [cat, setCat] = useState((init && init.cat) || (p.league === "mbl" ? "mbl" : p.league === "u20" || p.league === "u23" ? p.league : p.age < 18 ? "youth" : "mbl"));
   const [sub, setSub] = useState("u17");
   const [team, setTeam] = useState((init && init.team) || null);
-  const [k, setK] = useState((init && init.k) || null);
+  const [q, setQ] = useState("");
+  const [filt, setFilt] = useState("all");
+  const [sortK, setSortK] = useState("ovr");
+  const [asc, setAsc] = useState(false);
+  const [open, setOpen] = useState(null);
+  const [hov, setHov] = useState(null);
+  const [enter, setEnter] = useState(1);
+  const listRef = useRef(null), first = useRef(null);
+  useEffect(() => { if (init && init.k) npcOpen(init.k, init.y || p.year); }, []);
+  useEffect(() => {
+    const g = ev => { const d = ev.detail || {}; PR_TEAMS_OPEN = null; if (d.cat) setCat(d.cat); if (d.y) setY(d.y); setTeam(d.team || null); setOpen(null); setEnter(e => e + 1); };
+    window.addEventListener("pr-team", g); return () => window.removeEventListener("pr-team", g);
+  }, []);
   const teams = useMemo(() => npcTeamsFor(cat, y, sub), [cat, y, sub]);
-  const season = useMemo(() => (["mbl", "u20", "u23"].includes(cat) ? npcLeagueSeason(p, cat, y) : p.npcLog && p.npcLog[`${cat === "youth" ? sub : (team === "senior" ? "sea" : team)}:${y}`]) || null, [cat, y, sub, team]);
+  const league = ["mbl", "u20", "u23"].includes(cat);
+  const st = league ? npcLeagueStatus(p, cat, y) : "done";
+  const season = useMemo(() => (league ? npcLeagueSeason(p, cat, y) : p.npcLog && p.npcLog[`${cat === "youth" ? sub : (team === "senior" ? "sea" : team)}:${y}`]) || null, [cat, y, sub, team, p.mdComp, p.npcLog]);
+  const prev = league && st === "next" && y - 1 >= MD_BASE_YEAR ? npcLeagueSeason(p, cat, y - 1) : null;
+  const shown = season || prev;
   const tm = team ? teams.find(t => t.id === team) : null;
   const roster = useMemo(() => tm ? npcRosterMoved(p, cat, tm.id, y, npcRoster(cat, tm, y)) : [], [tm, cat, y, p.moves]);
   const nr = cat === "mbl" ? npcMbLNr(roster) : new Set();
   const rec = id => { const r = season && season.table && season.table.find(x => x.id === id); return r ? `${r.w}–${r.l}` : null; };
-  const go = (c) => { setCat(c); setTeam(null); setK(null); };
+  const go = (c) => { setCat(c); setTeam(null); setOpen(null); };
   const youAt = tm && ((cat === "mbl" && p.league === "mbl" && p.clubId === tm.id && y === p.year) || ((cat === "u20" || cat === "u23") && y === p.year && (p.clubId === tm.id || (p.legDeals && p.legDeals[cat] && p.legDeals[cat].y === y && p.legDeals[cat].clubId === tm.id)) && p.age <= (cat === "u20" ? 20 : 23)) || (cat === "youth" && y === p.year && p.hometown === tm.id && p.age < 19));
-  if (k) return (
-    <PrPage>
-      <button className="ghost" style={{ width: "auto", marginBottom: 12 }} onClick={() => setK(null)}><Ic n="left" /> {tm ? tm.name : "Back"}</button>
-      <NpcProfile player={p} k={k} y={y} onUpdate={onUpdate} onTeam={(lvl, club) => { setK(null); setCat(lvl); setTeam(club); setY(p.year); }} />
-    </PrPage>
-  );
+  const kitId = tm ? tm.logo || null : null;
+  const rows = useMemo(() => {
+    if (!tm) return [];
+    const out = roster.map(e => { const raw = shown && shown.lines && shown.lines[e.k]; return { k: e.k, e, l: raw ? npcLine(raw) : null, f: raw && raw[8] ? raw[8] : null, look: npcLook(e, kitId), nr: nr.has(e.k), conn: p.conn && p.conn[e.k] }; });
+    if (youAt) {
+      const m = season && season.src === "live" && p.mdComp && p.mdComp.stats && p.mdComp.stats[MD_ME];
+      const raw = m && m.g ? [m.t, m.g, m.pts, m.reb, m.ast, m.stl, m.blk, Math.round(m.min), m.l5 || null] : shown && shown.me;
+      out.push({ k: MD_ME, me: true, e: { k: MD_ME, n: p.name, pos: p.position, o: computeOverall(p.stats, p.position), ht: p.height, by: p.year - p.age, no: String(p.jersey), st: p.hometown }, l: raw ? npcLine(raw) : null, f: raw && raw[8] ? raw[8] : null, look: playerLook(p) });
+    }
+    return out;
+  }, [tm, roster, shown, youAt]);
+  const view = useMemo(() => {
+    const ql = q.trim().toLowerCase();
+    const list = rows.filter(r => (filt === "all" || (filt === "imp" && r.e.imp) || (filt === "g" && ["PG", "SG"].includes(r.e.pos)) || (filt === "f" && ["SF", "PF"].includes(r.e.pos)) || (filt === "c" && r.e.pos === "C")) && (!ql || (r.e.n || "").toLowerCase().includes(ql)));
+    const val = r => sortK === "name" ? r.e.n || "" : sortK === "ovr" ? r.e.o : sortK === "gp" ? (r.l ? r.l.g : -1) : r.l ? r.l[sortK] : -1;
+    list.sort((A, B) => { const a = val(A), b = val(B); const c = typeof a === "string" ? a.localeCompare(b) : a - b; return asc ? c : -c; });
+    return list;
+  }, [rows, q, filt, sortK, asc]);
+  const mx = useMemo(() => { const o = {}; ["ppg", "rpg", "apg", "mpg"].forEach(k => { o[k] = Math.max(1, ...view.map(r => r.l ? r.l[k] : 0)); }); return o; }, [view]);
+  // rows glide to their new place when the order changes
+  const capture = () => { if (!listRef.current) return; const m = {}; listRef.current.querySelectorAll(".rl-r").forEach(el => { m[el.dataset.k] = el.getBoundingClientRect().top; }); first.current = m; };
+  useLayoutEffect(() => {
+    const m = first.current; first.current = null;
+    if (!m || !listRef.current || vxReduced()) return;
+    listRef.current.querySelectorAll(".rl-r").forEach(el => { const f = m[el.dataset.k]; if (f == null) return; const dy = f - el.getBoundingClientRect().top; if (Math.abs(dy) < 1) return; try { el.animate([{ transform: `translateY(${dy}px)` }, { transform: "none" }], { duration: 420, easing: "cubic-bezier(.2,.8,.2,1)" }); } catch (er) { /* ignore */ } });
+  });
+  const sortBy = k => { capture(); if (sortK === k) setAsc(a => !a); else { setSortK(k); setAsc(k === "name"); } };
+  const toggle = k => { capture(); setOpen(o => o === k ? null : k); };
+  const lname = league ? NPC_KIND_LBL[cat] : "";
+  const note = !tm ? null : league && st === "next" && y === p.year ? `The ${y} ${lname} hasn't started yet, so this shows ${prev ? `last season's (${y - 1})` : "no"} numbers.` : league && st === "live" ? `The ${y} ${lname} is under way: numbers are this season so far.` : !shown ? "No games for this team this year yet." : null;
+  const statCell = (r, k) => r.l ? <div className="rl-st" key={k}><b>{r.l[k]}</b><small className="sl">{{ ppg: "PTS", rpg: "REB", apg: "AST", mpg: "MIN" }[k]}</small><span className="mb"><i style={{ width: `${Math.min(100, r.l[k] / mx[k] * 100)}%` }} /></span></div> : null;
   return (
     <PrPage>
-      <PrHead lbl={`${y} · ${tm ? tm.name : "Every team in your world"}`} title={tm ? tm.name : "Teams"} desc={tm ? `${NPC_KIND_LBL[cat === "youth" ? sub : cat === "nat" ? (tm.id === "senior" ? "sea" : tm.id) : cat] || ""} squad ${y}. Tap a player for his profile.` : "Pick a league and a team to see its players. Tap a player for his profile and his history with you."}
-        right={tm ? <button className="ghost" style={{ width: "auto" }} onClick={() => setTeam(null)}><Ic n="left" /> All teams</button> : null} />
+      <PrHead lbl={`${y} · ${tm ? tm.name : "Every team in your world"}`} title={tm ? tm.name : "Teams"} desc={tm ? `${NPC_KIND_LBL[cat === "youth" ? sub : cat === "nat" ? (tm.id === "senior" ? "sea" : tm.id) : cat] || ""} squad ${y}. Tap a player for a quick look, then open his profile.` : "Pick a league and a team to see its players. Tap a player for his profile and his history with you."}
+        right={tm ? <button className="ghost" style={{ width: "auto" }} onClick={() => { setTeam(null); setOpen(null); }}><Ic n="left" /> All teams</button> : null} />
+      <PrSeasonStrip player={p} />
       <div className="pr-teamctl">
         <div className="tabs">{NPC_CATS.map(([c, l]) => <button key={c} className={cat === c ? "on" : ""} onClick={() => go(c)}>{l}</button>)}</div>
         {cat === "youth" && <div className="tabs">{[["u15", "U15"], ["u17", "U17"], ["mssm", "MSSM"]].map(([c, l]) => <button key={c} className={sub === c ? "on" : ""} onClick={() => { setSub(c); setTeam(null); }}>{l}</button>)}</div>}
-        <div className="tabs pr-years">{years.slice(-8).map(v => <button key={v} className={y === v ? "on" : ""} onClick={() => setY(v)}>{v}</button>)}</div>
+        <div className="tabs pr-years">{years.slice(-8).map(v => <button key={v} className={y === v ? "on" : ""} onClick={() => { setY(v); setOpen(null); setEnter(e => e + 1); }}>{v}</button>)}</div>
       </div>
       {!tm && (
         <div className="pr-teamgrid">
           {teams.map(t => (
-            <button key={t.id} className="pr-team" onClick={() => setTeam(t.id)}>
+            <button key={t.id} className="pr-team" onClick={() => { setTeam(t.id); setEnter(e => e + 1); }}>
               {t.logo ? <PrTeamLogo team={{ name: t.name, logo: t.logo }} s={44} /> : t.flag ? <PrFlag state={t.flag} w={44} /> : <PrLogo k="c_harimau" s={44} />}
-              <span className="tx"><b>{t.name}</b><small>{rec(t.id) ? `${rec(t.id)} · ${season && season.src === "you" ? "your season" : "simulated"}` : t.state || (cat === "youth" ? `${sub.toUpperCase()} state team` : "")}</small></span>
+              <span className="tx"><b>{t.name}</b><small>{rec(t.id) ? `${rec(t.id)} · ${season && season.src === "you" ? "your season" : season && season.src === "live" ? "so far" : "simulated"}` : t.state || (cat === "youth" ? `${sub.toUpperCase()} state team` : "")}</small></span>
               {season && season.champ === t.id && <Tg cls="or" style={{ height: 22 }}><Ic n="trophy" /></Tg>}
             </button>
           ))}
         </div>
       )}
       {tm && (
-        <section className="pn" data-a="">
-          <div className="pr-tblw"><table className="pr-tbl pr-roster">
-            <thead><tr><th>Player</th><th>Pos</th><th>Age</th><th className="ph-hide">Ht</th><th>OVR</th><th>G</th><th>PPG</th><th className="ph-hide">RPG</th><th className="ph-hide">APG</th></tr></thead>
-            <tbody>
-              {youAt && <tr className="me"><td><span className="pcell" style={{ display: "flex", alignItems: "center", gap: 8 }}><span className="fc" style={{ width: 34, height: 36, flex: "none" }}><Sprite look={playerLook(p)} style={{ width: 34, height: 36 }} /></span><b>{p.name}</b><Tg cls="or" style={{ height: 20 }}>You</Tg></span></td><td>{p.position}</td><td className="num">{p.age}</td><td className="num ph-hide">{p.height}</td><td className="num">{computeOverall(p.stats, p.position)}</td><td colSpan={4} /></tr>}
-              {roster.slice().sort((a, b) => b.o - a.o).map(e => {
-                const l = season && season.lines && npcLine(season.lines[e.k]);
-                const c = p.conn && p.conn[e.k];
-                return (
-                  <tr key={e.k} onClick={() => setK(e.k)} className="click">
-                    <td><span className="pcell" style={{ display: "flex", alignItems: "center", gap: 8 }}><span className="fc" style={{ width: 34, height: 36, flex: "none" }}><Sprite look={npcLook(e, tm.logo || null)} style={{ width: 34, height: 36 }} /></span><b>{e.n}</b>{e.imp && <Tg style={{ height: 20 }}>Import</Tg>}{nr.has(e.k) && <Tg cls="neg" style={{ height: 20 }}>Not registered</Tg>}{c && <Tg cls={CONN_BOND[connBond(c)][1]} style={{ height: 20 }}>{CONN_BOND[connBond(c)][0]}</Tg>}</span></td>
-                    <td>{e.pos}</td><td className="num">{e.by ? y - e.by : "—"}</td><td className="num ph-hide">{e.ht || "—"}</td><td className="num"><b>{e.o}</b></td>
-                    <td className="num">{l ? l.g : "—"}</td><td className="num">{l ? l.ppg : "—"}</td><td className="num ph-hide">{l ? l.rpg : "—"}</td><td className="num ph-hide">{l ? l.apg : "—"}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table></div>
-          <PrSrc>{season ? (season.src === "you" ? "Stats from your own season" : "Stats from the simulated season") : "No games simulated for this team this year"} · tap a player</PrSrc>
+        <section>
+          <div className="rl-bar">
+            <label className="rl-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg><input value={q} onChange={ev => setQ(ev.target.value)} placeholder="Search this roster" aria-label="Search this roster" /></label>
+            <div className="vx-seg">{[["all", "All"], ["g", "Guards"], ["f", "Forwards"], ["c", "Centres"], ["imp", "Imports"]].map(([k, n]) => <button key={k} className={filt === k ? "on" : ""} onClick={() => { capture(); setFilt(k); }}>{n}</button>)}</div>
+            <div className="vx-seg rl-msort">{[["ovr", "OVR"], ["ppg", "PTS"], ["rpg", "REB"], ["apg", "AST"], ["name", "A–Z"]].map(([k, n]) => <button key={k} className={sortK === k ? "on" : ""} onClick={() => sortBy(k)}>{n}</button>)}</div>
+          </div>
+          {note && <div className="rl-note"><Ic n="clock" /> {note}</div>}
+          <div className="rl-h">{RL_COLS.map(([k, n]) => ["jn", "form", "tags"].includes(k) ? <span key={k} style={{ textAlign: k === "jn" ? "center" : "right" }}>{n}</span> : <button key={k} className={(k === "name" ? "l " : "") + (sortK === k ? "on" : "")} onClick={() => sortBy(k)} aria-label={`Sort by ${n}`}>{n}{sortK === k ? (asc ? " ▲" : " ▼") : ""}</button>)}</div>
+          <div className="rl-list" ref={listRef} key={`${cat}:${tm.id}:${y}:${enter}`}>
+            {view.length === 0 && <div className="pn" style={{ textAlign: "center", color: "var(--mu)" }}>No players match “{q}”.</div>}
+            {view.map((r, i) => {
+              const e = r.e, [c1, c2] = rlOvrCol(e.o), isOpen = open === r.k;
+              const bond = r.conn ? connBond(r.conn) : null;
+              const a = r.me ? MD_STATS.map(s2 => Math.round(p.stats[s2] || 0)) : mdAttrs(e);
+              const h = !r.me && p.h2h && p.h2h[r.k], tg = !r.me && p.tmg ? p.tmg[r.k] || 0 : 0;
+              return (
+                <div key={r.k} data-k={r.k} className={"rl-r in" + (r.me ? " me" : "") + (isOpen ? " open" : "")} style={{ "--i": Math.min(i, 16) }} tabIndex={0} role="button" aria-expanded={isOpen} aria-label={`${e.n}, ${e.pos}, overall ${e.o}`}
+                  onClick={ev => { if (ev.target.closest("[data-stop]")) return; toggle(r.k); }} onKeyDown={ev => { if ((ev.key === "Enter" || ev.key === " ") && ev.target === ev.currentTarget) { ev.preventDefault(); toggle(r.k); } }}
+                  onMouseEnter={() => setHov(r.k)} onMouseLeave={() => setHov(v => v === r.k ? null : v)}>
+                  <div className="rl-jn">{e.no || "—"}</div>
+                  <div className="rl-who"><VoxPortrait look={r.look} height={e.ht || 186} size={50} spin={hov === r.k && lay === "desk"} /><span style={{ minWidth: 0 }}><b>{e.n}</b><small>{e.pos}{e.by ? ` · ${y - e.by} yrs` : ""}{e.ht ? ` · ${e.ht} cm` : ""} · {e.imp ? (e.nat || "Import") : shortHome(e.st || p.hometown || "")}</small></span></div>
+                  <div className="rl-ob" style={{ background: c2, color: c1, boxShadow: `inset 0 0 0 1.5px ${c1}55` }}>{e.o}</div>
+                  <div className="rl-stats">
+                    {r.l ? ["ppg", "rpg", "apg", "mpg"].map(k => statCell(r, k)) : <div className="rl-na" style={{ gridColumn: "span 4" }}>{r.nr ? "Not registered this season" : st === "next" && !prev ? "Not played yet" : "Hasn't played"}</div>}
+                    <div className="rl-gp">{r.l ? r.l.g : 0}<small style={{ display: "block", color: "var(--di)", fontSize: 11 }}>GP</small></div>
+                  </div>
+                  <div className="rl-spk"><PrSpark f={r.f} /></div>
+                  <div className="rl-tags">
+                    {r.me && <Tg cls="or">You</Tg>}{e.imp && <Tg>Import</Tg>}{r.nr && <Tg cls="neg">Not registered</Tg>}
+                    {bond && <Tg cls={CONN_BOND[bond][1]}>{CONN_BOND[bond][0]}</Tg>}{!season && prev && r.l && <Tg>{y - 1}</Tg>}
+                  </div>
+                  {isOpen && (
+                    <div className="rl-exp" data-stop>
+                      <div><div className="vx-lbl" style={{ marginTop: 0 }}>Ratings</div><div className="vx-attrs">{VX_ANAMES.map((n, j) => <div key={n} className="vx-attr">{n}<span className="vx-bar"><i style={{ width: `${Math.min(100, a[j])}%` }} /></span><b>{a[j]}</b></div>)}</div></div>
+                      <div>
+                        <div className="vx-lbl" style={{ marginTop: 0 }}>With you</div>
+                        <div className="rel">{r.me ? <b>This is you.</b> : r.conn ? <><b>{CONN_BOND[bond][0]}</b><br />{connHow(r.conn)}</> : <><b>No history yet</b><br />You haven't shared a team.</>}
+                          {!r.me && (tg || h) ? <div style={{ marginTop: 6 }}>{tg ? `${tg} games together` : ""}{tg && h ? " · " : ""}{h ? `Head to head ${h[1]}–${h[2]}` : ""}</div> : null}</div>
+                        {r.l && <><div className="vx-lbl">{season ? (season.src === "live" ? "This season so far" : `${y} season`) : `Last season (${y - 1})`}</div><div style={{ color: "var(--mu)", fontSize: 13.5 }}>{r.l.ppg} pts · {r.l.rpg} reb · {r.l.apg} ast in {r.l.mpg} min over {r.l.g} games</div></>}
+                      </div>
+                      <div style={{ display: "flex", alignItems: "flex-end" }}>{!r.me && <button className="cta" style={{ flex: "0 1 auto" }} onClick={() => npcOpen(r.k, y)}>Open profile</button>}</div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <PrSrc>{shown ? (shown.src === "you" ? "Stats from your own season" : shown.src === "live" ? "Stats from this season so far" : "Stats from the simulated season") : "No games for this team yet"} · tap a player</PrSrc>
         </section>
       )}
     </PrPage>
@@ -11955,6 +12110,418 @@ function ms2Apply(p, comp, ev, choiceId, hit) {
 function BreakingEventScreen({ player, event, onDone }) {
   return <SpecialEventScreen player={player} event={event} onDone={onDone} breaking />;
 }
+/* =====================================================================
+   3D PLAYER — the 8-bit look built as voxels: a spinning stand for the
+   creator, Legacy and every profile, and small portraits for lists.
+   Also the new Locker room (look creator) and the player details card.
+===================================================================== */
+const VX_SKINS = ["#fbe3cf", "#f6d5b8", "#efc4a4", "#e7b48c", "#d9a57a", "#cc9469", "#c68a5c", "#b47a4e", "#a86f45", "#965e39", "#8a5634", "#74462a", "#6b3f24", "#4e2c18"];
+const VX_HAIRC = ["#16110f", "#3b2a20", "#6b4a2e", "#a8783e", "#d8b066", "#e9d7a6", "#b5432a", "#c4c4c4", "#f1f1f1", "#3a5fd0", "#7d3bd1", "#e85a9b", "#2fa36b"];
+const VX_HAIRS = [["buzz", "Buzz cut"], ["short", "Short"], ["fade", "High fade"], ["sidepart", "Side part"], ["waves", "Waves"], ["curly", "Curly top"], ["twists", "Twists"], ["afro", "Afro"], ["frohawk", "Frohawk"], ["hightop", "High-top"], ["cornrows", "Cornrows"], ["braids", "Braids"], ["locs", "Locs"], ["long", "Long"], ["manbun", "Man bun"], ["bun", "Top knot"], ["undercut", "Undercut"], ["mohawk", "Mohawk"], ["spiky", "Spiky"], ["bald", "Bald"]];
+const VX_EYES = [["round", "Round"], ["narrow", "Narrow"], ["wide", "Wide"], ["sleepy", "Focused"]];
+const VX_GLASSES = [["none", "None"], ["round", "Round"], ["square", "Square"], ["sport", "Sport goggles"], ["shades", "Shades"], ["gold", "Gold rims"]];
+const VX_SOCKS = [["none", "No-show"], ["ankle", "Ankle"], ["crew", "Crew"], ["mid", "Mid-calf"], ["knee", "Knee-high"]];
+const VX_SOCKC = ["#f3f4f6", "#1b1e25", "#e2392f", "#2f6fd8", "#ff7a1a", "#ffd34d", "#34c37a", "#e85a9b", "#7d3bd1"];
+const VX_SHOEC = ["#f3f4f6", "#1b1e25", "#e2392f", "#ff7a1a", "#ffd34d", "#2f6fd8", "#34c37a", "#e85a9b"];
+const VX_ACC = ["#e2392f", "#ff7a1a", "#ffd34d", "#34c37a", "#2f6fd8", "#f3f4f6", "#1b1e25", "#e85a9b"];
+const VX_DIG = { 0: "111101101101111", 1: "010110010010111", 2: "111001111100111", 3: "111001111001111", 4: "101101111001001", 5: "111100111001111", 6: "111100111101111", 7: "111001010010010", 8: "111101111101111", 9: "111101111001111" };
+const vxHex = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+const vxMix = (a, b, t) => { const A = vxHex(a), B = vxHex(b); return "#" + A.map((v, i) => Math.round(v + (B[i] - v) * t).toString(16).padStart(2, "0")).join(""); };
+const vxReduced = () => { try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) { return false; } };
+
+/* The game's look (indices or hex, old and new fields) as plain colours. */
+function vxResolve(L0, height) {
+  const L = L0 || DEFLOOK;
+  const ok = h => typeof h === "string" && /^#[0-9a-f]{6}$/i.test(h);
+  return {
+    skin: ok(L.skinHex) ? L.skinHex : SKIN[L.skin] || SKIN[2], hairC: ok(L.hairHex) ? L.hairHex : HAIRC[L.hairC] || HAIRC[0],
+    hair: L.ghost ? "short" : L.hair || "short", eyes: L.eyes === "sleepy" ? "focused" : L.eyes || "round", beard: L.beard || "none", build: L.build || "ath",
+    glasses: L.glasses || "none", socks: L.socks || "crew", sockC: ok(L.sockC) ? L.sockC : "#f3f4f6", stripes: L.stripes == null ? true : !!L.stripes,
+    band: ok(L.band) ? L.band : null, wrist: !!L.wrist, accent: ok(L.accent) ? L.accent : ok(L.trim) ? L.trim : "#ff7a1a",
+    sleeve: L.sleeve === true ? "left" : L.sleeve === "left" || L.sleeve === "right" ? L.sleeve : "none", sleeveC: ok(L.sleeveC) ? L.sleeveC : "#16181d",
+    shoes: ok(L.shoes) ? L.shoes : "#f3f4f6", jersey: ok(L.jersey) ? L.jersey : "#ff7a1a", trim: ok(L.trim) ? L.trim : "#ffffff",
+    panel: ok(L.panel) ? L.panel : ok(L.trim) ? L.trim : "#ffffff", shorts: ok(L.shorts) ? L.shorts : ok(L.jersey) ? L.jersey : "#ff7a1a",
+    no: String(L.no == null ? "" : L.no).replace(/\D/g, "").slice(-2), height: height || 186, ghost: !!L.ghost,
+  };
+}
+
+/* ---------- the voxel figure ---------- */
+function vxBuild(R, headOnly) {
+  const V = new Map(); const K = (x, y, z) => x + "," + y + "," + z;
+  const set = (x, y, z, c, a) => V.set(K(x, y, z), { x, y, z, c, a });
+  const get = (x, y, z) => V.get(K(x, y, z));
+  const paint = (x, y, z, c) => { const v = get(x, y, z); if (v) v.c = c; };
+  const box = (x0, x1, y0, y1, z0, z1, c, a) => { for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) set(x, y, z, typeof c === "function" ? c(x, y, z) : c, a); };
+  const skin = R.ghost ? "#3a404c" : R.skin, sk2 = sh(skin, .86), sk3 = sh(skin, .72);
+  const hc = R.ghost ? "#2a2f3a" : R.hairC, hd = sh(hc, .78), hv = (x, y, z) => ((x * 7 + y * 3 + z * 5) & 3) === 0 ? hd : hc;
+  const big = R.build === "big";
+  const hE = R.height < 176 ? 0 : R.height < 186 ? 1 : R.height < 197 ? 2 : 3;
+  const legLen = 9 + hE, top = 1 + legLen, T0 = top + 1, H0 = T0 + 10;
+  const tw0 = big ? -5 : -4, tw1 = big ? 4 : 3;
+  if (!headOnly) {
+    [[-4, -2], [1, 3]].forEach(([a, b], side) => {
+      box(a, b, 0, 1, -2, 2, R.shoes);
+      for (let x = a; x <= b; x++) for (let z = -2; z <= 2; z++) set(x, 0, z, sh(R.shoes, lum(R.shoes) > 200 ? .82 : 1.35));
+      for (let z = -1; z <= 1; z++) paint(side ? b : a, 1, z, R.accent);
+    });
+    const sH = Math.min({ none: 0, ankle: 1, crew: 3, mid: 5, knee: 7 }[R.socks] || 0, legLen - 5);
+    [[-4, -2], [1, 3]].forEach(([a, b]) => {
+      box(a, b, 2, top, -1, 1, (x, y) => y < 6 ? sk2 : skin);
+      if (sH > 0) { box(a, b, 2, 1 + sH, -1, 1, R.sockC); if (R.stripes && sH >= 3) { box(a, b, sH, sH, -1, 1, R.accent); if (sH >= 5) box(a, b, sH - 2, sH - 2, -1, 1, R.accent); } }
+    });
+    box(-4, 3, top - 4, top, -2, 1, (x, y) => (x === -4 || x === 3) ? R.panel : y === top - 4 ? sh(R.shorts, .8) : R.shorts);
+    for (let y = top - 4; y <= top - 2; y++) for (let z = -2; z <= 1; z++) { V.delete(K(-1, y, z)); V.delete(K(0, y, z)); }
+    box(tw0, tw1, T0, T0 + 8, -2, 1, (x, y) => (x === tw0 || x === tw1) ? R.panel : y === T0 ? sh(R.jersey, .82) : (y === T0 + 8 && (x === tw0 + 1 || x === tw1 - 1)) ? R.trim : R.jersey);
+    [[-1, T0 + 8, skin], [0, T0 + 8, skin], [-1, T0 + 7, R.trim], [0, T0 + 7, R.trim], [-2, T0 + 8, R.trim], [1, T0 + 8, R.trim]].forEach(([x, y, c]) => paint(x, y, 1, c));
+    const n = R.no, w = n.length === 1 ? [-2] : [-3, 1];
+    [...n].forEach((d, i) => { const g = VX_DIG[d] || VX_DIG[0]; for (let r = 0; r < 5; r++) for (let c = 0; c < 3; c++) if (g[r * 3 + c] === "1") { const xf = w[i] + c, y = T0 + 6 - r; paint(xf, y, 1, R.trim); paint(-1 - xf, y, -2, R.trim); } });
+    box(-1, 0, T0 + 9, T0 + 9, -1, 0, sk2);
+    [[tw0 - 2, tw0 - 1], [tw1 + 1, tw1 + 2]].forEach(([a, b], side) => {
+      box(a, b, T0 - 1, T0 + 8, -1, 0, (x, y) => y <= T0 ? sk2 : skin);
+      if (R.wrist) box(a, b, T0 + 1, T0 + 1, -1, 0, R.accent);
+      if ((R.sleeve === "left" && side === 0) || (R.sleeve === "right" && side === 1)) box(a, b, T0 + 2, T0 + 7, -1, 0, R.sleeveC);
+    });
+  }
+  box(-4, 3, H0, H0 + 7, -4, 3, (x, y, z) => y === H0 && z < 3 ? sk2 : skin);
+  box(-5, -5, H0 + 2, H0 + 4, -1, 0, sk2); box(4, 4, H0 + 2, H0 + 4, -1, 0, sk2);
+  box(-1, 0, H0 + 2, H0 + 2, 4, 4, sk2);
+  if (R.ghost) return V;
+  const lip = vxMix(sk3, "#b0434a", .35); paint(-1, H0 + 1, 3, lip); paint(0, H0 + 1, 3, lip);
+  const Wh = "#ffffff", Pu = "#14161c", flat = R.eyes === "narrow" || R.eyes === "focused";
+  const rows = { round: [3, 4], narrow: [3], wide: [3, 4, 5], focused: [3] }[R.eyes] || [3, 4];
+  rows.forEach(r => { paint(-3, H0 + r, 3, flat ? Pu : Wh); paint(-2, H0 + r, 3, Pu); paint(1, H0 + r, 3, Pu); paint(2, H0 + r, 3, flat ? Pu : Wh); });
+  if (R.eyes === "focused") [-3, -2, 1, 2].forEach(x => paint(x, H0 + 4, 3, sk3));
+  const br = Math.min(Math.max(...rows) + 1 + (R.eyes === "wide" ? 0 : 1), 6);
+  [-3, -2, 1, 2].forEach(x => paint(x, H0 + br, 3, sh(hc, .7)));
+  const bc = R.beard === "stubble" ? vxMix(skin, hc, .38) : hc;
+  if (R.beard === "stubble" || R.beard === "full") {
+    for (let x = -4; x <= 3; x++) for (let y = H0; y <= H0 + 1; y++) if (!(y === H0 + 1 && (x === -1 || x === 0))) paint(x, y, 3, bc);
+    for (let z = -1; z <= 3; z++) for (let y = H0; y <= H0 + 2; y++) { paint(-4, y, z, bc); paint(3, y, z, bc); }
+    if (R.beard === "full") box(-3, 2, H0, H0, 4, 4, hc);
+  }
+  if (R.beard === "mous") { for (let x = -3; x <= 2; x++) paint(x, H0 + 2, 3, hc); box(-2, 1, H0 + 1, H0 + 1, 4, 4, hc); }
+  if (R.beard === "goatee") { paint(-1, H0, 3, hc); paint(0, H0, 3, hc); box(-1, 0, H0 - 1, H0, 4, 4, hc); }
+  const top1 = (y, ins = 0, c = hv) => box(-4 + ins, 3 - ins, y, y, -4 + ins, 3 - ins, c);
+  const sides = (y0, y1, c = hv) => { box(-5, -5, y0, y1, -4, 3, c); box(4, 4, y0, y1, -4, 3, c); };
+  const back = (y0, y1, c = hv) => box(-4, 3, y0, y1, -5, -5, c);
+  const fringe = (y0, y1, c = hv) => box(-4, 3, y0, y1, 4, 4, c);
+  const inHead = (y0, c) => V.forEach(v => { if (v.y >= y0 && v.y <= H0 + 7 && v.x >= -4 && v.x <= 3 && v.z >= -4 && v.z <= 3 && (v.y === H0 + 7 || v.x === -4 || v.x === 3 || v.z === -4) && !(v.z === 3 && v.y < H0 + 7)) v.c = c(v.x, v.y, v.z); });
+  const st = R.hair;
+  if (st === "buzz") inHead(H0 + 5, (x, y) => vxMix(skin, hc, y >= H0 + 7 ? .8 : .55));
+  else if (st === "short") { top1(H0 + 8); sides(H0 + 5, H0 + 7); back(H0 + 3, H0 + 7); fringe(H0 + 7, H0 + 7); }
+  else if (st === "fade") { top1(H0 + 8); top1(H0 + 9, 1); inHead(H0 + 4, (x, y) => vxMix(skin, hc, y >= H0 + 6 ? .75 : .45)); fringe(H0 + 7, H0 + 8); }
+  else if (st === "sidepart") { top1(H0 + 8); top1(H0 + 9, 1); sides(H0 + 5, H0 + 7); back(H0 + 3, H0 + 7); fringe(H0 + 6, H0 + 7); box(-3, -3, H0 + 9, H0 + 9, -3, 2, sh(hc, 1.35)); }
+  else if (st === "waves") { top1(H0 + 8, 0, (x, y, z) => z % 2 ? hc : sh(hc, 1.3)); inHead(H0 + 4, (x, y, z) => ((y + z) % 2) ? hc : sh(hc, 1.25)); }
+  else if (st === "curly") { top1(H0 + 8); top1(H0 + 9); for (let x = -4; x <= 3; x++) for (let z = -4; z <= 3; z++) if ((x + z) % 2 === 0) set(x, H0 + 10, z, hd); sides(H0 + 5, H0 + 7); back(H0 + 3, H0 + 7); fringe(H0 + 7, H0 + 8); }
+  else if (st === "twists") { top1(H0 + 8); for (let x = -4; x <= 3; x++) for (let z = -4; z <= 3; z++) { const h = 1 + ((x * 31 + z * 17 + 99) % 3 + 3) % 3; for (let y = 1; y <= h; y++) set(x, H0 + 8 + y, z, (y + x) % 2 ? hc : hd); } sides(H0 + 5, H0 + 7); back(H0 + 3, H0 + 7); fringe(H0 + 7, H0 + 7); }
+  else if (st === "afro") { for (let x = -7; x <= 6; x++) for (let y = H0 + 2; y <= H0 + 13; y++) for (let z = -7; z <= 6; z++) { const dx = (x + .5) / 7, dy = (y - H0 - 7.5) / 6, dz = (z + .5) / 7; if (dx * dx + dy * dy + dz * dz <= 1 && !get(x, y, z) && !(z >= 3 && y < H0 + 7)) set(x, y, z, hv(x, y, z)); } }
+  else if (st === "frohawk") { inHead(H0 + 4, () => vxMix(skin, hc, .5)); for (let x = -2; x <= 1; x++) for (let z = -4; z <= 3; z++) for (let y = H0 + 8; y <= H0 + 10 + ((x + z) & 1); y++) set(x, y, z, hv(x, y, z)); }
+  else if (st === "hightop") { inHead(H0 + 4, () => vxMix(skin, hc, .6)); box(-4, 3, H0 + 8, H0 + 13, -4, 3, (x, y, z) => y === H0 + 13 ? sh(hc, 1.15) : hv(x, y, z)); }
+  else if (st === "cornrows" || st === "braids") { inHead(H0 + 3, x => (x & 1) ? hc : sh(hc, .6)); if (st === "braids") [-3, 2].forEach(x => { for (let y = H0 - 6; y <= H0 + 5; y++) set(x, y, -5, (y & 1) ? hc : hd); }); }
+  else if (st === "locs") { top1(H0 + 8); for (let x = -4; x <= 3; x += 2) for (let y = H0 - 3; y <= H0 + 7; y++) set(x, y, -5, (y & 1) ? hc : hd); for (let z = -4; z <= 2; z += 2) for (let y = H0; y <= H0 + 7; y++) { set(-5, y, z, (y & 1) ? hc : hd); set(4, y, z, (y & 1) ? hc : hd); } fringe(H0 + 7, H0 + 7); }
+  else if (st === "long") { top1(H0 + 8); sides(H0 + 1, H0 + 7); back(H0 - 6, H0 + 7); fringe(H0 + 6, H0 + 7); }
+  else if (st === "manbun") { top1(H0 + 8, 0, (x, y, z) => z % 2 ? hc : hd); sides(H0 + 5, H0 + 7); back(H0 + 3, H0 + 7); box(-1, 0, H0 + 6, H0 + 8, -7, -6, hv); }
+  else if (st === "bun") { top1(H0 + 8); sides(H0 + 5, H0 + 7); back(H0 + 3, H0 + 7); box(-2, 0, H0 + 9, H0 + 11, -3, -1, hv); }
+  else if (st === "undercut") { inHead(H0 + 3, () => vxMix(skin, hc, .4)); box(-3, 2, H0 + 8, H0 + 9, -4, 3, hv); box(-3, 2, H0 + 8, H0 + 9, 4, 5, hv); }
+  else if (st === "mohawk") { inHead(H0 + 4, () => vxMix(skin, hc, .3)); for (let z = -4; z <= 3; z++) for (let y = H0 + 8; y <= H0 + 10 + (z > 0 ? 1 : 0); y++) box(-1, 0, y, y, z, z, hv); }
+  else if (st === "spiky") { top1(H0 + 8); sides(H0 + 5, H0 + 7); back(H0 + 3, H0 + 7); fringe(H0 + 7, H0 + 7); for (let x = -4; x <= 3; x += 2) for (let z = -4; z <= 3; z += 2) { set(x, H0 + 9, z, hc); set(x, H0 + 10, z, hd); } }
+  else if (st === "bald") { paint(-2, H0 + 7, 1, sh(skin, 1.18)); paint(-1, H0 + 7, 1, sh(skin, 1.12)); }
+  if (R.band) { const y = H0 + 6; for (let z = -4; z <= 3; z++) { set(-5, y, z, R.band); set(4, y, z, R.band); } for (let x = -4; x <= 3; x++) { set(x, y, -5, R.band); set(x, y, 4, R.band); } }
+  const g = R.glasses;
+  if (g !== "none") {
+    const fr = g === "gold" ? "#d8b35a" : g === "sport" ? "#1b1e25" : "#17191e";
+    const ln = g === "shades" ? ["#0d0f14", .92] : g === "sport" ? ["#ffb347", .5] : g === "gold" ? ["#cfe8ff", .3] : ["#bfe3ff", .32];
+    if (g === "sport") {
+      for (let z = -4; z <= 3; z++) { set(-5, H0 + 4, z, fr); set(4, H0 + 4, z, fr); } for (let x = -4; x <= 3; x++) set(x, H0 + 4, -5, fr);
+      box(-4, 3, H0 + 5, H0 + 5, 4, 4, fr); for (let x = -4; x <= 3; x++) if (x !== -1 && x !== 0) set(x, H0 + 2, 4, fr);
+      box(-4, 3, H0 + 3, H0 + 4, 4, 4, ln[0], ln[1]);
+    } else {
+      [-3, 1].forEach(e => {
+        box(e, e + 1, H0 + 3, H0 + 4, 4, 4, ln[0], ln[1]);
+        for (let x = e; x <= e + 1; x++) { set(x, H0 + 5, 4, fr); set(x, H0 + 2, 4, fr); }
+        for (let y = H0 + 3; y <= H0 + 4; y++) { set(e - 1, y, 4, fr); set(e + 2, y, 4, fr); }
+        if (g === "square" || g === "shades") { set(e - 1, H0 + 5, 4, fr); set(e + 2, H0 + 5, 4, fr); set(e - 1, H0 + 2, 4, fr); set(e + 2, H0 + 2, 4, fr); }
+      });
+      for (let z = 0; z <= 3; z++) { set(-5, H0 + 4, z, fr); set(4, H0 + 4, z, fr); }
+    }
+  }
+  return V;
+}
+const VX_DIRS = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+function vxFaces(V) {
+  const faces = []; let y0 = 1e9, y1 = -1e9;
+  V.forEach(v => {
+    y0 = Math.min(y0, v.y); y1 = Math.max(y1, v.y);
+    VX_DIRS.forEach(n => {
+      const nb = V.get((v.x + n[0]) + "," + (v.y + n[1]) + "," + (v.z + n[2]));
+      if (nb && !nb.a && !v.a) return;
+      if (nb && nb.a && v.a) return;
+      const cx = v.x + .5, cy = v.y + .5, cz = v.z + .5, ex = n[0] * .5, ey = n[1] * .5, ez = n[2] * .5;
+      const c = n[0] ? [[cx + ex, cy - .5, cz - .5], [cx + ex, cy + .5, cz - .5], [cx + ex, cy + .5, cz + .5], [cx + ex, cy - .5, cz + .5]]
+        : n[1] ? [[cx - .5, cy + ey, cz - .5], [cx + .5, cy + ey, cz - .5], [cx + .5, cy + ey, cz + .5], [cx - .5, cy + ey, cz + .5]]
+          : [[cx - .5, cy - .5, cz + ez], [cx + .5, cy - .5, cz + ez], [cx + .5, cy + .5, cz + ez], [cx - .5, cy + .5, cz + ez]];
+      faces.push({ c, n, col: vxHex(v.c), a: v.a || 1, m: [cx + ex, cy + ey, cz + ez] });
+    });
+  });
+  return { faces, y0, y1: y1 + 1 };
+}
+const VX_CACHE = new Map();
+function vxModel(look, height, headOnly) {
+  const R = vxResolve(look, height);
+  const key = JSON.stringify(R) + (headOnly ? "h" : "");
+  if (VX_CACHE.has(key)) return VX_CACHE.get(key);
+  const M = vxFaces(vxBuild(R, headOnly));
+  VX_CACHE.set(key, M);
+  if (VX_CACHE.size > 160) VX_CACHE.delete(VX_CACHE.keys().next().value);
+  return M;
+}
+const VX_LT = (() => { const l = [-.45, .75, .55], m = Math.hypot(...l); return l.map(v => v / m); })();
+function vxRender(ctx, M, o) {
+  const { W, H, a, p, s, fy, oy = 0, floor } = o;
+  const ca = Math.cos(a), sa = Math.sin(a), cp = Math.cos(p), sp = Math.sin(p);
+  const tx = (x, y, z) => { x += .5; z += .5; const x1 = x * ca + z * sa, z1 = -x * sa + z * ca; const y1 = (y - fy) * cp - z1 * sp, z2 = (y - fy) * sp + z1 * cp; return [W / 2 + x1 * s, H / 2 + oy - y1 * s, z2]; };
+  if (floor) {
+    const [fx, fyy] = tx(-.5, M.y0, -.5); const R = floor * s, ry = R * Math.max(.12, sp);
+    const gr = ctx.createRadialGradient(fx, fyy, R * .2, fx, fyy, R * 1.25); gr.addColorStop(0, "rgba(255,122,26,.25)"); gr.addColorStop(1, "rgba(255,122,26,0)");
+    ctx.fillStyle = gr; ctx.beginPath(); ctx.ellipse(fx, fyy, R * 1.25, ry * 1.25, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = "#161a21"; ctx.beginPath(); ctx.ellipse(fx, fyy + ry * .18, R, ry, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = "#1d222b"; ctx.beginPath(); ctx.ellipse(fx, fyy, R, ry, 0, 0, 7); ctx.fill();
+    for (let i = 0; i < 24; i++) { const t = i / 24 * Math.PI * 2; const [px, py, pz] = tx(Math.cos(t) * floor * .86 - .5, M.y0, Math.sin(t) * floor * .86 - .5); ctx.fillStyle = i % 6 === 0 ? "#ff7a1a" : `rgba(255,255,255,${pz > 0 ? .35 : .12})`; const d = i % 6 === 0 ? 3.2 : 2; ctx.fillRect(px - d / 2, py - d / 2, d, d); }
+    ctx.fillStyle = "rgba(0,0,0,.45)"; ctx.beginPath(); ctx.ellipse(fx, fyy, 6 * s, 6 * s * Math.max(.12, sp), 0, 0, 7); ctx.fill();
+  }
+  const list = [];
+  for (const f of M.faces) {
+    const n = f.n, nx = n[0] * ca + n[2] * sa, nz1 = -n[0] * sa + n[2] * ca, ny = n[1] * cp - nz1 * sp, nz = n[1] * sp + nz1 * cp;
+    if (nz <= .001) continue;
+    const d = Math.max(0, nx * VX_LT[0] + ny * VX_LT[1] + nz * VX_LT[2]);
+    list.push([tx(f.m[0], f.m[1], f.m[2])[2], f, .52 + .55 * d]);
+  }
+  list.sort((A, B) => A[0] - B[0]);
+  for (const [, f, k] of list) {
+    const P = f.c.map(q => tx(q[0], q[1], q[2]));
+    const c = `rgb(${f.col[0] * k | 0},${f.col[1] * k | 0},${f.col[2] * k | 0})`;
+    ctx.globalAlpha = f.a; ctx.fillStyle = c; ctx.strokeStyle = c; ctx.lineWidth = .6;
+    ctx.beginPath(); ctx.moveTo(P[0][0], P[0][1]); ctx.lineTo(P[1][0], P[1][1]); ctx.lineTo(P[2][0], P[2][1]); ctx.lineTo(P[3][0], P[3][1]); ctx.closePath(); ctx.fill(); if (f.a === 1) ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+function vxFit(cv) { const r = cv.getBoundingClientRect(), d = Math.min(2, window.devicePixelRatio || 1); const w = Math.max(1, Math.round(r.width * d)), h = Math.max(1, Math.round(r.height * d)); if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; } return { W: w, H: h }; }
+function vxStill(cv, M, { a = -.45, p = .18, zoom = 1, head = true } = {}) {
+  if (!cv || !M) return;
+  const { W, H } = vxFit(cv); const ctx = cv.getContext("2d"); ctx.clearRect(0, 0, W, H);
+  const span = M.y1 - M.y0; const fy = head ? M.y1 - 6.5 + (zoom > 1.2 ? 1.2 : 0) : M.y0 + span * .5;
+  vxRender(ctx, M, { W, H, a, p, s: (head ? H / 15 : H / (span * 1.2)) * zoom, fy });
+}
+
+/* ---------- the turntable ---------- */
+function vxTurntable(cv, { zoom = 1, auto = true, onDeg } = {}) {
+  const T = { a: -.55, p: .26, z: zoom, v: 0, auto, M: null, pose: 0, t: 0, drag: null, live: true };
+  const ctx = cv.getContext("2d"); const RM = vxReduced();
+  T.draw = () => {
+    if (!T.M) return; const { W, H } = vxFit(cv); ctx.clearRect(0, 0, W, H);
+    const span = T.M.y1 - T.M.y0; const s = Math.min(H / (span * 1.32), W / 26) * T.z; const bob = T.pose === 1 && !RM ? Math.sin(T.t / 9) * .35 : 0;
+    vxRender(ctx, T.M, { W, H, a: T.a, p: T.p, s, fy: T.M.y0 + span * .5 + bob, oy: H * .04, floor: 9 });
+  };
+  let lastDeg = null;
+  const loop = () => {
+    T.t++;
+    if (!T.drag) { if (Math.abs(T.v) > .0004) { T.a += T.v; T.v *= .94; } else if (T.auto && !RM) T.a += .012; }
+    T.draw();
+    if (onDeg) { let d = Math.round((-T.a * 180 / Math.PI) % 360); if (d < 0) d += 360; if (d !== lastDeg) { lastDeg = d; onDeg(d); } }
+    T.raf = requestAnimationFrame(loop);
+  };
+  const down = e => { T.drag = { x: e.clientX, y: e.clientY, a: T.a, p: T.p, lx: e.clientX, t: performance.now() }; T.v = 0; try { cv.setPointerCapture(e.pointerId); } catch (er) { /* ignore */ } T.onTouch && T.onTouch(); };
+  const move = e => { if (!T.drag) return; const dx = e.clientX - T.drag.x, dy = e.clientY - T.drag.y; T.a = T.drag.a + dx * .012; T.p = Math.max(-.05, Math.min(.75, T.drag.p + dy * .004)); const now = performance.now(); T.v = (e.clientX - T.drag.lx) * .012 / Math.max(1, (now - T.drag.t) / 16); T.drag.lx = e.clientX; T.drag.t = now; };
+  const up = () => { T.drag = null; };
+  const wheel = e => { e.preventDefault(); if (e.shiftKey || e.ctrlKey) T.z = Math.max(.6, Math.min(2.4, T.z * (e.deltaY > 0 ? .92 : 1.08))); else { T.v = 0; T.a += (e.deltaY + e.deltaX) * .006; } T.onTouch && T.onTouch(); };
+  const key = e => { if (e.key === "ArrowLeft") { T.a -= .2; e.preventDefault(); } if (e.key === "ArrowRight") { T.a += .2; e.preventDefault(); } if (e.key === "+" || e.key === "=") T.z = Math.min(2.4, T.z * 1.1); if (e.key === "-") T.z = Math.max(.6, T.z / 1.1); };
+  const dbl = () => { T.a = -.55; T.p = .26; T.z = zoom; };
+  cv.addEventListener("pointerdown", down); cv.addEventListener("pointermove", move); cv.addEventListener("pointerup", up); cv.addEventListener("pointercancel", up);
+  cv.addEventListener("wheel", wheel, { passive: false }); cv.addEventListener("keydown", key); cv.addEventListener("dblclick", dbl);
+  T.snap = deg => { const target = -deg * Math.PI / 180, from = T.a; const k = Math.round((from - target) / (Math.PI * 2)); const to = target + k * Math.PI * 2; const t0 = performance.now(); T.v = 0; T.auto = false; if (RM) { T.a = to; return; } const step = now => { const u = Math.min(1, (now - t0) / 450), e = 1 - Math.pow(1 - u, 3); T.a = from + (to - from) * e; if (u < 1) requestAnimationFrame(step); }; requestAnimationFrame(step); };
+  T.start = () => { cancelAnimationFrame(T.raf); loop(); };
+  T.stop = () => cancelAnimationFrame(T.raf);
+  T.destroy = () => { T.stop(); cv.removeEventListener("pointerdown", down); cv.removeEventListener("pointermove", move); cv.removeEventListener("pointerup", up); cv.removeEventListener("pointercancel", up); cv.removeEventListener("wheel", wheel); cv.removeEventListener("keydown", key); cv.removeEventListener("dblclick", dbl); };
+  return T;
+}
+
+/* A spinning stand. Drag, swipe, scroll or use the arrow keys. */
+function Vox3D({ look, height, h = 420, zoom = 1, controls = true, auto = true, chip, label }) {
+  const cv = useRef(null), T = useRef(null), degRef = useRef(null), hintRef = useRef(null);
+  const [spin, setSpin] = useState(auto);
+  const [pose, setPose] = useState(0);
+  useEffect(() => {
+    const t = vxTurntable(cv.current, { zoom, auto, onDeg: d => { if (degRef.current) degRef.current.textContent = d + "°"; } });
+    t.onTouch = () => { if (hintRef.current) hintRef.current.style.opacity = 0; };
+    T.current = t; t.M = vxModel(look, height); t.start();
+    let io = null;
+    try { io = new IntersectionObserver(([en]) => { if (en.isIntersecting) t.start(); else t.stop(); }); io.observe(cv.current); } catch (e) { /* always on */ }
+    return () => { t.destroy(); if (io) io.disconnect(); };
+  }, []);
+  const key = JSON.stringify(vxResolve(look, height));
+  useEffect(() => { if (T.current) T.current.M = vxModel(look, height); }, [key]);
+  const snap = d => { if (T.current) { T.current.snap(d); setSpin(false); } };
+  return (
+    <div className="vx-stage" style={{ height: h }}>
+      <canvas ref={cv} tabIndex={0} aria-label={label || "Player on a turntable. Drag, scroll or use the arrow keys to spin."} />
+      <div className="vx-hud">{chip ? <span className="vx-chip">{chip}</span> : <span />}<span className="vx-deg" ref={degRef}>0°</span></div>
+      {controls && <div className="vx-hint" ref={hintRef}>Drag or scroll to spin · Shift + scroll to zoom</div>}
+      {controls && (
+        <div className="vx-ctrl">
+          <div className="vx-grp" role="group" aria-label="Views">{[[0, "Front"], [45, "¾"], [90, "Side"], [180, "Back"]].map(([d, l]) => <button key={d} onClick={() => snap(d)}>{l}</button>)}</div>
+          <div className="vx-grp"><button className={spin ? "on" : ""} aria-pressed={spin} onClick={() => { const v = !spin; setSpin(v); if (T.current) T.current.auto = v; }}><Ic n="replay" /> Auto spin</button></div>
+          <div className="vx-grp" role="group" aria-label="Zoom">
+            <button aria-label="Zoom out" onClick={() => { if (T.current) T.current.z = Math.max(.6, T.current.z / 1.15); }}>−</button>
+            <button aria-label="Zoom in" onClick={() => { if (T.current) T.current.z = Math.min(2.4, T.current.z * 1.15); }}>+</button>
+          </div>
+          <div className="vx-grp"><button onClick={() => { const v = pose ? 0 : 1; setPose(v); if (T.current) T.current.pose = v; }}>Pose: {pose ? "Bounce" : "Idle"}</button></div>
+        </div>
+      )}
+    </div>
+  );
+}
+/* A still head-and-shoulders portrait that turns while `spin` is on. */
+function VoxPortrait({ look, height, size = 52, spin = false, head = true, zoom = .86 }) {
+  const cv = useRef(null);
+  const key = JSON.stringify(vxResolve(look, height));
+  useEffect(() => { vxStill(cv.current, vxModel(look, height), { zoom, head }); }, [key, size]);
+  useEffect(() => {
+    if (!spin || vxReduced()) return undefined;
+    let a = -.45, raf; const M = vxModel(look, height);
+    const go = () => { a += .07; vxStill(cv.current, M, { a, zoom, head }); raf = requestAnimationFrame(go); };
+    go();
+    return () => { cancelAnimationFrame(raf); vxStill(cv.current, M, { zoom, head }); };
+  }, [spin, key]);
+  return <canvas ref={cv} className="vx-por" style={{ width: size, height: size }} aria-hidden="true" />;
+}
+function VxThumb({ look, height, kind }) {
+  const cv = useRef(null);
+  const key = JSON.stringify(vxResolve(look, height));
+  useEffect(() => { const t = setTimeout(() => vxStill(cv.current, vxModel(look, height, true), kind === "hair" ? { a: -.6 } : { a: -.18, p: .1, zoom: 1.35 }), 0); return () => clearTimeout(t); }, [key]);
+  return <canvas ref={cv} className="vx-th" aria-hidden="true" />;
+}
+
+/* ---------- the player details card ---------- */
+const VX_ARCH = { PG: "Floor general", SG: "Shot creator", SF: "Two-way wing", PF: "Stretch big", C: "Rim protector" };
+const VX_ANAMES = ["Shooting", "Playmaking", "Defense", "Rebounding", "Athleticism", "IQ"];
+function VxRing({ v, col = "#ff7a1a", s = 76 }) {
+  const c = 2 * Math.PI * 32;
+  return <div className="vx-ring" style={{ width: s, height: s }}><svg viewBox="0 0 76 76" aria-hidden="true"><circle cx="38" cy="38" r="32" fill="none" stroke="#262b35" strokeWidth="7" /><circle cx="38" cy="38" r="32" fill="none" stroke={col} strokeWidth="7" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - v / 99)} /></svg><b>{v}</b></div>;
+}
+function PrPlayerCard({ player, look }) {
+  const p = player;
+  const L = look || p.look || {};
+  const at = MD_STATS.map(k => Math.round((p.stats && p.stats[k]) || 0));
+  const ovr = computeOverall(p.stats, p.position);
+  const hi = at.indexOf(Math.max(...at)), lo = at.indexOf(Math.min(...at));
+  const ht = p.height || 186, ft = Math.floor(ht / 30.48), inch = Math.round((ht / 2.54) % 12);
+  const ws = p.wingspan || ht + 6;
+  const club = p.abroad ? p.teamName : p.clubId ? (getClub(p.clubId) || {}).name || p.teamName : p.teamName || shortHome(p.hometown || "");
+  return (
+    <section className="pn vx-card" data-a="">
+      <div className="vx-no">#{p.jersey}</div>
+      <div style={{ minWidth: 0 }}>
+        <h2 className="vx-name">{p.name}</h2>
+        <div className="ticks" style={{ marginTop: 8 }}>
+          <Tg cls="or">{p.position} · {VX_ARCH[p.position] || "Player"}</Tg>
+          {p.hometown && <Tg><PrFlag state={p.hometown} w={16} /> {shortHome(p.hometown)}</Tg>}
+          <Tg>{(L.hand || "Right")}-handed</Tg>
+          {club && <Tg>{club}</Tg>}
+        </div>
+        <div className="vx-facts">
+          <div><small>Height</small><b>{ht} cm</b><small>{ft}′{inch}″</small></div>
+          <div><small>Weight</small><b>{p.weight ? `${p.weight} kg` : "—"}</b><small>{L.build === "big" ? "Strong" : L.build === "slim" ? "Slim" : "Athletic"} build</small></div>
+          <div><small>Wingspan</small><b>{ws} cm</b><small>{ws - ht >= 0 ? "+" : ""}{ws - ht} cm</small></div>
+          <div><small>Age</small><b>{p.age}</b><small>Season {p.year}</small></div>
+        </div>
+      </div>
+      <div className="vx-attrbox">
+        <div className="vx-arch"><VxRing v={ovr} /><div><b style={{ font: "700 20px/1.1 var(--cd)" }}>Overall {ovr}</b><div style={{ color: "var(--mu)", fontSize: 13.5 }}>Best at {hi === 5 ? "IQ" : VX_ANAMES[hi].toLowerCase()} · works on {lo === 5 ? "IQ" : VX_ANAMES[lo].toLowerCase()}</div></div></div>
+        <div className="vx-attrs">{at.map((v, i) => <div key={i} className="vx-attr">{VX_ANAMES[i]}<span className="vx-bar"><i style={{ width: `${Math.min(100, v)}%` }} /></span><b>{v}</b></div>)}</div>
+      </div>
+    </section>
+  );
+}
+
+/* ---------- the look studio: creation step and the Locker room ---------- */
+const VX_TABS = [["body", "Body"], ["hair", "Hair"], ["face", "Face"], ["gear", "Socks & gear"]];
+function vxRandomLook() {
+  const pick = a => a[Math.floor(Math.random() * a.length)];
+  return { skinHex: pick(VX_SKINS), hair: pick(VX_HAIRS)[0], hairHex: pick(VX_HAIRC.slice(0, 9)), eyes: pick(VX_EYES)[0], beard: Math.random() < .6 ? "none" : pick(["stubble", "mous", "goatee", "full"]), glasses: Math.random() < .7 ? "none" : pick(VX_GLASSES.slice(1))[0], build: pick(["slim", "ath", "big"]), socks: pick(VX_SOCKS)[0], sockC: pick(VX_SOCKC), stripes: Math.random() < .5, shoes: pick(VX_SHOEC), accent: pick(VX_ACC), band: Math.random() < .25 ? pick(VX_ACC) : null, wrist: Math.random() < .5, sleeve: Math.random() < .2 ? pick(["left", "right"]) : "none" };
+}
+function LookStudio({ player, mode, onDone, onBack }) {
+  const lay = useLayoutMode();
+  const [look, setLook] = useState(() => {
+    const L = { ...DEFLOOK, ...(player.look || {}) };
+    return { ...L, skinHex: L.skinHex || SKIN[L.skin] || SKIN[2], hairHex: L.hairHex || HAIRC[L.hairC] || HAIRC[0], glasses: L.glasses || "none", socks: L.socks || "crew", sockC: L.sockC || "#f3f4f6", stripes: L.stripes == null ? true : L.stripes, accent: L.accent || "#ff7a1a", shoes: L.shoes || "#f3f4f6", wrist: !!L.wrist, sleeve: L.sleeve === true ? "left" : L.sleeve || "none", sleeveC: L.sleeveC || "#16181d", hand: L.hand || "Right" };
+  });
+  const [hist, setHist] = useState([]);
+  const [tab, setTab] = useState("hair");
+  const [saved, setSaved] = useState(false);
+  const kit = kitForPlayer(player) || {};
+  const full = { ...look, ...kit, no: String(player.jersey == null ? "" : player.jersey) };
+  const H = player.height || 186;
+  const change = patch => { setHist(h => [...h.slice(-39), look]); setLook(l => ({ ...l, ...patch })); setSaved(false); };
+  const undo = () => { if (!hist.length) return; setLook(hist[hist.length - 1]); setHist(h => h.slice(0, -1)); };
+  const sw = (list, key, nm) => <div className="vx-sw" role="radiogroup" aria-label={nm}>{list.map(c => <button key={String(c)} role="radio" aria-checked={look[key] === c} aria-label={`${nm} ${c}`} className={look[key] === c ? "on" : ""} style={{ background: c }} onClick={() => change({ [key]: c })} />)}</div>;
+  const seg = (list, key) => <div className="vx-seg">{list.map(([v, n]) => <button key={String(v)} className={look[key] === v ? "on" : ""} onClick={() => change({ [key]: v })}>{n}</button>)}</div>;
+  const thumbs = (list, key) => <div className="vx-thumbs">{list.map(([v, n]) => <button key={v} className={look[key] === v ? "on" : ""} onClick={() => change({ [key]: v })}><VxThumb look={{ ...full, [key]: v }} height={H} kind={key} />{n}</button>)}</div>;
+  const lb = (t, v) => <div className="vx-lbl">{t}{v ? <b>{v}</b> : null}</div>;
+  const finish = () => {
+    const nearest = (arr, hx) => { const A = vxHex(hx); let bi = 0, bd = 1e9; arr.forEach((c, i) => { const B = vxHex(c), d = (A[0] - B[0]) ** 2 + (A[1] - B[1]) ** 2 + (A[2] - B[2]) ** 2; if (d < bd) { bd = d; bi = i; } }); return bi; };
+    const out = { ...look, skin: nearest(SKIN, look.skinHex), hairC: nearest(HAIRC, look.hairHex) };
+    ["jersey", "trim", "panel", "shorts", "no", "acc"].forEach(k => delete out[k]);
+    onDone(out);
+    if (mode === "locker") setSaved(true);
+  };
+  return (
+    <PrPage>
+      <PrHead lbl={mode === "create" ? "Step 2 of 5" : `${player.name} · Locker room`} title={mode === "create" ? "Create your player" : "Locker room"}
+        desc={mode === "create" ? "This is how you'll look on every screen, from the state trials to the MBL. Looks don't change your ratings." : "Change your look any time. Your club's kit stays on in games."}
+        right={onBack ? <button className="ghost" style={{ width: "auto" }} onClick={onBack}><Ic n="left" /> Back</button> : null} />
+      <div className="vx-studio">
+        <div className="pn vx-left"><Vox3D look={full} height={H} h={lay === "phone" ? 430 : 560} chip={kit.jersey ? `Wearing the ${player.teamName || shortHome(player.hometown || "")} kit` : null} /></div>
+        <div className="pn vx-opts">
+          <div className="vx-otabs" role="tablist">{VX_TABS.map(([k, n]) => <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>{n}</button>)}</div>
+          <div className="vx-opane">
+            {tab === "body" && <>
+              {lb("Skin tone")}{sw(VX_SKINS, "skinHex", "Skin tone")}
+              {lb("Build")}{seg([["slim", "Slim"], ["ath", "Athletic"], ["big", "Strong"]], "build")}
+              {lb("Shooting hand")}{seg([["Right", "Right"], ["Left", "Left"]], "hand")}
+              <p className="vx-note">Height, weight and wingspan are set in body setup and change how you play.</p>
+            </>}
+            {tab === "hair" && <>
+              {lb("Hairstyle", (VX_HAIRS.find(x => x[0] === look.hair) || [0, ""])[1])}{thumbs(VX_HAIRS, "hair")}
+              {lb("Hair colour")}{sw(VX_HAIRC, "hairHex", "Hair colour")}
+            </>}
+            {tab === "face" && <>
+              {lb("Eyes")}{thumbs(VX_EYES, "eyes")}
+              {lb("Facial hair")}{thumbs(BEARDS, "beard")}
+              {lb("Glasses", (VX_GLASSES.find(x => x[0] === look.glasses) || [0, ""])[1])}{thumbs(VX_GLASSES, "glasses")}
+            </>}
+            {tab === "gear" && <>
+              {lb("Socks", (VX_SOCKS.find(x => x[0] === look.socks) || [0, ""])[1])}{seg(VX_SOCKS, "socks")}
+              {lb("Sock colour")}{sw(VX_SOCKC, "sockC", "Sock colour")}
+              {lb("Stripes")}{seg([[true, "Two stripes"], [false, "Plain"]], "stripes")}
+              {lb("Shoes")}{sw(VX_SHOEC, "shoes", "Shoe colour")}
+              {lb("Accent (shoe flash, stripes, wristbands)")}{sw(VX_ACC, "accent", "Accent colour")}
+              {lb("Headband")}<div className="vx-sw"><button className={!look.band ? "on none" : "none"} aria-label="No headband" onClick={() => change({ band: null })} />{VX_ACC.map(c => <button key={c} className={look.band === c ? "on" : ""} style={{ background: c }} aria-label={`Headband ${c}`} onClick={() => change({ band: c })} />)}</div>
+              {lb("Wristbands")}{seg([[true, "On"], [false, "Off"]], "wrist")}
+              {lb("Arm sleeve")}{seg([["none", "None"], ["left", "Left arm"], ["right", "Right arm"]], "sleeve")}
+              {look.sleeve !== "none" && sw(["#16181d", "#f3f4f6", "#e2392f", "#2f6fd8", "#ff7a1a"], "sleeveC", "Sleeve colour")}
+            </>}
+          </div>
+          <div className="vx-oact">
+            <button className="ghost" style={{ width: "auto", marginTop: 0 }} onClick={() => change(vxRandomLook())}><Ic n="replay" /> Randomise</button>
+            <button className="ghost" style={{ width: "auto", marginTop: 0 }} disabled={!hist.length} onClick={undo}>Undo</button>
+            <button className="cta" style={{ marginLeft: "auto", flex: "0 1 auto" }} onClick={finish}>{mode === "create" ? <>Continue to body setup <Ic n="right" /></> : saved ? "Saved" : "Save look"}</button>
+          </div>
+        </div>
+        <div className="vx-cardrow"><PrPlayerCard player={player} look={look} /></div>
+      </div>
+    </PrPage>
+  );
+}
 
 const PR_CSS = `.pr{color-scheme:dark;--bg:#0a0b0e;--bg2:#0f1115;--p1:#14171c;--p2:#1a1e25;--p3:#222731;--ln:rgba(255,255,255,.07);--ln2:rgba(255,255,255,.12);--ink:#f3f4f6;--mu:#a3a9b4;--di:#737a86;--or:#ff7a1a;--or2:#ff9a4d;--gd:#e2b65a;--ok:#34c37a;--bd:#f05252;--in:#4aa8ff;--r1:6px;--r2:10px;--r3:14px;--r4:20px;--tc:#ff7a1a;--td:#1a1208;--cd:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;--sn:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;--ease:cubic-bezier(.2,.8,.2,1)}
 .pr .i{width:18px;height:18px;flex:none}
@@ -12078,6 +12645,7 @@ const PR_CSS = `.pr{color-scheme:dark;--bg:#0a0b0e;--bg2:#0f1115;--p1:#14171c;--
 .pr .tg.or{background:rgba(255,122,26,.14);border-color:rgba(255,122,26,.35);color:#ffb27a}
 .pr .field{display:flex;flex-direction:column;gap:7px}
 .pr .field label{font-size:12.5px;font-weight:600;color:var(--mu)}
+.pr .seg{display:grid;gap:8px}
 .pr .states{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;max-height:212px;overflow:auto;padding-right:4px}
 .pr .st{display:flex;align-items:center;gap:9px;height:40px;padding:0 10px;border-radius:10px;background:var(--p1);border:1px solid var(--ln);font-size:13px;color:var(--mu);font-weight:500}
 .pr .st.on{border-color:var(--or);color:var(--ink);background:rgba(255,122,26,.1)}
@@ -12124,6 +12692,7 @@ const PR_CSS = `.pr{color-scheme:dark;--bg:#0a0b0e;--bg2:#0f1115;--p1:#14171c;--
 .pr .path{display:flex;align-items:center;gap:0;flex-wrap:wrap;justify-content:center}
 .pr .path .nd{display:flex;flex-direction:column;align-items:center;gap:6px;width:92px;font-size:11.5px;color:var(--di);font-weight:600;text-align:center}
 .pr .path .nd.on{color:var(--ink)}
+.pr .path .ln{width:28px;height:2px;background:var(--p3);margin-bottom:22px}
 .pr .hero{display:grid;grid-template-columns:minmax(200px,280px) minmax(0,1fr);min-height:340px;padding:0;background:linear-gradient(120deg,var(--td),#0e1014 70%);border-color:color-mix(in srgb,var(--tc) 30%,transparent)}
 .pr .hero .pic{position:relative;overflow:hidden;background:radial-gradient(260px 300px at 50% 70%,color-mix(in srgb,var(--tc) 55%,transparent),transparent 70%)}
 .pr .hero .pic .ph{position:absolute;inset:18px 0 0 0;background:none;border-radius:0}
@@ -12537,6 +13106,7 @@ const PR_CSS = `.pr{color-scheme:dark;--bg:#0a0b0e;--bg2:#0f1115;--p1:#14171c;--
 .pr[data-l=phone] .xr,.pr[data-l=land] .xr{grid-template-columns:minmax(0,1fr)}
 .pr[data-l=phone] .xo{grid-template-columns:44px minmax(0,1fr) auto}
 .pr[data-l=phone] .xo .tg{grid-column:2}
+.pr .loop{position:absolute;left:20px;top:16px;width:788px;height:36px;border-radius:10px;border:1px dashed rgba(255,122,26,.45);display:flex;align-items:center;gap:8px;padding:0 12px;font-size:12.5px;color:var(--or2);background:rgba(255,122,26,.06)}
 .pr canvas.pxs{image-rendering:pixelated;image-rendering:crisp-edges}
 .pr canvas.pxs{display:block;width:100%;height:auto}
 .pr .ch .art canvas.pxs,.pr .evart canvas.pxs{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
@@ -12567,6 +13137,12 @@ const PR_CSS = `.pr{color-scheme:dark;--bg:#0a0b0e;--bg2:#0f1115;--p1:#14171c;--
 .pr #drawer{position:fixed;left:16px;bottom:68px;z-index:101;width:min(380px,calc(100vw - 32px));max-height:min(78vh,720px);overflow:auto;border-radius:20px;background:rgba(20,22,28,.97);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(16px);box-shadow:0 30px 60px -10px rgba(0,0,0,.85);padding:16px;display:none;font-size:13px}
 .pr #drawer.open{display:block;animation:pr-pop .3s var(--ease) both}
 .pr #drawer h4{margin:4px 0 8px;font-size:11.5px;color:var(--di);font-weight:700;letter-spacing:.04em}
+.pr #drawer .sl{display:grid;gap:2px;margin-bottom:12px}
+.pr #drawer .sl button{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:8px;align-items:center;text-align:left;padding:8px 10px;border-radius:10px;color:var(--mu)}
+.pr #drawer .sl button:hover{background:rgba(255,255,255,.06);color:var(--ink)}
+.pr #drawer .sl button.on{background:rgba(255,122,26,.14);color:var(--ink)}
+.pr #drawer .sl button i{font:700 13px var(--cd);font-style:normal;color:var(--di)}
+.pr #drawer .sl button small{color:var(--di);font-size:11px}
 .pr #drawer p{color:var(--di);font-size:12px;margin:0 0 10px;line-height:1.45}
 @media (max-width:600px){.pr #pc{left:8px;bottom:calc(72px + env(safe-area-inset-bottom))}.pr #drawer{left:8px;bottom:124px}}
 .pr{background:var(--bg);color:var(--ink);font-family:var(--sn)}
@@ -12809,6 +13385,108 @@ const PR_CSS = `.pr{color-scheme:dark;--bg:#0a0b0e;--bg2:#0f1115;--p1:#14171c;--
 .pr .click-n{cursor:pointer}.pr .click-n:hover b,.pr .click-n:hover small:first-child{text-decoration:underline}
 .pr .nav.pr-md,.pr .bnav .pr-md{color:var(--or)}
 .pr[data-l=phone] .pr-prs{grid-template-columns:1fr}
+/* ---- 3D player, Locker room, player card ---- */
+.pr .vx-stage{position:relative;overflow:hidden;border-radius:16px;background:radial-gradient(60% 55% at 50% 38%,rgba(255,122,26,.16),transparent 70%),linear-gradient(180deg,#12151b,#0b0d11 72%);display:flex;flex-direction:column}
+.pr .vx-stage canvas{flex:1;width:100%;min-height:0;display:block;touch-action:none;cursor:grab}
+.pr .vx-stage canvas:active{cursor:grabbing}
+.pr .vx-hud{position:absolute;top:12px;left:12px;right:12px;display:flex;justify-content:space-between;gap:8px;pointer-events:none}
+.pr .vx-chip{display:inline-flex;align-items:center;height:26px;padding:0 10px;border-radius:99px;background:rgba(255,122,26,.16);color:var(--or2);font-size:12.5px;font-weight:600;max-width:70%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pr .vx-deg{font:13px/1 "Press Start 2P",monospace;color:var(--or2);background:rgba(0,0,0,.45);padding:6px 8px;border-radius:8px}
+.pr .vx-hint{position:absolute;left:50%;top:48px;transform:translateX(-50%);color:var(--mu);font-size:12px;background:rgba(0,0,0,.5);padding:5px 12px;border-radius:99px;white-space:nowrap;transition:opacity .6s;pointer-events:none}
+.pr .vx-ctrl{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;padding:10px;border-top:1px solid var(--ln);background:rgba(10,11,14,.6)}
+.pr .vx-grp{display:flex;gap:3px;background:var(--p2);border-radius:11px;padding:3px}
+.pr .vx-grp button{height:36px;min-width:38px;padding:0 10px;border:0;border-radius:8px;background:transparent;color:var(--mu);font-weight:600;font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer}
+.pr .vx-grp button.on,.pr .vx-grp button:hover{background:var(--p3);color:var(--ink)}
+.pr .vx-por{display:block;border-radius:12px;background:radial-gradient(circle at 50% 30%,#2a2f3a,#14171c);flex:none}
+.pr .vx-th{width:60px;height:60px;display:block}
+.pr .vx-studio{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:16px}
+.pr .vx-left{padding:0;overflow:hidden}
+.pr .vx-opts{display:flex;flex-direction:column;padding:0;overflow:hidden}
+.pr .vx-otabs{display:flex;gap:2px;padding:6px;border-bottom:1px solid var(--ln);overflow-x:auto;scrollbar-width:none}
+.pr .vx-otabs button{flex:none;height:40px;padding:0 14px;border:0;border-radius:9px;background:transparent;color:var(--mu);font:700 16px/1 var(--cd);cursor:pointer}
+.pr .vx-otabs button.on{background:var(--p3);color:var(--ink);box-shadow:inset 0 -2px 0 var(--or)}
+.pr .vx-opane{padding:12px 16px 16px;overflow:auto;max-height:560px}
+.pr .vx-lbl{display:flex;justify-content:space-between;align-items:baseline;margin:14px 0 8px;font-weight:600;font-size:13.5px;color:var(--mu)}
+.pr .vx-lbl:first-child{margin-top:2px}.pr .vx-lbl b{color:var(--ink);font-weight:600}
+.pr .vx-sw{display:flex;flex-wrap:wrap;gap:8px}
+.pr .vx-sw button{width:36px;height:36px;border-radius:10px;border:2px solid transparent;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12);cursor:pointer;transition:transform .15s}
+.pr .vx-sw button:hover{transform:translateY(-2px)}
+.pr .vx-sw button.on{border-color:var(--or);box-shadow:0 0 0 3px rgba(255,122,26,.25)}
+.pr .vx-sw button.none{background:transparent;border:2px dashed var(--ln2)}.pr .vx-sw button.none.on{border:2px solid var(--or)}
+.pr .vx-thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:8px}
+.pr .vx-thumbs button{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 4px 8px;border-radius:12px;border:1px solid var(--ln);background:var(--p2);font-size:12px;color:var(--mu);cursor:pointer;transition:transform .15s,border-color .15s}
+.pr .vx-thumbs button:hover{border-color:var(--ln2);transform:translateY(-2px)}
+.pr .vx-thumbs button.on{border-color:var(--or);color:var(--ink);background:rgba(255,122,26,.08)}
+.pr .vx-seg{display:flex;flex-wrap:wrap;gap:6px}
+.pr .vx-seg button{height:38px;padding:0 13px;border-radius:10px;border:1px solid var(--ln2);background:var(--p2);font-size:13.5px;font-weight:600;color:var(--mu);cursor:pointer}
+.pr .vx-seg button.on{border-color:var(--or);color:var(--or2);background:rgba(255,122,26,.1)}
+.pr .vx-note{color:var(--di);font-size:12.5px;margin:14px 0 0}
+.pr .vx-oact{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--ln);margin-top:auto;flex-wrap:wrap}
+.pr .vx-cardrow{grid-column:1/-1}
+.pr .vx-card{display:grid;grid-template-columns:auto minmax(0,1fr) minmax(0,1.1fr);gap:22px;align-items:center}
+.pr .vx-no{font:800 88px/.85 var(--cd);color:var(--or);text-shadow:0 6px 30px rgba(255,122,26,.3)}
+.pr .vx-name{font:800 32px/1 var(--cd);margin:0}
+.pr .vx-facts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:12px}
+.pr .vx-facts>div{background:var(--p2);border-radius:12px;padding:8px 10px}.pr .vx-facts small{display:block;color:var(--di);font-size:11.5px;font-weight:600}.pr .vx-facts b{font:700 19px/1.15 var(--cd)}
+.pr .vx-arch{display:flex;align-items:center;gap:14px;margin-bottom:12px}
+.pr .vx-ring{position:relative;flex:none}.pr .vx-ring svg{width:100%;height:100%;transform:rotate(-90deg)}.pr .vx-ring b{position:absolute;inset:0;display:grid;place-items:center;font:800 28px/1 var(--cd)}
+.pr .vx-attrs{display:grid;grid-template-columns:1fr 1fr;gap:8px 18px}
+.pr .vx-attr{display:grid;grid-template-columns:84px minmax(0,1fr) 28px;align-items:center;gap:8px;font-size:13px;color:var(--mu)}
+.pr .vx-attr b{color:var(--ink);text-align:right}
+.pr .vx-bar{height:8px;border-radius:9px;background:var(--p3);overflow:hidden}.pr .vx-bar i{display:block;height:100%;border-radius:9px;background:linear-gradient(90deg,var(--or),var(--or2));transform-origin:left;animation:vxgrow .9s cubic-bezier(.2,.8,.2,1) both}
+@keyframes vxgrow{from{transform:scaleX(0)}}
+.pr .vx-legacy{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);gap:16px;margin-bottom:16px;align-items:stretch}
+.pr .vx-legacy .vx-card{grid-template-columns:auto minmax(0,1fr)}.pr .vx-legacy .vx-attrbox{grid-column:1/-1}.pr[data-l=tab] .vx-studio,.pr[data-l=phone] .vx-studio,.pr[data-l=land] .vx-studio{grid-template-columns:1fr}.pr[data-l=tab] .vx-card,.pr[data-l=phone] .vx-card,.pr[data-l=land] .vx-card{grid-template-columns:auto minmax(0,1fr)}.pr[data-l=tab] .vx-attrbox,.pr[data-l=phone] .vx-attrbox,.pr[data-l=land] .vx-attrbox{grid-column:1/-1}
+.pr[data-l=phone] .vx-card{grid-template-columns:1fr}.pr[data-l=phone] .vx-no{font-size:60px}.pr[data-l=phone] .vx-facts{grid-template-columns:repeat(2,minmax(0,1fr))}.pr[data-l=phone] .vx-attrs{grid-template-columns:1fr}.pr[data-l=phone] .vx-legacy,.pr[data-l=tab] .vx-legacy,.pr[data-l=land] .vx-legacy{grid-template-columns:1fr}
+/* ---- player profile drawer ---- */
+.pr .pr-drawer{position:fixed;inset:0;z-index:80;background:rgba(5,6,9,.6);backdrop-filter:blur(3px);animation:vxfade .25s both}
+.pr .pr-drawer-in{position:absolute;top:0;right:0;bottom:0;width:min(720px,100%);background:var(--bg2,#0f1115);border-left:1px solid var(--ln2);overflow-y:auto;padding:14px 16px 40px;animation:vxslide .42s cubic-bezier(.2,.8,.2,1) both}
+.pr[data-l=phone] .pr-drawer-in{top:6vh;left:0;width:100%;border-left:0;border-top:1px solid var(--ln2);border-radius:18px 18px 0 0;animation-name:vxup}
+.pr .pr-drawer .g>*{grid-column:1/-1}
+.pr .pr-drawer .pr-npc-vx{margin-bottom:12px}
+@keyframes vxfade{from{opacity:0}}@keyframes vxslide{from{transform:translateX(100%)}}@keyframes vxup{from{transform:translateY(100%)}}
+/* ---- season strip + roster list ---- */
+.pr .pr-strip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:14px}
+.pr .pr-strip .sleg{position:relative;padding:10px 12px;border-radius:12px;background:var(--p1);border:1px solid var(--ln);overflow:hidden}
+.pr .pr-strip .sleg b{display:block;font:700 17px/1.1 var(--cd)}.pr .pr-strip .sleg small{color:var(--di);font-size:12px}
+.pr .pr-strip .sleg.is-live{border-color:var(--or)}.pr .pr-strip .sleg.is-live::after{content:"";position:absolute;left:0;bottom:0;height:3px;width:var(--pct);background:var(--or)}
+.pr .pr-strip .sleg.is-done{background:rgba(52,195,122,.07);border-color:rgba(52,195,122,.35)}
+.pr .pr-strip .sleg .tg{position:absolute;top:9px;right:10px}
+.pr[data-l=phone] .pr-strip{grid-template-columns:1fr}
+.pr .rl-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 10px}
+.pr .rl-search{position:relative;flex:1 1 200px;max-width:300px}.pr .rl-search input{width:100%;height:42px;border-radius:11px;border:1px solid var(--ln2);background:var(--p1);padding:0 12px 0 36px;font-size:16px;color:var(--ink)}.pr .rl-search svg{position:absolute;left:11px;top:12px;width:18px;height:18px;color:var(--di)}
+.pr .rl-note{display:flex;gap:10px;align-items:center;padding:9px 13px;border-radius:12px;background:rgba(74,168,255,.08);border:1px solid rgba(74,168,255,.25);color:#bfe0ff;font-size:13.5px;margin-bottom:10px}
+.pr .rl-list{display:flex;flex-direction:column;gap:6px}
+.pr .rl-h,.pr .rl-r{display:grid;grid-template-columns:40px minmax(180px,2.2fr) 56px repeat(4,minmax(56px,1fr)) 40px 92px minmax(90px,1fr);align-items:center;gap:10px;padding:0 12px}
+.pr .rl-h{height:32px;color:var(--di);font-size:12px;font-weight:700}
+.pr .rl-h button{border:0;background:none;color:inherit;font:inherit;display:flex;align-items:center;gap:4px;justify-content:flex-end;height:32px;padding:0;width:100%;cursor:pointer}
+.pr .rl-h button.l{justify-content:flex-start}.pr .rl-h button.on{color:var(--or2)}
+.pr .rl-r{position:relative;min-height:64px;background:var(--p1);border:1px solid var(--ln);border-radius:14px;cursor:pointer;transition:transform .25s cubic-bezier(.2,.8,.2,1),border-color .2s,background .2s,box-shadow .25s}
+.pr .rl-r:hover{transform:translateY(-2px);border-color:var(--ln2);background:#171a20;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+.pr .rl-r.me{border-color:rgba(255,122,26,.55);background:linear-gradient(90deg,rgba(255,122,26,.1),var(--p1) 40%)}
+.pr .rl-r.open{border-color:var(--or);background:#171a20}
+.pr .rl-r.in{animation:rlin .5s cubic-bezier(.2,.8,.2,1) both;animation-delay:calc(var(--i)*35ms)}
+@keyframes rlin{from{opacity:0;transform:translateY(14px)}}
+.pr .rl-jn{font:800 21px/1 var(--cd);color:var(--di);text-align:center}
+.pr .rl-who{display:flex;align-items:center;gap:10px;padding:6px 0;min-width:0}
+.pr .rl-who b{display:block;font-weight:700;font-size:15px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pr .rl-who small{color:var(--di);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+.pr .rl-ob{display:grid;place-items:center;width:44px;height:44px;border-radius:12px;font:800 22px/1 var(--cd);margin:auto}
+.pr .rl-st{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.pr .rl-st b{font:700 19px/1 var(--cd)}.pr .rl-st .sl{display:none;color:var(--di);font-size:11px;font-weight:600}
+.pr .rl-st .mb{width:100%;height:4px;border-radius:4px;background:var(--p3);overflow:hidden}.pr .rl-st .mb i{display:block;height:100%;background:var(--or);opacity:.75;transform-origin:left;animation:vxgrow .8s cubic-bezier(.2,.8,.2,1) both}
+.pr .rl-gp{text-align:right;color:var(--mu)}
+.pr .rl-na{color:var(--di);font-size:12.5px;text-align:center}
+.pr .rl-tags{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}.pr .rl-tags .tg{height:22px;font-size:11.5px}
+.pr .rl-stats{display:contents}
+.pr .rl-exp{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:18px;padding:4px 0 14px;cursor:default;animation:vxfade .35s both}
+.pr .rl-exp .rel{background:var(--p2);border-radius:12px;padding:12px;font-size:13.5px;color:var(--mu)}.pr .rl-exp .rel b{color:var(--ink)}
+.pr .rl-exp .vx-attrs{grid-template-columns:1fr}
+.pr .rl-msort{display:none}.pr[data-l=phone] .rl-h,.pr[data-l=tab] .rl-h,.pr[data-l=land] .rl-h{display:none}.pr[data-l=phone] .rl-msort,.pr[data-l=tab] .rl-msort,.pr[data-l=land] .rl-msort{display:flex}.pr[data-l=phone] .rl-r,.pr[data-l=tab] .rl-r,.pr[data-l=land] .rl-r{grid-template-columns:minmax(0,1fr) 48px;grid-template-areas:"who ob" "s s";padding:10px 12px;gap:8px}.pr[data-l=phone] .rl-jn,.pr[data-l=tab] .rl-jn,.pr[data-l=phone] .rl-spk,.pr[data-l=tab] .rl-spk,.pr[data-l=phone] .rl-tags,.pr[data-l=tab] .rl-tags,.pr[data-l=land] .rl-jn,.pr[data-l=land] .rl-spk,.pr[data-l=land] .rl-tags{display:none}.pr[data-l=phone] .rl-who,.pr[data-l=tab] .rl-who,.pr[data-l=land] .rl-who{grid-area:who;padding:0}.pr[data-l=phone] .rl-ob,.pr[data-l=tab] .rl-ob,.pr[data-l=land] .rl-ob{grid-area:ob}.pr[data-l=phone] .rl-stats,.pr[data-l=tab] .rl-stats,.pr[data-l=land] .rl-stats{grid-area:s;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}.pr[data-l=phone] .rl-st,.pr[data-l=tab] .rl-st,.pr[data-l=land] .rl-st{align-items:flex-start}.pr[data-l=phone] .rl-st .sl,.pr[data-l=tab] .rl-st .sl,.pr[data-l=land] .rl-st .sl{display:block}
+.pr[data-l=phone] .rl-exp{grid-template-columns:1fr}
+@media (prefers-reduced-motion:reduce){.pr .rl-r,.pr .rl-r.in,.pr .vx-bar i,.pr .rl-st .mb i,.pr .pr-drawer,.pr .pr-drawer-in{animation:none!important;transition:none!important}}
+
+.pr .vx-left{display:flex;flex-direction:column}.pr .vx-left .vx-stage{flex:1;height:auto!important;min-height:520px}.pr[data-l=phone] .vx-left .vx-stage{min-height:440px}
 `;
 function PrStyle() { return <style>{PR_CSS}</style>; }
 
@@ -18983,7 +19661,7 @@ export default function App() {
       <Stage screen={screen} player={player} event={currentEvent}>
       <ScreenFade key={screen}>
       {screen === "start" && <StartHero><StartScreen onStart={handleStart} savedGame={savedGame} onContinue={handleContinue} onViewHallOfFame={() => setScreen("hall_of_fame")} onViewAchievements={() => setScreen("achievement_gallery")} /></StartHero>}
-      {screen === "look" && player && <LookCreatorScreen player={player} onConfirm={handleConfirmLook} />}
+      {screen === "look" && player && <LookStudio player={player} mode="create" onDone={handleConfirmLook} />}
       {screen === "league" && player && <LeagueScreen player={player} onBack={() => setScreen("hub")} />}
       {screen === "comp" && player && player.mdComp && (
         <MdCompScreen player={player} comp={player.mdComp} onPreGame={handleMdPreGame} onSim={handleMdSim} onSimBig={handleMdSimBig}
@@ -19189,6 +19867,7 @@ export default function App() {
       {screen === "legacy" && player && <LegacyScreen player={player} />}
       {screen === "teams" && player && <TeamsScreen player={player} onUpdate={(q) => { setPlayer(q); save(q); }} />}
       {screen === "social" && player && <SocialScreen player={player} onUpdate={(q) => { setPlayer(q); save(q); }} />}
+      {screen === "locker" && player && <LookStudio player={player} mode="locker" onDone={(look) => { const q = { ...player, look }; setPlayer(q); save(q); }} onBack={() => setScreen("hub")} />}
       {screen === "agent" && player && <AgentScreen player={player} onUpdate={(q) => { setPlayer(q); save(q); }}
         onSign={(offer, fee) => handleJoinClub(offer, { ...player, money: Math.max(0, (player.money || 0) - fee), agent: { ...(player.agent || {}), last: null, key: null },
           history: [...(player.history || []), { age: player.age, tierLabel: "Agent", note: `Your agent set up the move to ${offer.club.name} and took ${rm(fee)} (5% of the first year).` }] })} />}
