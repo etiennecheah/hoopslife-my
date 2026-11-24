@@ -3695,7 +3695,7 @@ function saveToHallOfFame(p, careerSummary) {
       trophies: (careerSummary.clubs || []).reduce((sum, c) => sum + (c.titles || 0), 0),
       mvpCount: p.mvpCount || 0,
       dpoyCount: p.dpoyCount || 0,
-      tainted: !!p.tainted, banned: !!p.lifeBan, clubs: prCareerClubs(p),
+      tainted: !!p.tainted, banned: !!p.lifeBan, badges: ((p.rec || {}).b || []).length, clubs: prCareerClubs(p),
       timestamp: Date.now(),
     };
     const raw = window.localStorage.getItem(HALL_OF_FAME_KEY);
@@ -3825,7 +3825,8 @@ function computeClubTerms(p, club, { firstProSigning = false } = {}) {
     league = (rating >= MBL_RATING_THRESHOLD) ? "mbl" : ((p.age <= 20) ? "u20" : "u23");
   }
 
-  const salary = contractMonthlySalary({ leagueId: league, role, club, semiPro, mvpCount: p.mvpCount, dpoyCount: p.dpoyCount });
+  let salary = contractMonthlySalary({ leagueId: league, role, club, semiPro, mvpCount: p.mvpCount, dpoyCount: p.dpoyCount });
+  if (p.goalsTalk) salary = Math.round(salary * 1.1 / 100) * 100;
   const years = offeredContractYears(p, { firstProSigning });
   return { league, role, salary, firstOption, semiPro, years };
 }
@@ -6580,6 +6581,7 @@ function mdRecord(comp, gi, g, p) {
     const s = comp.stats[key] || (comp.stats[key] = { t: team, n: b.name, imp: b.imp ? 1 : 0, g: 0, min: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, fgm: 0, fga: 0, tpm: 0, tpa: 0, ftm: 0, fta: 0, tov: 0, fin: 0 });
     if (b.min <= 0) return;
     s.t = team; s.g++; s.min += b.min; s.l5 = (s.l5 || []).concat(b.pts).slice(-5);
+    s.hi = [Math.max((s.hi || [0, 0, 0])[0], b.pts), Math.max((s.hi || [0, 0, 0])[1], b.reb), Math.max((s.hi || [0, 0, 0])[2], b.ast)];
     ["pts", "reb", "ast", "stl", "blk", "fgm", "fga", "tpm", "tpa", "ftm", "fta", "tov"].forEach(k => { s[k] += b[k]; });
     if (gm.ph === "f") s.fin += b.pts + b.reb + b.ast + b.stl + b.blk;
   });
@@ -7239,6 +7241,7 @@ function MdCompScreen({ player, comp, onPreGame, onSim, onSimBig, onSimAll, onFi
               <div style={{ font: "500 11px Inter,sans-serif", color: C.chalkDim, marginTop: 8 }}>FG {line.fgPct}% · 3PT {line.threePct}% · FT {line.ftPct}%</div>
             </div>
           )}
+          <GoalsPanel player={player} comp={comp} mode="comp" />
           <div className="rd-card" style={{ padding: 12 }}>
             <div className="rd-k" style={{ marginBottom: 6 }}>Your results</div>
             {!played.length && <p style={{ font: "400 12px Inter,sans-serif", color: C.chalkDim, margin: 0 }}>No games played yet.</p>}
@@ -7738,7 +7741,7 @@ function prCrumb(p) {
   return `Season ${p.year || ""}${lg ? " · " + lg : ""}${p.teamName ? " · " + p.teamName : ""}`;
 }
 const PR_TITLES = {
-  legacy: "Legacy", teams: "Teams", investments: "Investments", social: "Social", agent: "Agent", locker: "Locker room", md_breaking: "Breaking news", hall_of_fame: "Hall of Fame", achievement_gallery: "Achievements", leg_offers: "League-only offers", dl_invite: "D-League invite",
+  goals_intro: "Coach's targets", legacy: "Legacy", teams: "Teams", investments: "Investments", social: "Social", agent: "Agent", locker: "Locker room", md_breaking: "Breaking news", hall_of_fame: "Hall of Fame", achievement_gallery: "Achievements", leg_offers: "League-only offers", dl_invite: "D-League invite",
   offseason_plan: "Off-season", training: "Training", creation_build: "Build your player", event: "Career event", result: "Season result",
   u15_result: "State selection", u15_tournament: "Tournament result", u15_shortlist: "Youth shortlist", u15_bootcamp_result: "Bukit Jalil",
   age16_u16_result: "Age 16", age16_u17_result: "Age 16", a17_result: "Age 17", a17_shortlist: "U18 shortlist", a17_bootcamp_result: "Bukit Jalil",
@@ -7913,7 +7916,7 @@ function prBgSeason(year, kind) {
     const comp = mdNewLeague({ kind: kind || "mbl", year, p, world, names: MD_NAMES, clubsMeta: prClubsMeta(kind || "mbl"), myClub: null, myRole: "Bench" });
     let guard = 0;
     while (!comp.done && guard++ < 900) mdSimUntilMine(comp, p, true);
-    PR_BG[k] = { ...prLeagueSummary(comp), lines: npcLines(comp), aw: mdAwards(comp, { rookies: new Set(comp.rookies || []) }) };
+    PR_BG[k] = { ...prLeagueSummary(comp), lines: npcLines(comp), aw: mdAwards(comp, { rookies: new Set(comp.rookies || []) }), rec: (kind || "mbl") === "mbl" ? recFromComp(comp) : null };
   } catch (e) { PR_BG[k] = null; }
   return PR_BG[k];
 }
@@ -7942,7 +7945,7 @@ function prLeaguesFor(p, all) {
 /* =====================================================================
    SHELL — prototype side menu, top bar and phone tabs
 ===================================================================== */
-const PR_COMP_SCREENS = new Set(["comp", "md_pregame", "md_live", "md_box"]);
+const PR_COMP_SCREENS = new Set(["comp", "md_pregame", "md_live", "md_box", "goals_intro"]);
 const PR_NAV_IC = { hub: "home", league: "table", pathway: "route", lifestyle_spending: "cash", career_highlights: "star", legacy: "crown", teams: "users", investments: "chart", social: "phone", agent: "user", matchday: "play", locker: "pen" };
 function Shell({ show, screen, player, onNav, onUpdate, children }) {
   const lay = useLayoutMode();
@@ -8349,6 +8352,7 @@ function Hub({ player, onPlaySeason, onRetireConsider, onManageInvestments, onRe
         )}
         {!youth && <PrLeagueMini L={L0} onOpenLeague={onOpenLeague} />}
         {!youth && <PrLeaders L={L0} player={p} onOpenLeague={onOpenLeague} />}
+        {!youth && <GoalsHubCard player={p} onOpen={inComp ? onBackToComp : undefined} />}
         {acts.length > 0 && (
           <section className="pn c12" data-a="">
             <h3><Ic n="cash" /> Career & money<small>{rm(p.money)} in the bank</small></h3>
@@ -9118,6 +9122,7 @@ const ResultScreen = memo(function ResultScreen({ summary, player, onContinue })
           </section>
         )}
       </div>
+      {sm.goals && <div className="g" style={{ marginTop: 16 }}><GoalsReview review={sm.goals} player={p} /></div>}
       <PrNext disabled={advancing} onClick={handleAdvance}>{advancing ? "Advancing…" : sm.leg ? `On to the ${sm.nextLabel}` : "Continue"}</PrNext>
     </PrPage>
   );
@@ -9129,6 +9134,7 @@ function MidseasonRecapScreen({ player, onContinue }) {
     <PrResult player={player} tc={prTeamColors(player)[0]} medal={<PrMedalK k="silver" icon="clock" />} lbl={<>Midseason · {player.teamName}</>} title="First half in the books"
       text={s ? `${half.gp1 || s.gp || 0} games in, playing as a ${player.starterStatus}. The second half starts now.` : "The second half starts now."}
       statTitle="First half" stats={s ? [["PPG", s.ppg.toFixed(1)], ["RPG", s.rpg.toFixed(1)], ["APG", s.apg.toFixed(1)], ["Role", player.starterStatus], ["Coach", player.relationships.coach], ["Team", player.relationships.team]] : []}
+      extra={player.mdComp ? <GoalsPanel player={player} comp={player.mdComp} mode="checkin" /> : null}
       cta="On to the second half" onContinue={onContinue} />
   );
 }
@@ -9353,7 +9359,7 @@ function LeagueScreen({ player, onBack }) {
       <PrHead lbl={<><PrLogo k={s.kind === "mbl" ? "c_mbl" : "c_dleague"} s={22} /> {L.mine ? "Your league" : "Simulated season"} · {s.year}{s.done ? " · final" : ` · ${s.played} of ${s.total} games played`}</>}
         title={lgName} desc={L.mine ? "Every game of your season, simulated possession by possession." : (s.kind === "mbl" ? "Real clubs and real players: rosters age, move and change imports every year. Results are simulated by the same engine as your games." : "Every real local of the right age who isn't in the MBL, placed at a club and simulated by the same engine as your games.")}
         right={leagues.length > 1 ? <div className="tabs" style={{ marginBottom: 0 }}>{leagues.map(l => <button key={l.id} className={l.id === L.id ? "on" : ""} onClick={() => setWhich(l.id)}>{l.label}</button>)}</div> : null} />
-      <div className="tabs" style={{ maxWidth: 640 }}>{[["table", "Standings"], ["leaders", "Leaders"], ["awards", "Awards race"], ["games", "Results"], ["po", "Playoffs"]].map(([id, l]) => <button key={id} className={tab === id ? "on" : ""} onClick={() => setTab(id)}>{l}</button>)}</div>
+      <div className="tabs" style={{ maxWidth: 640 }}>{[["table", "Standings"], ["leaders", "Leaders"], ["awards", "Awards race"], ["games", "Results"], ["po", "Playoffs"], ["rec", "Records"]].map(([id, l]) => <button key={id} className={tab === id ? "on" : ""} onClick={() => setTab(id)}>{l}</button>)}</div>
       {tab === "table" && (
         <section className="pn" data-a="" style={{ overflowX: "auto" }}>
           <table className="mini-t">
@@ -9396,6 +9402,7 @@ function LeagueScreen({ player, onBack }) {
         </div>
       )}
       {tab === "awards" && <PrAwardRace s={s} p={p} nm={nm} />}
+      {tab === "rec" && <RecordsBook player={p} />}
       {tab === "games" && (
         <section className="pn" data-a="">
           {res.length === 0 && <p style={{ color: "var(--di)", margin: 0 }}>No games played yet.</p>}
@@ -9592,6 +9599,7 @@ function MdBoxScreen({ player, comp, gi, game, onContinue }) {
         ))}
       </div>
       <PrNext onClick={onContinue}>Back to the schedule</PrNext>
+      <RecToasts ev={(comp.recEv || {})[gi]} />
     </PrPage>
   );
 }
@@ -10658,7 +10666,7 @@ function LegacyScreen({ player, focus, onBack, onPlayAgain }) {
   const list0 = ids.filter(id => achF === "all" ? true : achF === "on" ? isOn(id) : !isOn(id)).sort((a, b) => (isOn(b) ? 1 : 0) - (isOn(a) ? 1 : 0) || (mine.has(b) ? 1 : 0) - (mine.has(a) ? 1 : 0));
   const cut = Math.max(12, ids.filter(isOn).length + 4);
   const list = achAll || achF === "on" ? list0 : list0.slice(0, cut);
-  const sorted = entries.slice().sort((a, b) => sort === "best" ? (b.peakOverall || 0) - (a.peakOverall || 0) || (b.trophies || 0) - (a.trophies || 0) : (b.timestamp || 0) - (a.timestamp || 0));
+  const sorted = entries.slice().sort((a, b) => sort === "best" ? ((b.peakOverall || 0) + (b.badges || 0) * 0.5) - ((a.peakOverall || 0) + (a.badges || 0) * 0.5) || (b.trophies || 0) - (a.trophies || 0) : (b.timestamp || 0) - (a.timestamp || 0));
   const shown = all ? sorted : sorted.slice(0, 8);
   const top = sorted[0];
   const stats = [["Careers", entries.length], ["Best peak", entries.length ? Math.max(...entries.map(e => e.peakOverall || 0)) : "—"], ["Titles", entries.reduce((s, e) => s + (e.trophies || 0), 0)], ["MVPs", entries.reduce((s, e) => s + (e.mvpCount || 0), 0)]];
@@ -10691,6 +10699,7 @@ function LegacyScreen({ player, focus, onBack, onPlayAgain }) {
         <div className="pn" style={{ padding: 0, overflow: "hidden" }}><Vox3D look={playerLook(p)} height={p.height} h={440} chip={p.retired ? "Retired" : p.teamName || null} /></div>
         <PrPlayerCard player={p} />
       </div>}
+      {p && <div className="g" style={{ marginBottom: 16 }}><RecChase player={p} /></div>}
       <div className="g">
         <section className="c5 l12" data-a="">
           {p ? <PrCareerCard p={p} /> : top ? <PrCareerCard entry={top} /> : <div className="pn"><p style={{ color: "var(--di)", margin: 0 }}>Finish a career to put a card here.</p></div>}
@@ -10927,6 +10936,7 @@ function NpcProfile({ player, k, y, onClose, onTeam, onUpdate }) {
         <div style={{ minWidth: 0, flex: 1 }}>
           <div className="lbl" style={{ color: "var(--or2)" }}>{now.imp ? `Import${now.nat ? " · " + now.nat : ""}` : now.gen ? "Generated player" : "Real player · HoopStatsMY"}</div>
           <h2>{now.n}</h2>
+          {(() => { const rl = recProfileLine(p, k); return rl ? <div className="rc-pl"><Ic n="book" /> {rl.text} · {recFmt(rl.v)}</div> : null; })()}
           <div className="ticks">
             {now.st && !now.imp && <Tg><PrFlag state={now.st} w={18} /> {shortHome(now.st)}</Tg>}
             <Tg>{now.pos}</Tg>{age != null && <Tg>Age {age}</Tg>}{now.ht ? <Tg>{now.ht}cm</Tg> : null}{now.no ? <Tg>#{now.no}</Tg> : null}
@@ -12522,6 +12532,811 @@ function LookStudio({ player, mode, onDone, onBack }) {
     </PrPage>
   );
 }
+/* =====================================================================
+   RECORDS & MILESTONES — the MBL record book. Starts from real MBL
+   2022–2024 box scores (HoopStatsMY) and grows with every season this
+   career simulates: your own MBL seasons and the background league.
+===================================================================== */
+const REC_SEED = {"y0":2022,"y1":2024,"champ":{"2022":"ns_matrix","2023":"ns_matrix","2024":"johor_tigers"},"p":[["r2180746","Dequan Jaylin Abrom",1,34,672,199,133,90,1,1,"ns_matrix"],["r2252562","Chun Hong Ting",0,37,616,278,121,64,16,2,"ns_matrix"],["r2371569","Yi Hou Wong",0,45,605,170,81,86,6,2,"ns_matrix"],["s1960004","Moses Morgan",1,29,575,241,74,36,10,0,"johor_tigers"],["r2786760","Anthony Trevor Moe",1,29,564,410,55,36,40,0,"x:Putrajaya Parkcity Heat"],["r2341473","Yee Tong Heng",0,47,547,161,278,107,3,1,"johor_tigers"],["r2252605","Jayson Shu Wen Lee",0,38,503,177,77,47,2,0,"penang_sunrise"],["r2371555","Jia Jun Lee",0,42,483,154,90,43,3,0,"penang_sunrise"],["r2180764","Arinze Thomas Chidom",1,21,460,217,69,71,41,0,"johor_tigers"],["r1957810","John Khai Chiek Wong",0,51,419,199,99,63,9,1,"johor_tigers"],["r1973897","Yong Gan Wee",0,42,415,107,95,69,2,0,"sarawak_cola"],["r2180755","Jordan Wayne Tolbert",1,18,401,250,62,49,21,0,"penang_sunrise"],["r2371565","Xian Fu Ooi",0,41,388,144,46,34,7,2,"x:Putrajaya Parkcity Heat"],["r1845447","Zhen Jie Tem",0,37,381,104,53,38,0,0,"sarawak_cola"],["r2180754","Cameron Wallace Jasper Satterwhite",1,19,381,139,75,44,18,0,"penang_sunrise"],["r620479","Chee Wei Lim",0,50,378,128,137,90,1,1,"johor_tigers"],["r2370342","Tychique Bosango",1,22,358,223,71,43,18,0,"x:Putrajaya Parkcity Heat"],["r1959967","Tevin Glass",1,13,341,191,54,25,11,0,"johor_tigers"],["r2786758","Amir Darrion Wiiliams",1,21,336,274,39,26,37,2,"ns_matrix"],["s1960001","Charles Wayne Garcia Jr",1,11,302,145,37,15,13,0,"x:Singapore Adroit"],["r2371567","Tian Yuan Kuek",0,42,301,141,43,21,15,1,"ns_matrix"],["r2370355","Alexander Mudronja",1,14,267,98,68,20,8,0,"sarawak_cola"],["r2371557","Joon Kang Lee",0,50,256,118,119,59,4,1,"johor_tigers"],["r2379689","Frederick Lee Jones Lish",1,12,246,75,26,25,1,0,"penang_sunrise"],["r2092917","Jia Hao Hiew",0,47,234,90,74,49,3,2,"ns_matrix"],["r2092920","Wee Yiang De",0,40,231,117,68,43,10,1,"ns_matrix"],["r2385519","Carl Bird Jabari",1,10,211,64,37,18,3,1,"johor_tigers"],["r2370352","Jock Henry Perry",1,14,198,177,18,4,6,0,"sarawak_cola"],["r2385518","Anigwe Christian",1,10,187,108,22,6,13,1,"johor_tigers"],["r1959974","Wutipong Dasom",1,12,185,61,22,10,4,0,"johor_tigers"],["s1242701","Zhong Han Wong",1,11,174,78,30,15,3,0,"x:Singapore Adroit"],["r2198572","Lamonte Bearden",1,8,165,51,58,16,3,0,"kl_aseel"],["r1960005","Teck Hwa Gan",0,37,153,79,17,18,3,0,"sarawak_cola"],["r2252617","Wan Seong Lim",0,39,152,93,25,15,5,0,"penang_sunrise"],["r2786676","Jun Kai John Tang",0,36,145,40,33,11,4,1,"johor_tigers"],["r2379688","Yevgen Sakhniuk",1,12,145,122,70,11,7,0,"penang_sunrise"],["r107060","Yew Thung Chan",0,24,142,65,41,27,5,0,"x:Putrajaya Parkcity Heat"],["r1959982","Jean-Luc Wellesley Morel",1,9,141,153,15,8,29,0,"penang_sunrise"],["r2371570","Zi Fueng Chang",0,42,137,68,24,12,1,2,"ns_matrix"],["r2370334","Esque Tyrone Kimani",1,7,134,65,17,8,3,1,"johor_tigers"],["r2385492","Jackson Jr Vance",1,8,134,53,11,8,2,0,"ns_matrix"],["r556382","Run Sam Yap",0,30,132,50,25,22,1,0,"penang_sunrise"],["r1962006","Jeff Alvin Viernes",1,7,129,28,27,9,0,1,"ns_matrix"],["r2370330","John Angok Akec Madut",1,7,128,79,24,19,7,0,"ns_matrix"],["r2302680","Jing Hung Lee",0,31,125,117,18,14,14,0,"ns_matrix"],["r2370364","Jiar Yang Tan Goh",0,32,124,34,31,12,2,0,"sarawak_cola"],["r1959994","Jun Manzo",1,8,123,27,28,7,0,0,"kl_aseel"],["r2302708","Zheng Yang Chong",0,10,123,28,28,28,2,0,"x:UCSI Rising Star"],["r1959986","Kittitep Lane Dasom",1,9,120,36,27,16,1,0,"penang_sunrise"],["r2084326","Lakksman Ganapathy",0,27,120,92,32,3,1,0,"x:Putrajaya Parkcity Heat"],["r2092914","Kok Hou Teo",0,37,118,78,105,42,0,1,"sarawak_cola"],["r2191275","Marcellus Roberts",0,11,116,130,22,18,7,0,"x:UCSI Rising Star"],["r2370339","Andre Terrence",1,7,116,77,10,8,0,1,"johor_tigers"],["r2370332","Toluwalope Joseph Obasa",0,15,113,102,11,14,38,0,"ns_matrix"],["r2786658","Damian Chong Kee Ghai",0,29,112,54,17,13,1,1,"johor_tigers"],["r1959996","Jai Reyes",1,10,111,26,34,9,0,0,"kl_aseel"],["r2341474","Jin Yen Chin",0,26,108,137,18,18,5,0,"penang_sunrise"],["r2341467","Lok Seng Mak",0,39,107,106,24,19,7,1,"ns_matrix"],["r2385838","Stephen Lane Hurt",0,10,107,75,19,2,10,1,"johor_tigers"],["r1846127","Wei Long Tan",0,22,104,88,14,15,2,1,"ns_matrix"],["r27509","Yoong Jing Kwaan",0,31,102,99,31,9,5,0,"sarawak_cola"],["r1959973","Ryan Smith",1,6,101,114,15,7,10,0,"x:Pegasus Sports"],["r2371573","Wei Yong Ong",0,32,100,127,129,76,6,2,"ns_matrix"],["s1967621","Salvador Andrian Celada",1,5,100,19,18,9,1,0,"x:Pegasus Sports"],["r2371556","Jason Hao Wen Khor",0,29,97,60,40,27,1,0,"penang_sunrise"],["r2778711","Maegen Mahadevan Suresh Mahadevan",0,36,96,158,30,27,3,0,"ns_matrix"],["r912376","Wai Kin Chua",0,24,96,41,31,14,4,0,"x:UCSI Rising Star"],["r1287289","Liang Chuan Yek",0,18,96,62,17,12,2,0,"sarawak_cola"],["s2379687","Raymond Edward Miller Jr",1,12,95,78,14,9,10,0,"penang_sunrise"],["r2318312","Brian Kia Wee Tang",0,33,94,39,14,4,2,1,"johor_tigers"],["r2385491","Charles Starling Alexander",1,7,84,65,11,14,5,0,"sarawak_cola"],["r2092911","Wen Qian Anthony Liew",0,40,80,107,34,22,9,2,"sarawak_cola"],["r2186232","Griffin Brachon Lanalt",1,4,78,31,31,11,2,0,"kl_aseel"],["r27734","Wing Jet Tan",0,9,75,18,12,8,0,0,"sarawak_cola"],["r1287209","Yan Qing Goh",0,9,74,48,9,8,4,0,"penang_sunrise"],["r54872","Jonathan Zhong Han Wong",0,10,73,32,35,6,0,1,"ns_matrix"],["r2252596","Kok Weng Lai",0,14,72,18,9,11,2,0,"penang_sunrise"],["r2370335","Dandre Lee Tyrone",0,7,71,49,12,8,6,1,"johor_tigers"],["r2371560","Jun Xian Foo",0,23,70,22,7,5,0,0,"penang_sunrise"],["r1286739","Chi Sheng Tan",0,20,68,38,38,11,0,0,"x:UCSI Rising Star"],["r2568842","Zhen Yang Chong",0,10,68,28,14,10,2,0,"x:Pegasus Sports"],["r1959976","Kemark Carino",1,10,64,75,13,5,20,0,"x:Pegasus Sports"],["r27512","Li Wei Chee",0,23,57,57,14,6,7,0,"sarawak_cola"],["r2370353","Aaron Romare Burt",0,7,57,26,10,4,2,0,"sarawak_cola"],["r1959968","Dasom Apisittinan Lane",1,10,55,44,30,20,0,0,"johor_tigers"],["r2370324","Talley Jr Zoran",1,4,55,21,15,7,2,0,"penang_sunrise"],["s1960019","Russel Low",1,5,54,29,12,7,10,0,"x:Singapore Adroit"],["r1959984","Toan Anh Nguyen",1,7,51,11,16,6,0,0,"penang_sunrise"],["r2615596","Kin Sing Pan",0,12,51,21,17,12,3,0,"x:Putrajaya Parkcity Heat"],["r2778709","Michael Munnesvicky",0,19,50,19,10,6,1,1,"ns_matrix"],["r1954877","Hoong Shen Ho",0,29,50,32,15,9,1,1,"johor_tigers"],["r2615561","Chun Kit Sin",0,12,50,27,31,16,0,0,"x:Putrajaya Parkcity Heat"],["r1954885","Jin Xi Yap",0,18,49,54,9,2,2,0,"x:UCSI Rising Star"],["r1959969","Cabanag Jeramer",0,6,48,15,5,9,0,0,"johor_tigers"],["s2304364","Zhi Shin Chin",0,11,48,36,12,4,1,0,"johor_tigers"],["r2180756","Steven Anthony Toyloy",0,5,45,32,12,5,2,0,"x:UCSI Rising Star"],["r2252589","Joon Yi Wee",0,26,41,26,10,11,0,0,"johor_tigers"],["r2568823","Jia Sheng Lee",0,17,40,43,24,3,0,0,"x:Putrajaya Parkcity Heat"],["r1846134","Wei Yuong Liew",0,12,37,32,14,9,3,1,"ns_matrix"],["r2252252","Macoumba Mouhamed",1,11,37,25,7,7,0,0,"x:Putrajaya Parkcity Heat"],["r556411","Wei Chew Teng",0,19,35,31,5,4,2,0,"penang_sunrise"],["r1966705","Prince Nnamdi Eze",1,7,32,66,9,1,13,0,"kl_aseel"],["s1973854","Qing De Wu",1,5,31,24,5,6,1,0,"x:Singapore Adroit"],["r2370325","Braelen Bridges Marquis",0,4,31,24,4,1,1,0,"penang_sunrise"],["r2370317","Byron Ray Maxwell",0,3,31,12,4,3,0,0,"penang_sunrise"],["r861915","Zhen Kang Leong",0,7,30,17,7,9,0,0,"x:Pegasus Sports"],["r2252636","Yoon Khong Phang",0,20,30,20,3,0,1,0,"penang_sunrise"],["s1960006","Shi Yu Ng",1,7,29,22,4,0,1,0,"x:Singapore Adroit"],["r1885900","Yi Hang Te",0,15,29,11,6,6,1,1,"johor_tigers"],["s1960007","Naqib Borhan",1,7,27,26,3,3,1,0,"x:Singapore Adroit"],["r1287293","Leng Siang Teow",0,9,26,18,4,7,1,0,"x:Pegasus Sports"],["r1287140","Kah An Soong",0,7,25,14,2,0,0,0,"kl_aseel"],["s1287270","Qing Huang Toh",1,4,24,13,6,2,0,0,"x:Singapore Adroit"],["r2786687","Kuan Hong Tan",0,14,24,29,4,7,1,0,"x:Putrajaya Parkcity Heat"],["s1960002","Tim Alan Van Waale",1,8,23,21,3,3,2,0,"x:Singapore Adroit"],["r2125928","Edward Zhi Liang Siau",0,11,23,14,4,1,0,0,"penang_sunrise"],["r2125903","Barry Tsung Lik Kong",0,7,21,13,1,3,0,0,"x:Pegasus Sports"],["s1973883","Wei Long Wong",1,4,21,16,8,7,0,0,"x:Singapore Adroit"],["r2092834","Yip Hong Chan",0,12,21,10,8,6,0,0,"penang_sunrise"],["r2092916","Sharwhin Siva Ragu",0,8,20,36,2,1,3,2,"ns_matrix"],["s1242703","Zhen Qiang Zhou",1,6,19,7,9,6,0,0,"x:Singapore Adroit"],["r2105612","V Lavin Raj",0,7,19,15,3,2,0,0,"johor_tigers"],["s2252660","Chien Chung Lee",1,7,18,24,1,3,2,0,"penang_sunrise"],["r346957","Delvin Kok Chiang Goh",0,6,17,14,11,4,3,1,"ns_matrix"],["r107215","Hi Yih Yeong",0,7,17,12,11,7,0,0,"x:Putrajaya Parkcity Heat"],["r2568812","Guang Yang Kiu",0,21,16,31,17,13,2,0,"penang_sunrise"],["r2370363","Chun Hong Yap",0,9,15,7,6,1,0,0,"x:Putrajaya Parkcity Heat"],["r1287262","Shean Lin Kuan",0,6,11,6,2,1,0,0,"x:Pegasus Sports"],["r1974682","Jun Yuan Bong",0,4,11,3,0,1,0,0,"johor_tigers"],["r2371572","Zi Hong Cheah",0,3,11,7,2,1,0,0,"penang_sunrise"],["r2371568","Hensler Xue Sen Kwan",0,7,10,3,8,3,3,0,"x:Putrajaya Parkcity Heat"],["r2252670","Chun Kit Sim",0,7,8,7,9,5,0,0,"kl_aseel"],["r2252635","Yong Jun Ng",0,4,7,6,1,0,1,0,"johor_tigers"],["s1960022","Desmond Oh Wei Jie",1,2,6,4,1,1,0,0,"x:Singapore Adroit"],["r2371566","Soon Guan Low",0,3,6,2,1,0,0,0,"x:Putrajaya Parkcity Heat"],["r1286737","Chee Wey Tan",0,2,6,0,2,0,1,0,"ns_matrix"],["r1091368","Wei Yuan Eng",0,3,5,2,1,1,0,0,"penang_sunrise"],["r2084311","Inpik Lewis",0,6,5,2,5,2,0,0,"kl_aseel"],["r2371571","Tze Zam Chew",0,3,5,6,1,1,0,0,"x:Putrajaya Parkcity Heat"],["r1287231","Wei Hao Poh",1,4,4,5,4,0,0,0,"x:Singapore Adroit"],["r1960017","Yeong Wooi Khaw",1,5,4,23,2,1,1,0,"x:Singapore Adroit"],["r1957820","Yu Zen Khor",0,2,4,2,0,0,1,0,"johor_tigers"],["r556405","Di Yang Tee",0,16,4,6,5,1,0,0,"penang_sunrise"],["r2252627","Xin Zhi Chua",0,3,4,10,1,0,0,0,"penang_sunrise"],["r1846144","Ting Jun Foo",0,5,3,3,12,1,0,1,"ns_matrix"],["r2615642","Suen Ye Er",0,1,3,2,1,0,0,0,"johor_tigers"],["r1959970","Ming Da Chong",0,2,3,1,1,0,0,0,"johor_tigers"],["r2786750","Eman Ajmal Jamil",0,2,3,0,0,0,0,1,"ns_matrix"],["r2797840","Ivan Jia Yu Chia",0,1,3,0,0,0,0,1,"johor_tigers"],["r1958899","Yi Kang Teoh",0,7,2,1,4,3,0,0,"x:Pegasus Sports"],["r1287136","Jo Ee Kwan",0,3,2,2,1,0,0,0,"kl_aseel"],["s1960015","Herman Chan",1,3,2,7,0,0,0,0,"x:Singapore Adroit"],["r2252634","Yi Yang Ong",0,4,2,2,0,0,0,0,"johor_tigers"],["r556413","Jun Chiu Bong",0,1,2,2,1,0,0,0,"johor_tigers"],["r1958881","Zhen Chyuan Kang",0,1,2,2,1,0,1,1,"ns_matrix"],["r2304382","Syahrul Ridzuan Rosli",0,6,2,12,1,0,1,0,"x:UCSI Rising Star"],["r2180750","Anton Gill",0,1,2,1,2,0,0,0,"kl_aseel"],["r2370362","Chee Huei Liaw",0,2,2,1,0,0,0,0,"sarawak_cola"],["r2084370","Yu Hong Wan",0,1,0,0,0,0,0,0,"kl_aseel"],["r2568856","Yu Xiang Chin",0,1,0,1,0,0,0,0,"kl_aseel"],["s1960014","Mitchell Frederick Folkoff",1,3,0,15,3,4,0,0,"x:Singapore Adroit"],["r2125915","Wenn Yunn Liew",0,1,0,0,0,0,0,0,"kl_aseel"],["r427791","Jia Yung Tong",0,1,0,0,0,2,0,0,"johor_tigers"],["r2304381","Nik Muhammad Hafizudin Nik Hamzah",0,1,0,4,2,0,0,1,"ns_matrix"],["r2568815","Hee Wei Ng",0,1,0,0,0,0,0,0,"penang_sunrise"],["r1845450","Zhong Shin Thea",0,1,0,0,0,0,0,0,"sarawak_cola"]],"hi":{"pts":[[49,"r1962006","Jeff Alvin Viernes","ns_matrix",2022],[46,"s1960001","Charles Wayne Garcia Jr","x:Singapore Adroit",2022],[42,"r2180746","Dequan Jaylin Abrom","ns_matrix",2024],[40,"r2252605","Jayson Shu Wen Lee","penang_sunrise",2022],[38,"r1959967","Tevin Glass","johor_tigers",2022],[37,"s1960001","Charles Wayne Garcia Jr","x:Singapore Adroit",2022],[37,"r2180764","Arinze Thomas Chidom","johor_tigers",2023],[37,"r2252605","Jayson Shu Wen Lee","penang_sunrise",2024],[37,"r2385519","Carl Bird Jabari","johor_tigers",2024],[36,"s1960004","Moses Morgan","x:Singapore Adroit",2022]],"reb":[[31,"r1959982","Jean-Luc Wellesley Morel","penang_sunrise",2022],[27,"r2786758","Amir Darrion Wiiliams","ns_matrix",2022],[24,"r1959982","Jean-Luc Wellesley Morel","penang_sunrise",2022],[23,"r1959973","Ryan Smith","x:Pegasus Sports",2022],[23,"r1959973","Ryan Smith","x:Pegasus Sports",2022],[23,"r1959982","Jean-Luc Wellesley Morel","penang_sunrise",2022],[23,"r2786758","Amir Darrion Wiiliams","ns_matrix",2022],[23,"r2786760","Anthony Trevor Moe","x:Putrajaya Parkcity Heat",2024],[22,"r1966705","Prince Nnamdi Eze","kl_aseel",2022],[22,"r2180755","Jordan Wayne Tolbert","penang_sunrise",2023]],"ast":[[13,"r2371573","Wei Yong Ong","ns_matrix",2024],[12,"r1962006","Jeff Alvin Viernes","ns_matrix",2022],[12,"r2379688","Yevgen Sakhniuk","penang_sunrise",2024],[11,"r2092914","Kok Hou Teo","penang_sunrise",2023],[11,"r2186232","Griffin Brachon Lanalt","kl_aseel",2023],[11,"r2198572","Lamonte Bearden","kl_aseel",2023],[11,"r2198572","Lamonte Bearden","kl_aseel",2023],[10,"r1959996","Jai Reyes","kl_aseel",2022],[10,"r1973897","Yong Gan Wee","kl_aseel",2023],[10,"r2341473","Yee Tong Heng","johor_tigers",2023]]},"c":{"penang_sunrise":{"p":[["r2252605",38,503,177,77,47,2],["r2180755",18,401,250,62,49,21],["r2180754",19,381,139,75,44,18],["r2379689",12,246,75,26,25,1],["r2371567",18,174,69,24,13,11],["r2379688",12,145,122,70,11,7],["r1959982",9,141,153,15,8,29],["r2371555",16,135,53,21,11,1],["r1959986",9,120,36,27,16,1],["r2371556",29,97,60,40,27,1],["s2379687",12,95,78,14,9,10],["r2341474",16,84,99,15,16,5],["r1287209",9,74,48,9,8,4],["r2371560",23,70,22,7,5,0],["r2092920",8,66,38,20,10,3],["r2092914",19,63,55,79,26,0],["r2786658",8,60,21,6,8,0],["r2370324",4,55,21,15,7,2],["r1959984",7,51,11,16,6,0],["r2252617",16,44,42,7,5,1],["r556411",19,35,31,5,4,2],["r2370325",4,31,24,4,1,1],["r2370317",3,31,12,4,3,0],["r2252636",20,30,20,3,0,1],["r2252596",4,29,9,6,6,0],["r2341467",15,28,36,8,6,3],["r1286739",9,24,19,13,5,0],["r2125928",11,23,14,4,1,0],["r2092834",12,21,10,8,6,0],["r2778709",6,20,6,4,4,0],["r556382",7,19,13,6,8,0],["s2252660",7,18,24,1,3,2],["r2568812",21,16,31,17,13,2],["r2371572",3,11,7,2,1,0],["r1091368",3,5,2,1,1,0],["r556405",16,4,6,5,1,0],["r2252627",3,4,10,1,0,0],["r2568815",1,0,0,0,0,0]],"hi":{"pts":[[40,"r2252605","Jayson Shu Wen Lee",2022],[37,"r2252605","Jayson Shu Wen Lee",2024],[35,"r2379689","Frederick Lee Jones Lish",2024]],"reb":[[31,"r1959982","Jean-Luc Wellesley Morel",2022],[24,"r1959982","Jean-Luc Wellesley Morel",2022],[23,"r1959982","Jean-Luc Wellesley Morel",2022]],"ast":[[12,"r2379688","Yevgen Sakhniuk",2024],[11,"r2092914","Kok Hou Teo",2023],[9,"r2180754","Cameron Wallace Jasper Satterwhite",2023]]}},"kl_aseel":{"p":[["r2786760",17,380,261,29,13,26],["r1845447",27,360,94,46,32,0],["r1973897",28,243,68,65,50,2],["r2198572",8,165,51,58,16,3],["r1960005",28,138,77,15,17,3],["r1959994",8,123,27,28,7,0],["r2302680",26,114,107,16,14,13],["r1959996",10,111,26,34,9,0],["r2186232",4,78,31,31,11,2],["r2370364",18,76,21,20,7,2],["r1846127",11,74,58,10,13,2],["r27509",17,73,56,22,5,2],["r2778711",24,71,140,24,16,3],["r2084326",17,61,60,27,2,0],["r912376",11,52,19,15,5,4],["r2252617",10,43,25,11,7,4],["r1966705",7,32,66,9,1,13],["r1287140",7,25,14,2,0,0],["r2568823",6,9,6,1,0,0],["r2252670",7,8,7,9,5,0],["r2084311",6,5,2,5,2,0],["r1287136",3,2,2,1,0,0],["r2180750",1,2,1,2,0,0],["r2084370",1,0,0,0,0,0],["r2568856",1,0,1,0,0,0],["r2125915",1,0,0,0,0,0]],"hi":{"pts":[[35,"r2786760","Anthony Trevor Moe",2023],[32,"r2786760","Anthony Trevor Moe",2023],[31,"r2786760","Anthony Trevor Moe",2023]],"reb":[[22,"r1966705","Prince Nnamdi Eze",2022],[21,"r2786760","Anthony Trevor Moe",2023],[21,"r2786760","Anthony Trevor Moe",2023]],"ast":[[11,"r2186232","Griffin Brachon Lanalt",2023],[11,"r2198572","Lamonte Bearden",2023],[11,"r2198572","Lamonte Bearden",2023]]}},"johor_tigers":{"p":[["r2341473",47,547,161,278,107,3],["r2180764",21,460,217,69,71,41],["r1957810",51,419,199,99,63,9],["r620479",50,378,128,137,90,1],["s1960004",21,351,166,61,26,9],["r1959967",13,341,191,54,25,11],["r2371557",50,256,118,119,59,4],["r2385519",10,211,64,37,18,3],["r2385518",10,187,108,22,6,13],["r2370334",7,134,65,17,8,3],["r2370339",7,116,77,10,8,0],["r2385838",10,107,75,19,2,10],["r1959974",7,99,27,6,7,2],["r2318312",33,94,39,14,4,2],["r2786676",27,90,22,17,6,3],["r1287289",11,79,48,11,9,2],["r2370335",7,71,49,12,8,6],["r1959968",10,55,44,30,20,0],["r2786658",21,52,33,11,5,1],["r1954877",29,50,32,15,9,1],["r1959969",6,48,15,5,9,0],["s2304364",11,48,36,12,4,1],["r2252589",26,41,26,10,11,0],["r27512",11,35,22,5,4,1],["r1885900",11,21,10,5,5,1],["r2105612",7,19,15,3,2,0],["r1974682",4,11,3,0,1,0],["r2252635",4,7,6,1,0,1],["r1957820",2,4,2,0,0,1],["r2615642",1,3,2,1,0,0],["r1959970",2,3,1,1,0,0],["r2797840",1,3,0,0,0,0],["r2252634",4,2,2,0,0,0],["r556413",1,2,2,1,0,0],["r427791",1,0,0,0,2,0]],"hi":{"pts":[[38,"r1959967","Tevin Glass",2022],[37,"r2180764","Arinze Thomas Chidom",2023],[37,"r2385519","Carl Bird Jabari",2024]],"reb":[[19,"r1959967","Tevin Glass",2022],[19,"r2370339","Andre Terrence",2024],[18,"r1959967","Tevin Glass",2022]],"ast":[[10,"r2341473","Yee Tong Heng",2023],[10,"r2341473","Yee Tong Heng",2023],[10,"r2341473","Yee Tong Heng",2023]]}},"ns_matrix":{"p":[["r2180746",34,672,199,133,90,1],["r2252562",37,616,278,121,64,16],["r2371569",45,605,170,81,86,6],["r2786758",21,336,274,39,26,37],["r2092917",47,234,90,74,49,3],["r2371565",30,201,84,30,15,3],["r2092920",32,165,79,48,33,7],["r2371570",42,137,68,24,12,1],["r2385492",8,134,53,11,8,2],["r1962006",7,129,28,27,9,0],["r2370330",7,128,79,24,19,7],["r2371567",24,127,72,19,8,4],["r2370332",15,113,102,11,14,38],["r2371573",32,100,127,129,76,6],["r2341467",24,79,70,16,13,4],["r54872",10,73,32,35,6,0],["r2092911",29,50,82,21,12,4],["r1846134",12,37,32,14,9,3],["r1846127",11,30,30,4,2,0],["r2778709",13,30,13,6,2,1],["r2778711",12,25,18,6,11,0],["r2092914",7,24,12,6,6,0],["r2092916",8,20,36,2,1,3],["r346957",6,17,14,11,4,3],["r2302680",5,11,10,2,0,1],["r1286737",2,6,0,2,0,1],["r1846144",5,3,3,12,1,0],["r2786750",2,3,0,0,0,0],["r1958881",1,2,2,1,0,1],["r2304381",1,0,4,2,0,0]],"hi":{"pts":[[49,"r1962006","Jeff Alvin Viernes",2022],[42,"r2180746","Dequan Jaylin Abrom",2024],[35,"r2252562","Chun Hong Ting",2022]],"reb":[[27,"r2786758","Amir Darrion Wiiliams",2022],[23,"r2786758","Amir Darrion Wiiliams",2022],[21,"r2092916","Sharwhin Siva Ragu",2022]],"ast":[[13,"r2371573","Wei Yong Ong",2024],[12,"r1962006","Jeff Alvin Viernes",2022],[9,"r2180746","Dequan Jaylin Abrom",2023]]}},"sarawak_cola":{"p":[["r2370355",14,267,98,68,20,8],["r2370352",14,198,177,18,4,6],["r1973897",14,172,39,30,19,0],["r2385491",7,84,65,11,14,5],["r27734",9,75,18,12,8,0],["r2370353",7,57,26,10,4,2],["r2370364",14,48,13,11,5,0],["r2092914",11,31,11,20,10,0],["r2092911",11,30,25,13,10,5],["r27509",14,29,43,9,4,3],["r27512",12,22,35,9,2,6],["r1845447",10,21,10,7,6,0],["r1287289",7,17,14,6,3,0],["r1960005",9,15,2,2,1,0],["r2370362",2,2,1,0,0,0],["r1845450",1,0,0,0,0,0]],"hi":{"pts":[[33,"r2370355","Alexander Mudronja",2024],[30,"r2370355","Alexander Mudronja",2024],[26,"r2370352","Jock Henry Perry",2024]],"reb":[[22,"r2370352","Jock Henry Perry",2024],[21,"r2370352","Jock Henry Perry",2024],[21,"r2370352","Jock Henry Perry",2024]],"ast":[[8,"r2370355","Alexander Mudronja",2024],[7,"r2370355","Alexander Mudronja",2024],[7,"r2370355","Alexander Mudronja",2024]]}}},"xn":{"x:Pegasus Sports":"Pegasus Sports","x:Singapore Adroit":"Singapore Adroit","x:UCSI Rising Star":"UCSI Rising Star","x:Putrajaya Parkcity Heat":"Putrajaya Parkcity Heat"}};
+PR_IC.book = '<path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v17H6.5A2.5 2.5 0 0 0 4 21.5z"/><path d="M4 21.5A2.5 2.5 0 0 1 6.5 19H20v3H6.5"/><path d="M9 7h7M9 11h5"/>';
+PR_IC.medal = '<circle cx="12" cy="15" r="6"/><path d="M8.5 3h7l-1.8 6.3M8.5 3l1.8 6.3"/><path d="M12 12.5l.9 1.8 2 .3-1.4 1.4.3 2-1.8-1-1.8 1 .3-2-1.4-1.4 2-.3z"/>';
+PR_IC.up = '<path d="M12 19V5M5 12l7-7 7 7"/>';
+const REC_CATS = [["pts", "Points", "PTS"], ["reb", "Rebounds", "REB"], ["ast", "Assists", "AST"], ["stl", "Steals", "STL"], ["blk", "Blocks", "BLK"], ["g", "Games", "GP"], ["ti", "Titles", "TITLES"]];
+const REC_I = { g: 0, pts: 1, reb: 2, ast: 3, stl: 4, blk: 5, ti: 6 };
+const REC_MS = [["pts", 500, "500 points"], ["pts", 1000, "1,000 points"], ["pts", 2000, "2,000 points"], ["pts", 3000, "3,000 points"], ["g", 50, "50 games"], ["g", 100, "100 games"], ["g", 200, "200 games"], ["reb", 250, "250 rebounds"], ["reb", 500, "500 rebounds"], ["ast", 150, "150 assists"], ["ast", 300, "300 assists"], ["ti", 1, "First MBL title"], ["ti", 3, "Three MBL titles"], ["ti", 5, "Five MBL titles"]];
+const REC_MS_ID = (m) => m[0] + m[1];
+const REC_CLUB_X = (id) => (REC_SEED && REC_SEED.xn && REC_SEED.xn[id]) || null;
+const recClubName = (id) => { if (!id) return ""; const x = REC_CLUB_X(id); if (x) return x; try { return npcTeamName(id); } catch (e) { return id; } };
+const recFmt = (n) => Number(n || 0).toLocaleString("en-MY");
+const recShort = (n) => { const w = String(n || "").replace(",", "").split(/\s+/).filter(Boolean); let i = w.length - 1; while (i > 0 && /^(jr|sr|ii|iii|iv)\.?$/i.test(w[i])) i--; return w[i] || ""; };
+const recOrd = (n) => n + (["th", "st", "nd", "rd"][((n % 100) - 20) % 10] || ["th", "st", "nd", "rd"][n % 100] || "th");
+
+/* One finished (or live) MBL season, reduced to what the record book needs. */
+function recFromComp(comp) {
+  if (!comp || !comp.stats) return null;
+  const rows = {};
+  Object.entries(comp.stats).forEach(([k, s]) => {
+    if (!s || !s.g) return;
+    const hi = s.hi || [0, 0, 0];
+    rows[k] = [s.g, s.pts, s.reb, s.ast, s.stl, s.blk, s.t, s.n || "", s.imp ? 1 : 0, hi[0], hi[1], hi[2]];
+  });
+  return { y: comp.year, champ: comp.champion || null, rows };
+}
+const recEmpty = () => ({ v: 1, ys: [], t: {}, nm: {}, c: {}, hi: { pts: [], reb: [], ast: [] }, chi: {}, ct: {}, b: [] });
+/* Add a season into this career's record book (deltas over the real seed). */
+function recAddSeason(rec0, season, p) {
+  if (!season || !season.rows) return rec0 || recEmpty();
+  const rec = rec0 ? JSON.parse(JSON.stringify(rec0)) : recEmpty();
+  if (rec.ys.includes(season.y)) return rec;
+  rec.ys.push(season.y);
+  Object.entries(season.rows).forEach(([k0, r]) => {
+    const k = k0 === MD_ME ? "me" : k0;
+    const t = rec.t[k] || (rec.t[k] = [0, 0, 0, 0, 0, 0, 0]);
+    for (let i = 0; i < 6; i++) t[i] += r[i];
+    const champ = season.champ && season.champ === r[6];
+    if (champ) t[6] += 1;
+    rec.nm[k] = [k === "me" ? ((p && p.name) || "You") : (r[7] || (rec.nm[k] && rec.nm[k][0]) || ""), r[8], r[6], season.y];
+    const club = r[6];
+    if (club) {
+      const cc = rec.c[club] || (rec.c[club] = {});
+      const ct = cc[k] || (cc[k] = [0, 0, 0, 0, 0, 0]);
+      for (let i = 0; i < 6; i++) ct[i] += r[i];
+      const ch = rec.chi[club] || (rec.chi[club] = { pts: [], reb: [], ast: [] });
+      [["pts", 9], ["reb", 10], ["ast", 11]].forEach(([cat, j]) => { if (r[j] > 0) ch[cat] = ch[cat].concat([[r[j], k, season.y]]).sort((a, b) => b[0] - a[0] || a[2] - b[2]).slice(0, 3); });
+    }
+    [["pts", 9], ["reb", 10], ["ast", 11]].forEach(([cat, j]) => { if (r[j] > 0) rec.hi[cat].push([r[j], k, club, season.y]); });
+  });
+  ["pts", "reb", "ast"].forEach(cat => { rec.hi[cat] = rec.hi[cat].sort((a, b) => b[0] - a[0] || a[3] - b[3]).slice(0, 10); });
+  if (season.champ) rec.ct[season.champ] = (rec.ct[season.champ] || 0) + 1;
+  return rec;
+}
+/* At the end of each year: the background MBL seasons this career hasn't counted yet (at most 4 at a time). */
+function recYearEnd(p0, y) {
+  const p = { ...p0 };
+  let rec = p.rec || recEmpty();
+  let n = 0;
+  for (let yy = MD_BASE_YEAR; yy <= y && n < 4; yy++) {
+    if (rec.ys.includes(yy)) continue;
+    // your own MBL season from an older save (no single-game detail): still count your totals
+    const mine = p.npcLog && p.npcLog[`mbl:${yy}`];
+    const bg = mine && mine.lines ? null : prBgSeason(yy, "mbl");
+    if (!(mine && mine.lines) && (!bg || !bg.rec)) { rec = { ...rec, ys: rec.ys.concat([yy]) }; continue; }
+    const season = mine && mine.lines ? { y: yy, champ: mine.champ, rows: Object.fromEntries(Object.entries(mine.lines).map(([k, l]) => [k, [l[1], l[2], l[3], l[4], l[5], l[6], l[0], "", 0, 0, 0, 0]]).concat(mine.me ? [["me", [mine.me[1], mine.me[2], mine.me[3], mine.me[4], mine.me[5], mine.me[6], mine.me[0], p.name, 0, 0, 0, 0]]] : [])) } : bg.rec;
+    rec = recAddSeason(rec, season, p);
+    n++;
+  }
+  p.rec = rec;
+  recBadgesQuiet(p);
+  return p;
+}
+/* Everyone's totals: the real seed, this career's seasons, and the live season so far. */
+function recView(p, live) {
+  const S = REC_SEED || { p: [], hi: {}, c: {} };
+  const rec = (p && p.rec) || recEmpty();
+  const M = new Map();
+  S.p.forEach(r => M.set(r[0], { k: r[0], n: r[1], imp: !!r[2], g: r[3], pts: r[4], reb: r[5], ast: r[6], stl: r[7], blk: r[8], ti: r[9], club: r[10], y: 2024, real: true }));
+  const add = (k, a, nm) => {
+    const o = M.get(k) || { k, n: "", imp: false, g: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, ti: 0, club: null, y: 0 };
+    ["g", "pts", "reb", "ast", "stl", "blk", "ti"].forEach((c, i) => { o[c] += a[i] || 0; });
+    if (nm) { if (nm[0]) o.n = nm[0]; o.imp = o.real ? o.imp : !!nm[1]; if (nm[2]) o.club = nm[2]; if (nm[3]) o.y = nm[3]; }
+    M.set(k, o);
+  };
+  Object.entries(rec.t).forEach(([k, a]) => add(k, a, rec.nm[k]));
+  const liveOn = live && live.kind === "mbl" && live.stats && !rec.ys.includes(live.year);
+  if (liveOn) Object.entries(live.stats).forEach(([k0, s]) => { if (!s || !s.g) return; const k = k0 === MD_ME ? "me" : k0; add(k, [s.g, s.pts, s.reb, s.ast, s.stl, s.blk, 0], [k === "me" ? p.name : s.n, s.imp, s.t, live.year]); });
+  const me = M.get("me");
+  if (me) { me.me = true; me.n = p.name; me.imp = false; }
+  return { M, rec, live: liveOn ? live : null };
+}
+function recName(o) {
+  if (o.n) return o.n;
+  try { const e = npcFind(o.k, o.y || MD_BASE_YEAR); if (e && e.n) return e.n; } catch (er) { /* ignore */ }
+  return "Unknown player";
+}
+function recBoard(V, cat, local) {
+  return Array.from(V.M.values()).filter(o => o[cat] > 0 && (!local || !o.imp || o.me)).sort((a, b) => b[cat] - a[cat] || a.g - b.g || String(a.n).localeCompare(String(b.n)));
+}
+function recRankOf(V, k, cat) { const b = recBoard(V, cat, false); const i = b.findIndex(o => o.k === k); return i >= 0 ? i + 1 : null; }
+/* Single-game records: seed + this career + the live season. */
+function recSingle(V, cat) {
+  const S = REC_SEED || { hi: {} };
+  const out = (S.hi[cat] || []).map(r => ({ v: r[0], k: r[1], n: r[2], club: r[3], y: r[4] }));
+  (V.rec.hi[cat] || []).forEach(r => { const o = V.M.get(r[1]); out.push({ v: r[0], k: r[1], n: o ? recName(o) : "", club: r[2], y: r[3] }); });
+  if (V.live) { const j = { pts: 0, reb: 1, ast: 2 }[cat]; Object.entries(V.live.stats).forEach(([k0, s]) => { if (s && s.hi && s.hi[j] > 0) { const k = k0 === MD_ME ? "me" : k0; const o = V.M.get(k); out.push({ v: s.hi[j], k, n: o ? recName(o) : s.n, club: s.t, y: V.live.year }); } }); }
+  return out.sort((a, b) => b.v - a.v || a.y - b.y).slice(0, 10);
+}
+/* A club's own book. */
+function recClub(V, club) {
+  const S = REC_SEED || { c: {} };
+  const sc = S.c[club] || { p: [], hi: { pts: [], reb: [], ast: [] } };
+  const T = new Map();
+  const add = (k, a) => { const o = T.get(k) || [0, 0, 0, 0, 0, 0]; for (let i = 0; i < 6; i++) o[i] += a[i] || 0; T.set(k, o); };
+  sc.p.forEach(r => add(r[0], r.slice(1)));
+  Object.entries((V.rec.c || {})[club] || {}).forEach(([k, a]) => add(k, a));
+  if (V.live) Object.entries(V.live.stats).forEach(([k0, s]) => { if (s && s.g && s.t === club) add(k0 === MD_ME ? "me" : k0, [s.g, s.pts, s.reb, s.ast, s.stl, s.blk]); });
+  const lead = {};
+  ["pts", "reb", "ast", "g"].forEach(cat => {
+    const i = { g: 0, pts: 1, reb: 2, ast: 3 }[cat];
+    lead[cat] = Array.from(T.entries()).map(([k, a]) => ({ k, v: a[i], g: a[0], o: V.M.get(k) })).filter(x => x.v > 0).sort((a, b) => b.v - a.v).slice(0, 5);
+  });
+  const hi = {};
+  ["pts", "reb", "ast"].forEach(cat => {
+    const j = { pts: 0, reb: 1, ast: 2 }[cat];
+    const l = (sc.hi[cat] || []).map(r => ({ v: r[0], k: r[1], n: r[2], y: r[3] }));
+    (((V.rec.chi || {})[club] || {})[cat] || []).forEach(r => { const o = V.M.get(r[1]); l.push({ v: r[0], k: r[1], n: o ? recName(o) : "", y: r[2] }); });
+    if (V.live) Object.entries(V.live.stats).forEach(([k0, s]) => { if (s && s.t === club && s.hi && s.hi[j] > 0) { const k = k0 === MD_ME ? "me" : k0; const o = V.M.get(k); l.push({ v: s.hi[j], k, n: o ? recName(o) : s.n, y: V.live.year }); } });
+    hi[cat] = l.sort((a, b) => b.v - a.v || a.y - b.y).slice(0, 3);
+  });
+  const seedTi = Object.values(S.champ || {}).filter(c => c === club).length;
+  return { lead, hi, titles: seedTi + ((V.rec.ct || {})[club] || 0), T };
+}
+/* Badges you've earned so far (set without fanfare for totals that came from an older save). */
+function recBadgesQuiet(p) {
+  const V = recView(p, null);
+  const me = V.M.get("me");
+  if (!me) return p;
+  const got = new Set((p.rec.b || []).map(b => b[0]));
+  const add = REC_MS.filter(m => !got.has(REC_MS_ID(m)) && me[m[0]] >= m[1]);
+  if (add.length) p.rec = { ...p.rec, b: (p.rec.b || []).concat(add.map(m => [REC_MS_ID(m), p.year])) };
+  return p;
+}
+
+/* ---------- after each of your MBL games: anything worth a pop-up? ---------- */
+const REC_PRI = { sg: 0, csg: 1, ms: 2, pass: 3, club: 4 };
+function recScan(p0, comp) {
+  if (!comp || comp.kind !== "mbl" || !comp.stats) return { p: p0, ev: [] };
+  const p = { ...p0 };
+  const mine = comp.games.filter(g => g.res && g.res.my && !g.res.my.dnp && (g.h === comp.myTeam || g.a === comp.myTeam)).sort((a, b) => a.i - b.i);
+  const from = comp.recGi == null ? -1 : comp.recGi;
+  const fresh = mine.filter(g => g.i > from);
+  const titleNow = comp.champion && comp.champion === comp.myTeam && !comp.recTitle && !comp.banned;
+  if (!fresh.length && !titleNow) return { p, ev: [] };
+  const V = recView(p, null);   // without this season
+  const base = V.M.get("me") || { g: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, ti: 0 };
+  // others: their totals including this season so far
+  const others = new Map();
+  V.M.forEach((o, k) => { if (k !== "me") others.set(k, { ...o }); });
+  Object.entries(comp.stats).forEach(([k, s]) => { if (k === MD_ME || !s || !s.g) return; const o = others.get(k) || { k, n: s.n, imp: !!s.imp, g: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, ti: 0, club: s.t, y: comp.year }; o.g += s.g; o.pts += s.pts; o.reb += s.reb; o.ast += s.ast; o.stl += s.stl; o.blk += s.blk; if (!o.n) o.n = s.n; others.set(k, o); });
+  const ol = Array.from(others.values());
+  // single-game marks to beat
+  const sgBest = {}; ["pts", "reb", "ast"].forEach(c => { const l = recSingle(V, c).filter(x => x.k !== "me"); const j = { pts: 0, reb: 1, ast: 2 }[c]; let b = l.length ? l[0].v : 0; Object.entries(comp.stats).forEach(([k, s]) => { if (k !== MD_ME && s && s.hi) b = Math.max(b, s.hi[j]); }); sgBest[c] = b; });
+  const club = comp.myTeam;
+  const CB = recClub(V, club);
+  const cOthers = new Map(); CB.T.forEach((a, k) => { if (k !== "me") cOthers.set(k, a.slice()); });
+  Object.entries(comp.stats).forEach(([k, s]) => { if (k === MD_ME || !s || !s.g || s.t !== club) return; const a = cOthers.get(k) || [0, 0, 0, 0, 0, 0]; a[0] += s.g; a[1] += s.pts; a[2] += s.reb; a[3] += s.ast; cOthers.set(k, a); });
+  const cMeBase = CB.T.get("me") || [0, 0, 0, 0, 0, 0];
+  const csgBest = {}; ["pts", "reb", "ast"].forEach(c => { const j = { pts: 0, reb: 1, ast: 2 }[c]; let b = (CB.hi[c] || []).filter(x => x.k !== "me").reduce((m, x) => Math.max(m, x.v), 0); Object.entries(comp.stats).forEach(([k, s]) => { if (k !== MD_ME && s && s.t === club && s.hi) b = Math.max(b, s.hi[j]); }); csgBest[c] = b; });
+  // my own best single games so far (so a record is only announced when it's broken again)
+  const myBest = { pts: 0, reb: 0, ast: 0 };
+  (V.rec.hi.pts || []).forEach(r => { if (r[1] === "me") myBest.pts = Math.max(myBest.pts, r[0]); });
+  (V.rec.hi.reb || []).forEach(r => { if (r[1] === "me") myBest.reb = Math.max(myBest.reb, r[0]); });
+  (V.rec.hi.ast || []).forEach(r => { if (r[1] === "me") myBest.ast = Math.max(myBest.ast, r[0]); });
+  const cum = { g: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0 };
+  mine.filter(g => g.i <= from).forEach(g => { const m = g.res.my; cum.g++; ["pts", "reb", "ast", "stl", "blk"].forEach(c => { cum[c] += m[c] || 0; }); ["pts", "reb", "ast"].forEach(c => { myBest[c] = Math.max(myBest[c], m[c] || 0); }); });
+  const got = new Set(((p.rec || {}).b || []).map(b => b[0]));
+  const ev = [], byGi = {};
+  const clubNm = recClubName(club);
+  const push = (gi, e) => { ev.push(e); (byGi[gi] = byGi[gi] || []).push(e); };
+  let tiBefore = base.ti || 0;
+  const bestRank = comp.recBest = { ...(comp.recBest || {}) };
+  const step = (gi, line, title) => {
+    const before = { g: base.g + cum.g, pts: base.pts + cum.pts, reb: base.reb + cum.reb, ast: base.ast + cum.ast, stl: base.stl + cum.stl, blk: base.blk + cum.blk, ti: tiBefore };
+    if (line) { cum.g++; ["pts", "reb", "ast", "stl", "blk"].forEach(c => { cum[c] += line[c] || 0; }); }
+    if (title) tiBefore += 1;
+    const after = { g: base.g + cum.g, pts: base.pts + cum.pts, reb: base.reb + cum.reb, ast: base.ast + cum.ast, stl: base.stl + cum.stl, blk: base.blk + cum.blk, ti: tiBefore };
+    if (line) {
+      ["pts", "reb", "ast"].forEach(c => {
+        const v = line[c] || 0;
+        if (v > 0 && v > sgBest[c] && v > myBest[c]) push(gi, { t: "sg", cat: c, v, title: `MBL record: ${v} ${REC_CATS.find(x => x[0] === c)[1].toLowerCase()}`, sub: `The most in a single MBL game since the record book began in 2022.` });
+        else if (v > 0 && v > csgBest[c] && v > myBest[c] && v >= ({ pts: 25, reb: 12, ast: 8 })[c]) push(gi, { t: "csg", cat: c, v, title: `${clubNm} record: ${v} ${REC_CATS.find(x => x[0] === c)[1].toLowerCase()}`, sub: `The most in one game for the club.` });
+        myBest[c] = Math.max(myBest[c], v);
+      });
+    }
+    REC_MS.forEach(m => { const id = REC_MS_ID(m); if (!got.has(id) && before[m[0]] < m[1] && after[m[0]] >= m[1]) { got.add(id); push(gi, { t: "ms", cat: m[0], v: m[1], id, title: m[2], sub: m[0] === "ti" ? "A new milestone badge for your Legacy page." : `Career MBL ${REC_CATS.find(x => x[0] === m[0])[1].toLowerCase()}. A new milestone badge.` }); } });
+    ["pts", "reb", "ast", "stl", "blk"].forEach(c => {
+      const b = before[c], a = after[c];
+      if (a <= b) return;
+      const passed = ol.filter(o => o[c] >= b && o[c] < a && o[c] > 0);
+      if (!passed.length) return;
+      const rank = 1 + ol.filter(o => o[c] >= a).length;
+      // only a new best place on the list this season (no re-passing the same names)
+      if (bestRank[c] == null) bestRank[c] = 1 + ol.filter(o => o[c] >= b).length;
+      if (rank > 10 || rank >= bestRank[c]) return;
+      bestRank[c] = rank;
+      const top = passed.sort((x, y) => y[c] - x[c])[0];
+      push(gi, { t: "pass", cat: c, v: a, rank, k: top.k, title: `#${rank} all-time in MBL ${REC_CATS.find(x => x[0] === c)[1].toLowerCase()}`, sub: `You passed ${recName(top)} (${recFmt(top[c])}). You're on ${recFmt(a)}.` });
+    });
+    if (line) ["pts", "reb", "ast"].forEach(c => {
+      const i = { pts: 1, reb: 2, ast: 3 }[c];
+      const b = cMeBase[i] + before[c] - base[c], a = cMeBase[i] + after[c] - base[c];
+      const lead = Array.from(cOthers.entries()).sort((x, y) => y[1][i] - x[1][i])[0];
+      if (lead && lead[1][i] >= b && lead[1][i] < a && lead[1][i] >= 100) { const o = V.M.get(lead[0]) || { k: lead[0], n: (comp.stats[lead[0]] || {}).n }; push(gi, { t: "club", cat: c, v: a, title: `${clubNm}'s all-time ${REC_CATS.find(x => x[0] === c)[1].toLowerCase()} leader`, sub: `You passed ${recName(o)} (${recFmt(lead[1][i])}) for the club record.` }); }
+    });
+  };
+  fresh.forEach(g => step(g.i, g.res.my, false));
+  if (titleNow) { comp.recTitle = true; const gi = fresh.length ? fresh[fresh.length - 1].i : (mine.length ? mine[mine.length - 1].i : -1); step(gi, null, true); }
+  if (fresh.length) comp.recGi = fresh[fresh.length - 1].i;
+  // badges: popularity +2 each
+  const newMs = ev.filter(e => e.t === "ms");
+  if (newMs.length) {
+    p.rec = { ...(p.rec || recEmpty()), b: ((p.rec || {}).b || []).concat(newMs.map(e => [e.id, p.year])) };
+    p.popularity = clamp((p.popularity || 0) + 2 * newMs.length);
+  }
+  comp.recEv = { ...(comp.recEv || {}) };
+  Object.entries(byGi).forEach(([gi, l]) => { comp.recEv[gi] = (comp.recEv[gi] || []).concat(l).sort((a, b) => REC_PRI[a.t] - REC_PRI[b.t]); });
+  ev.sort((a, b) => REC_PRI[a.t] - REC_PRI[b.t]);
+  return { p, ev };
+}
+const recBannerText = (ev) => !ev || !ev.length ? null : ev.slice(0, 2).map(e => `${e.title}. ${e.sub}`).join(" ") + (ev.length > 2 ? ` And ${ev.length - 2} more in the record book.` : "");
+
+/* ---------- pop-ups on the box score ---------- */
+function RecToasts({ ev }) {
+  const [gone, setGone] = useState(false);
+  const list = (ev || []).slice(0, 2);
+  const more = (ev || []).length - list.length;
+  useEffect(() => { setGone(false); if (!list.length) return; const t = setTimeout(() => setGone(true), 9000); return () => clearTimeout(t); }, [ev]);
+  if (!list.length || gone) return null;
+  return (
+    <div className="rc-toasts" aria-live="polite">
+      {list.map((e, i) => (
+        <div key={i} className={"rc-toast t-" + e.t} style={{ animationDelay: i * 160 + "ms" }} onClick={() => setGone(true)}>
+          <span className="rc-tb"><Ic n={e.t === "ms" ? "medal" : e.t === "pass" ? "up" : e.t === "club" ? "crown" : "book"} />{!prReduced() && [0, 1, 2, 3, 4, 5].map(j => <i key={j} className="rc-sp" style={{ "--dx": Math.cos(j * 1.05) * 34 + "px", "--dy": Math.sin(j * 1.05) * 34 + "px", animationDelay: i * 160 + 260 + "ms" }} />)}</span>
+          <span><small className="lbl">{e.t === "ms" ? "Milestone" : e.t === "pass" ? "All-time list" : e.t === "club" ? "Club record" : e.t === "csg" ? "Club single-game record" : "MBL single-game record"}</small><b>{e.title}</b><small>{e.sub}</small></span>
+        </div>
+      ))}
+      {more > 0 && <div className="rc-more">And {more} more in the record book</div>}
+    </div>
+  );
+}
+
+/* ---------- the record book (League page, "Records" tab) ---------- */
+function RecClubMark({ id, s = 26 }) {
+  if (id && LOGO[id]) return <PrLogo k={id} s={s} />;
+  const nm = recClubName(id) || "?";
+  return <span className="rc-cm" style={{ "--s": s + "px" }}>{nm.split(/\s+/).map(w => w[0]).join("").slice(0, 3)}</span>;
+}
+function RecordsBook({ player }) {
+  const p = player;
+  const live = p.mdComp && p.mdComp.kind === "mbl" ? p.mdComp : null;
+  const V = useMemo(() => recView(p, live), [p.rec, live && live.recGi, live && live.cursor, p.name]);
+  const [cat, setCat] = useState("pts");
+  const [local, setLocal] = useState(false);
+  const myClub = (live && live.myTeam) || (p.league === "mbl" && p.clubId) || "ns_matrix";
+  const [club, setClub] = useState(MD_MBL_CLUBS.includes(myClub) ? myClub : MD_MBL_CLUBS[0]);
+  const board = useMemo(() => recBoard(V, cat, local), [V, cat, local]);
+  const mi = board.findIndex(o => o.me);
+  const rows = mi < 0 || mi < 10 ? board.slice(0, 10).map((o, i) => [o, i + 1]) : board.slice(0, 10).map((o, i) => [o, i + 1]).concat([[null, 0]], board.slice(Math.max(10, mi - 1), mi + 2).map((o, j) => [o, Math.max(10, mi - 1) + j + 1]));
+  const ref = useRef(null), first = useRef({});
+  const flip = () => { const m = {}; if (ref.current) ref.current.querySelectorAll("[data-k]").forEach(el => { m[el.dataset.k] = el.getBoundingClientRect().top; }); first.current = m; };
+  useLayoutEffect(() => {
+    if (prReduced() || !ref.current) return;
+    ref.current.querySelectorAll("[data-k]").forEach(el => { const t0 = first.current[el.dataset.k]; if (t0 == null) { el.animate([{ opacity: 0, transform: "translateY(10px)" }, { opacity: 1, transform: "none" }], { duration: 320, easing: "cubic-bezier(.2,.8,.2,1)" }); return; } const d = t0 - el.getBoundingClientRect().top; if (d) el.animate([{ transform: `translateY(${d}px)` }, { transform: "none" }], { duration: 420, easing: "cubic-bezier(.2,.8,.2,1)" }); });
+    first.current = {};
+  }, [cat, local]);
+  const C = REC_CATS.find(c => c[0] === cat);
+  const me = V.M.get("me");
+  const podium = board.slice(0, 3);
+  const CB = useMemo(() => recClub(V, club), [V, club]);
+  const yEnd = Math.max(2024, ...(V.rec.ys || []));
+  const look = (o) => { if (o.me) return playerLook(p); try { const e = npcFind(o.k, o.y || MD_BASE_YEAR); return e ? npcLook(e, o.club && MD_MBL_CLUBS.includes(o.club) ? o.club : null) : DEFLOOK; } catch (er) { return DEFLOOK; } };
+  const open = (o) => { if (!o || o.me || !/^[rkg]/.test(o.k)) return; npcOpen(o.k, o.y || MD_BASE_YEAR); };
+  const pg = (o) => cat === "g" || cat === "ti" ? (cat === "ti" ? `${o.g} games` : "") : (o.g ? (o[cat] / o.g).toFixed(1) + " a game" : "");
+  return (
+    <div className="rc">
+      <section className="pn rc-hero" data-a="">
+        <div className="rc-hero-t">
+          <span className="lbl" style={{ color: "var(--gd)" }}><Ic n="book" /> MBL record book · 2022–{live ? live.year + " (so far)" : yEnd}</span>
+          <h2>All-time {C[1].toLowerCase()}</h2>
+          <p>Real MBL box scores from 2022 to 2024, then every season this career has simulated. {live ? "Your live season counts as you play." : ""}</p>
+        </div>
+        <div className="rc-pod">{[1, 0, 2].map(i => podium[i] ? (
+          <button key={podium[i].k} className={"rc-pd p" + (i + 1) + (podium[i].me ? " is-me" : "")} onClick={() => open(podium[i])}>
+            <span className="fig"><Sprite look={look(podium[i])} still /></span>
+            <span className="st"><span className="rkb">{i + 1}</span><span className="v num">{recFmt(podium[i][cat])}</span><span className="n">{podium[i].me ? p.name : recName(podium[i])}</span></span>
+          </button>) : <span key={i} />)}</div>
+      </section>
+      <div className="rc-grid">
+        <section className="pn" data-a="">
+          <div className="rc-bar">
+            <div className="tabs rc-cats">{REC_CATS.map(([k, l]) => <button key={k} className={cat === k ? "on" : ""} onClick={() => { flip(); setCat(k); }}>{l}</button>)}</div>
+            <div className="tabs rc-who">{[[false, "Everyone"], [true, "Local players"]].map(([v, l]) => <button key={l} className={local === v ? "on" : ""} onClick={() => { flip(); setLocal(v); }}>{l}</button>)}</div>
+          </div>
+          {me && me[cat] > 0 && (() => { const i = board.findIndex(o => o.me); const ab = i > 0 ? board[i - 1] : null; return <div className="rc-chase"><Ic n="target" /><span>{i === 0 ? <>You lead the all-time list with <b>{recFmt(me[cat])}</b>.</> : <>You're <b>{recOrd(i + 1)}</b> with {recFmt(me[cat])}. <b>{recFmt(ab[cat] - me[cat] + 1)}</b> more to pass {recName(ab)}.</>}</span></div>; })()}
+          <div className="rc-board" ref={ref}>
+            {rows.map(([o, rk], i) => o ? (
+              <div key={o.k} data-k={o.k} className={"rc-r" + (o.me ? " is-me" : "") + (/^[rkg]/.test(o.k) && !o.me ? " click" : "")} onClick={() => open(o)}>
+                <span className={"rk num r" + rk}>{rk}</span>
+                <RecClubMark id={o.club} s={28} />
+                <span className="nm"><b>{o.me ? p.name : recName(o)}</b><small>{recClubName(o.club)}{o.imp ? " · import" : ""}{o.real && !o.me ? "" : ""}</small></span>
+                <span className="pg">{pg(o)}</span>
+                <span className="tot num">{recFmt(o[cat])}</span>
+              </div>
+            ) : <div key={"gap" + i} className="rc-gap">···</div>)}
+            {!board.length && <p style={{ color: "var(--di)", margin: 0 }}>No one has any yet.</p>}
+          </div>
+          <PrSrc color="var(--gd)">{local ? "Malaysian players only" : "Everyone who has played in the MBL"} · regular season and playoffs · source: HoopStatsMY box scores (2022–24), then this career</PrSrc>
+        </section>
+        <div className="rc-side">
+          <section className="pn" data-a="">
+            <h3><Ic n="fire" /> Single-game records</h3>
+            {["pts", "reb", "ast"].map(c => { const l = recSingle(V, c); const x = l[0]; if (!x) return null; return (
+              <div key={c} className={"rc-sg" + (x.k === "me" ? " is-me" : "")}>
+                <b className="num">{x.v}</b>
+                <span><small className="lbl">{REC_CATS.find(z => z[0] === c)[1]}</small><span className="nm">{x.k === "me" ? p.name : x.n || "Unknown"}</span><small>{recClubName(x.club)} · {x.y}</small></span>
+                <span className="nx">{l.slice(1, 3).map((z, j) => <small key={j}>{z.v} · {z.k === "me" ? "you" : recShort(z.n)} {z.y}</small>)}</span>
+              </div>); })}
+          </section>
+          <section className="pn" data-a="">
+            <h3><RecClubMark id={club} s={24} /> Club records<small>{CB.titles} title{CB.titles === 1 ? "" : "s"} since 2022</small></h3>
+            <select className="pr-agsel rc-sel" value={club} onChange={e => setClub(e.target.value)} aria-label="Club">{MD_MBL_CLUBS.map(id => <option key={id} value={id}>{recClubName(id)}</option>)}</select>
+            {CB.lead.pts.length === 0 ? <p className="rc-empty">No MBL history in the record book yet. The first season played here starts it.</p> : (
+              <div className="rc-cl">{[["pts", "Points"], ["reb", "Rebounds"], ["ast", "Assists"], ["g", "Games"]].map(([c, l]) => { const x = CB.lead[c][0]; if (!x) return null; const o = x.o || { k: x.k }; return (
+                <div key={c} className={x.k === "me" ? "is-me" : ""}><small className="lbl">{l}</small><b className="num">{recFmt(x.v)}</b><span>{x.k === "me" ? "You" : recName(o)}</span></div>); })}</div>
+            )}
+            {CB.hi.pts[0] && <div className="rc-chi">{["pts", "reb", "ast"].map(c => CB.hi[c][0] ? <span key={c}><b className="num">{CB.hi[c][0].v}</b> {c.toUpperCase()} in a game · {CB.hi[c][0].k === "me" ? "you" : CB.hi[c][0].n} ({CB.hi[c][0].y})</span> : null)}</div>}
+          </section>
+          <RecMilestones player={p} V={V} />
+        </div>
+      </div>
+    </div>
+  );
+}
+function RecMilestones({ player, V }) {
+  const p = player;
+  const me = V.M.get("me") || { g: 0, pts: 0, reb: 0, ast: 0, ti: 0 };
+  const got = new Map(((p.rec || {}).b || []).map(b => [b[0], b[1]]));
+  const n = REC_MS.filter(m => got.has(REC_MS_ID(m)) || me[m[0]] >= m[1]).length;
+  return (
+    <section className="pn" data-a="">
+      <h3><Ic n="medal" /> Your milestones<small>{n} of {REC_MS.length}</small></h3>
+      <div className="rc-ms">{REC_MS.map(m => {
+        const id = REC_MS_ID(m), has = got.has(id) || me[m[0]] >= m[1];
+        const w = Math.min(100, (me[m[0]] || 0) / m[1] * 100);
+        return (
+          <div key={id} className={"rc-b" + (has ? " got" : "")} title={m[2]}>
+            <span className="bd"><Ic n={m[0] === "ti" ? "trophy" : "medal"} /></span>
+            <span><b>{m[2]}</b><small>{has ? (got.get(id) ? `Earned ${got.get(id)}` : "Earned") : `${recFmt(me[m[0]] || 0)} of ${recFmt(m[1])}`}</small>{!has && <i className="bar"><i style={{ width: w + "%" }} /></i>}</span>
+          </div>);
+      })}</div>
+      <PrSrc>Each badge: popularity +2 and a little more Hall of Fame standing</PrSrc>
+    </section>
+  );
+}
+/* Legacy page: the three nearest names to pass, and the badges. */
+function RecChase({ player }) {
+  const p = player;
+  const live = p.mdComp && p.mdComp.kind === "mbl" ? p.mdComp : null;
+  const V = useMemo(() => recView(p, live), [p.rec, live && live.recGi]);
+  const me = V.M.get("me");
+  if (!me || !me.g) return (
+    <section className="pn c12" data-a="">
+      <h3><Ic n="book" /> Records chase</h3>
+      <p style={{ color: "var(--mu)", margin: 0 }}>Play in the MBL to start climbing the all-time record book. It begins with real MBL box scores from 2022 to 2024.</p>
+    </section>
+  );
+  const targets = [];
+  ["pts", "reb", "ast", "stl", "blk", "g"].forEach(c => {
+    const b = recBoard(V, c, false); const i = b.findIndex(o => o.me); if (i <= 0) return;
+    const ab = b[i - 1], gap = ab[c] - me[c] + 1, rate = c === "g" ? 1 : me[c] / Math.max(1, me.g);
+    targets.push({ c, ab, gap, rank: i + 1, next: i, games: Math.ceil(gap / Math.max(0.1, rate)) });
+  });
+  targets.sort((a, b) => a.games - b.games);
+  const best = ["pts", "reb", "ast", "g"].map(c => [c, recRankOf(V, "me", c)]).filter(x => x[1]).sort((a, b) => a[1] - b[1])[0];
+  return (
+    <section className="pn c12" data-a="">
+      <h3><Ic n="book" /> Records chase<small>{best ? `#${best[1]} all-time in MBL ${REC_CATS.find(x => x[0] === best[0])[1].toLowerCase()}` : ""}</small></h3>
+      <div className="rc-tg">{targets.slice(0, 3).map(t => (
+        <div key={t.c} className="rc-t">
+          <small className="lbl">{REC_CATS.find(x => x[0] === t.c)[1]} · you're {recOrd(t.rank)}</small>
+          <b>{recName(t.ab)}</b>
+          <span><b className="num">{recFmt(t.gap)}</b> to pass for {recOrd(t.next)}</span>
+          <i className="bar"><i style={{ width: Math.max(4, Math.min(100, me[t.c] / t.ab[t.c] * 100)) + "%" }} /></i>
+          <small>About {t.games} game{t.games === 1 ? "" : "s"} at your pace</small>
+        </div>
+      ))}</div>
+      <RecMilestones player={p} V={V} />
+    </section>
+  );
+}
+/* One line for a player profile: his best all-time rank. */
+function recProfileLine(p, k) {
+  try {
+    const live = p.mdComp && p.mdComp.kind === "mbl" ? p.mdComp : null;
+    const V = recView(p, live);
+    if (!V.M.has(k)) return null;
+    const best = ["pts", "reb", "ast", "stl", "blk", "g", "ti"].map(c => [c, recRankOf(V, k, c)]).filter(x => x[1] && x[1] <= 25).sort((a, b) => a[1] - b[1] || ["pts", "reb", "ast", "ti", "g", "stl", "blk"].indexOf(a[0]) - ["pts", "reb", "ast", "ti", "g", "stl", "blk"].indexOf(b[0]))[0];
+    if (!best) return null;
+    const o = V.M.get(k);
+    return { text: `#${best[1]} all-time in MBL ${REC_CATS.find(x => x[0] === best[0])[1].toLowerCase()}`, v: o[best[0]], cat: best[0] };
+  } catch (e) { return null; }
+}
+/* =====================================================================
+   SEASON GOALS — three targets from your coach for the club league each
+   year (MBL if you're registered, else your D-League tournament). Set
+   before the first game, checked at halfway, judged at the end.
+===================================================================== */
+const GOAL_COACHES = ["Goh", "Lim", "Tan", "Wong", "Lee", "Ng", "Chong", "Razak", "Hafiz", "Kumar", "Ooi", "Yap", "Teoh", "Ismail"];
+const GOAL_ROLES = ["Bench", "Rotation", "Starter"];
+const goalCoach = (club, y) => "Coach " + GOAL_COACHES[mdHash(`${club}:coach:${Math.floor((y - 2020) / 4)}`) % GOAL_COACHES.length];
+const goalHalf = (x) => Math.max(0.5, Math.round(x * 2) / 2);
+const goalFmtT = (G) => G.unit === "%" ? `${G.tgt}%` : G.unit === "place" ? (G.tgt === 1 ? "Champions" : `Top ${G.tgt}`) : G.unit === "tech" ? "0" : String(G.tgt);
+const GOAL_LIB = [
+  ["Earn 15+ minutes a game", "Under 21, bench or rotation", "Minutes per game"],
+  ["Shoot 42% or better", "Under 23, any role", "Field-goal %"],
+  ["Average 14+ points (scales with role)", "Starters and first options", "Points per game"],
+  ["Average 4+ assists / 8+ rebounds", "Guards / bigs in their prime", "Per game"],
+  ["Defensive anchor: 2+ steals and blocks", "Wings and bigs, 22–30", "Steals + blocks per game"],
+  ["Make the playoffs / finish top 2 / win the title", "Everyone, sized to the club", "Final regular-season place, title"],
+  ["Lead the locker room", "Captains and 30+", "Team chemistry at season end"],
+  ["Bring on a young player", "30+, or a captain", "His minutes per game"],
+  ["Play 20 of 24 games", "27+, or after an injury", "Games played"],
+  ["No technical fouls", "After a referee row or a fine", "Technicals"],
+];
+/* Which competition carries this year's goals. */
+function goalsLegOk(p, comp) {
+  if (!comp || comp.type !== "league" || p.stage !== "pro" || p.abroad || p.uba || !p.clubId) return false;
+  if (p.mdYear && p.mdYear.youthInvite) return false;
+  const lg = p.mdYear ? (p.mdYear.legs.includes("mbl") ? "mbl" : p.mdYear.legs[p.mdYear.legs.length - 1]) : comp.kind;
+  return comp.kind === lg && !comp.banned && !comp.notRegistered && !comp.injuredCarry && !comp.seasonOut;
+}
+/* What your season would look like on current form: your games simulated once on a side seed. */
+function goalsProject(p, comp) {
+  const mine = comp.games.filter(g => g.ph === "rs" && (g.h === comp.myTeam || g.a === comp.myTeam));
+  const acc = { g: 0, min: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, fgm: 0, fga: 0 };
+  const salts = comp.kind === "mbl" ? [701] : [701, 1301];
+  salts.forEach(salt => {
+    const c = JSON.parse(JSON.stringify(comp));
+    c.year = comp.year + salt; c.injuryPerGame = 0; c.injuredUntil = -1; c.seasonOut = false;
+    mine.forEach(g => {
+      try {
+        const sim = mdSimOne(c, g.i, p, { plan: "balanced" });
+        const b = sim && sim.box && sim.box[MD_ME];
+        if (!b || b.min <= 0) return;
+        acc.g++; ["min", "pts", "reb", "ast", "stl", "blk", "fgm", "fga"].forEach(k => { acc[k] += b[k] || 0; });
+      } catch (e) { /* skip */ }
+    });
+  });
+  const n = Math.max(1, acc.g);
+  // a fresh, rested, injury-free run reads a little high: shade it to a typical season
+  const k = 0.94;
+  return { mpg: acc.min / n * 0.97, ppg: acc.pts / n * k, rpg: acc.reb / n * k, apg: acc.ast / n * k, spg: acc.stl / n * k, bpg: acc.blk / n * k, fg: acc.fga ? acc.fgm / acc.fga * 100 - 1 : 40, n: mine.length };
+}
+/* Club strength rank in this league: average of each roster's best eight. */
+function goalsClubRank(comp) {
+  const str = Object.keys(comp.teams).map(id => { const l = (comp.entries[id] || []).map(e => e.o || e.ovr || 0).sort((a, b) => b - a).slice(0, 8); return [id, l.reduce((s, v) => s + v, 0) / Math.max(1, l.length)]; }).sort((a, b) => b[1] - a[1]);
+  return { rank: 1 + str.findIndex(x => x[0] === comp.myTeam), n: str.length };
+}
+function goalsPlan(p, comp) {
+  const role = comp.myRole || p.starterStatus || "Rotation";
+  const age = p.age, pos = p.position;
+  const big = pos === "PF" || pos === "C", guard = pos === "PG" || pos === "SG";
+  const ex = goalsProject(p, comp);
+  const nRs = ex.n || 24;
+  const captain = (p.seasonsAtClub || 0) >= 4 && age >= 26;
+  const clubName = (comp.teams[comp.myTeam] || {}).name || p.teamName || "your club";
+  const recentInc = (p.incidents || []).some(i => p.year - i.y <= 2 && ["referee", "alcohol", "backlash", "benched"].includes(i.kind));
+  const lastPro = (p.history || []).slice().reverse().find(h => h.category === "pro");
+  const hurt = !!(comp.slowStart || p.recentlyRehabbed || (lastPro && lastPro.injury && lastPro.injury.serious));
+  const lvl = (x, kind) => x * (kind === "stretch" ? 1.3 : 1.1);
+  const mk = (slot, kind, id) => {
+    switch (id) {
+      case "min": { const t = Math.min(34, Math.max(6, Math.round(lvl(ex.mpg, kind)))); return { id, ic: "clock", title: `Earn ${t}+ minutes a game`, why: "Show you belong in the rotation.", tgt: t, unit: "mpg" }; }
+      case "fg": { const t = Math.min(56, Math.max(38, Math.round(ex.fg + (kind === "stretch" ? 4 : 2)))); return { id, ic: "target", title: `Shoot ${t}% or better`, why: "Good shots, not just more shots.", tgt: t, unit: "%" }; }
+      case "pts": { const raw = lvl(ex.ppg, kind); const t = raw < 8 ? Math.max(1.5, goalHalf(raw)) : Math.round(raw); return { id, ic: "ball", title: `Average ${t}+ points`, why: role === "Starter" ? "You're one of the first options." : "Make your minutes count on the scoreboard.", tgt: t, unit: "ppg" }; }
+      case "ast": { const t = Math.max(1, goalHalf(lvl(ex.apg, kind))); return { id, ic: "pass", title: `Average ${t}+ assists`, why: "Make the others better too.", tgt: t, unit: "apg" }; }
+      case "reb": { const t = Math.max(1.5, goalHalf(lvl(ex.rpg, kind))); return { id, ic: "rebound", title: `Average ${t}+ rebounds`, why: "Own the glass.", tgt: t, unit: "rpg" }; }
+      case "def": { const t = Math.max(0.5, goalHalf(lvl(ex.spg + ex.bpg, kind))); return { id, ic: "shield", title: `Defensive anchor: ${t}+ steals and blocks`, why: "Steals plus blocks, every night.", tgt: t, unit: "sbpg" }; }
+      case "chem": { const t = Math.min(88, Math.max(60, Math.round((p.relationships.team || 50) + (kind === "stretch" ? 8 : 4)))); return { id, ic: "heart", title: "Lead the locker room", why: `Keep team chemistry at ${t} or higher.`, tgt: t, unit: "chem" }; }
+      case "ment": {
+        const kids = (comp.entries[comp.myTeam] || []).filter(e => e.k !== MD_ME && e.by && comp.year - e.by <= 21).sort((a, b) => (b.o || 0) - (a.o || 0));
+        const kid = kids[0]; if (!kid) return null;
+        const t = kind === "stretch" ? 14 : 10;
+        return { id, ic: "users", title: `Bring on ${kid.n}`, why: `Get your ${comp.year - kid.by}-year-old teammate ${t}+ minutes a game.`, tgt: t, unit: "mpg", mentee: { k: kid.k, n: kid.n } };
+      }
+      case "fit": { const t = Math.min(nRs, Math.ceil(nRs * (kind === "stretch" ? 0.92 : 0.83))); return { id, ic: "shield", title: `Play ${t} of ${nRs} games`, why: hurt ? "Stay healthy after last year's injury." : "Stay fit for the whole season.", tgt: t, unit: "gp", count: true }; }
+      case "tech": return { id, ic: "x", title: "No technical fouls", why: "The league is watching you after last time.", tgt: 0, unit: "tech" };
+      case "team": {
+        const cr = goalsClubRank(comp);
+        const cut = comp.kind === "mbl" ? 4 : 8;
+        if (cr.rank === 1) return { id: "title", ic: "trophy", title: "Win the title", why: `${clubName} have the strongest roster. Anything less is a failure.`, tgt: 1, unit: "place", lower: true };
+        if (cr.rank <= 3) return { id: "top2", ic: "trophy", title: "Finish in the top 2", why: comp.kind === "mbl" ? "A home-court seed for the semi-finals." : "A top seed for the knockouts.", tgt: 2, unit: "place", lower: true };
+        return { id: "po", ic: "users", title: "Make the playoffs", why: `Top ${cut} of ${cr.n} after the regular season.`, tgt: cut, unit: "place", lower: true };
+      }
+      default: return null;
+    }
+  };
+  // personal
+  const personal = age < 21 && role !== "Starter" ? "min" : "pts";
+  // career stage (the stretch goal)
+  let career;
+  const h = mdHash(`${p.name}:${p.year}:goal`) % 3;
+  if (recentInc) career = "tech";
+  else if (hurt && age >= 24) career = "fit";
+  else if (age < 23) career = personal === "min" ? "fg" : "fg";
+  else if (age >= 30 || captain) career = (h % 2 === 0 && mk("career", "stretch", "ment")) ? "ment" : "chem";
+  else {
+    const opts = [guard ? "ast" : big ? "reb" : (ex.apg >= ex.rpg / 2 ? "ast" : "reb")];
+    if (!guard && age >= 22) opts.push("def");
+    if (age >= 27) opts.push("fit");
+    career = opts[h % opts.length];
+  }
+  const list = [
+    { ...mk("personal", "core", personal), slot: "personal", kind: "core" },
+    { ...mk("team", "core", "team"), slot: "team", kind: "core" },
+    { ...(mk("career", "stretch", career) || mk("career", "stretch", "chem")), slot: "career", kind: "stretch" },
+  ];
+  const stage = age < 23 ? "young" : age >= 30 ? "vet" : "prime";
+  const ask = list[1].id === "title" ? "We win it all this year." : list[1].id === "top2" ? "Top two, or it's a failed season." : "Help us get to the playoffs.";
+  const quote = stage === "young" ? `You're young, so I'm not asking for miracles. ${list[0].id === "min" ? "Earn your minutes" : "Score when it's there"}, take good shots, and ${ask.charAt(0).toLowerCase() + ask.slice(1)}`
+    : stage === "vet" ? `You don't have to carry us any more. ${list[2].id === "ment" ? "Bring the kid along" : list[2].id === "chem" ? "Keep this room together" : "Stay on the floor"}, and do your job. ${ask}`
+    : `${role === "Starter" ? "You're a starter now. I need you producing every night." : "Your minutes are there to be won."} ${ask}`;
+  return { y: comp.year, kind: comp.kind, club: comp.myTeam, clubName, coach: goalCoach(comp.myTeam, comp.year), quote, role, list, exp: ex, techRate: recentInc ? 0.04 : 0.025 };
+}
+/* Your technicals this season: a small chance each game you play (more after a referee row). */
+function goalsTechs(comp, G0) {
+  if (!G0 || !G0.list.some(g => g.id === "tech")) return 0;
+  return comp.games.filter(g => g.res && g.res.my && !g.res.my.dnp && (g.h === comp.myTeam || g.a === comp.myTeam)).filter(g => (mdHash(`tech:${comp.year}:${g.i}:${G0.club}`) % 1000) < G0.techRate * 1000).length;
+}
+/* Where a goal stands right now. */
+function goalValue(G, comp, p, G0) {
+  const s = comp.stats[MD_ME] || { g: 0, min: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, fgm: 0, fga: 0 };
+  const g = s.g || 0;
+  const mineRs = comp.games.filter(x => x.ph === "rs" && (x.h === comp.myTeam || x.a === comp.myTeam));
+  const rsLeft = mineRs.filter(x => !x.res).length;
+  const rsDone = mineRs.length - rsLeft;
+  let v = 0;
+  switch (G.unit) {
+    case "mpg": if (G.mentee) { const m = comp.stats[G.mentee.k]; v = m && m.g ? m.min / m.g : 0; } else v = g ? s.min / g : 0; break;
+    case "%": v = s.fga ? s.fgm / s.fga * 100 : 0; break;
+    case "ppg": v = g ? s.pts / g : 0; break;
+    case "apg": v = g ? s.ast / g : 0; break;
+    case "rpg": v = g ? s.reb / g : 0; break;
+    case "sbpg": v = g ? (s.stl + s.blk) / g : 0; break;
+    case "chem": v = (p.relationships && p.relationships.team) || 0; break;
+    case "gp": v = mineRs.filter(x => x.res && x.res.my && !x.res.my.dnp).length; break;
+    case "tech": v = goalsTechs(comp, G0); break;
+    case "place": { const t = mdTable(comp, Object.keys(comp.teams), ["rs"]); v = rsDone ? 1 + t.findIndex(r => r.id === comp.myTeam) : 0; break; }
+    default: v = 0;
+  }
+  const over = comp.done || (!rsLeft && G.unit === "place" && G.tgt !== 1) || (comp.games.every(x => !(x.h === comp.myTeam || x.a === comp.myTeam) || x.res) && comp.done);
+  const champ = comp.champion && comp.champion === comp.myTeam;
+  let hit;
+  if (G.unit === "place") hit = G.tgt === 1 ? champ : v > 0 && v <= G.tgt;
+  else if (G.unit === "tech") hit = v === 0;
+  else hit = v >= G.tgt;
+  let st;
+  const ended = comp.done;
+  const started = rsDone > 0 || g > 0;
+  if (G.unit === "tech") st = v > 0 ? "miss" : ended ? "done" : started ? "track" : "new";
+  else if (G.unit === "gp") st = v >= G.tgt ? "done" : v + rsLeft < G.tgt ? "miss" : ended ? "miss" : !started ? "new" : rsLeft <= 4 && v + rsLeft - 1 < G.tgt ? "risk" : "track";
+  else if (G.unit === "place" && G.tgt === 1) st = ended ? (champ ? "done" : "miss") : !started ? "new" : comp.po && comp.po.some && false ? "track" : v && v <= 2 ? "track" : v && v <= (comp.kind === "mbl" ? 4 : 8) ? "close" : "risk";
+  else if (G.unit === "place") st = !rsLeft && rsDone ? (hit ? "done" : "miss") : !started ? "new" : hit ? "track" : v <= G.tgt + 1 ? "close" : "risk";
+  else st = ended ? (hit ? "done" : "miss") : !started ? "new" : hit ? "track" : v >= G.tgt * 0.9 ? "close" : "risk";
+  if (G.unit === "place" && G.tgt === 1 && !ended && rsDone && !rsLeft) { const t = mdTable(comp, Object.keys(comp.teams), ["rs"]); const pl = 1 + t.findIndex(r => r.id === comp.myTeam); if (pl > (comp.kind === "mbl" ? 4 : 8)) st = "miss"; }
+  // per-game series for the spark line (running value)
+  let series = null;
+  if (["ppg", "apg", "rpg", "sbpg", "%"].includes(G.unit) || (G.unit === "mpg" && !G.mentee)) {
+    const mine = comp.games.filter(x => x.res && x.res.my && !x.res.my.dnp && (x.h === comp.myTeam || x.a === comp.myTeam)).sort((a, b) => a.i - b.i);
+    const c = { n: 0, a: 0, b: 0 };
+    series = mine.map(x => { const m = x.res.my; c.n++; if (G.unit === "%") { c.a += m.fgm || 0; c.b += m.fga || 0; return c.b ? c.a / c.b * 100 : 0; } const val = G.unit === "ppg" ? m.pts : G.unit === "apg" ? m.ast : G.unit === "rpg" ? m.reb : G.unit === "sbpg" ? (m.stl || 0) + (m.blk || 0) : m.min; c.a += val || 0; return c.a / c.n; });
+  }
+  return { v, st, hit: !!hit, over: !!over, series };
+}
+const GOAL_ST = { new: ["Not started", ""], track: ["On track", "pos"], close: ["Close", "or"], risk: ["At risk", "neg"], done: ["Hit", "pos"], miss: ["Missed", "neg"] };
+const goalShow = (G, v) => G.unit === "place" ? (v ? recOrd(v) : "—") : G.unit === "%" ? (v ? v.toFixed(1) + "%" : "—") : G.unit === "gp" || G.unit === "tech" || G.unit === "chem" ? String(Math.round(v)) : v.toFixed(1);
+const goalFill = (G, v) => {
+  if (G.unit === "place") return v ? Math.max(6, Math.min(100, (9 - v) / (9 - G.tgt) * 82)) : 0;
+  if (G.unit === "tech") return v ? 100 : 0;
+  const mx = G.unit === "gp" ? (G.tgt / 0.83) : G.tgt * 1.35;
+  return Math.max(0, Math.min(100, v / mx * 100));
+};
+const goalTgtPos = (G) => G.unit === "place" ? 82 : G.unit === "tech" ? 0 : G.unit === "gp" ? 83 : 100 / 1.35;
+function goalReward(p, G) {
+  const sal = p.contractSalary || 0;
+  return G.kind === "stretch" ? { cash: Math.max(2000, sal * 2), coach: 8, pop: 3, miss: -2 } : { cash: Math.max(1000, sal), coach: 5, pop: 0, miss: -4 };
+}
+const goalRewardText = (p, G) => { const r = goalReward(p, G); return { hit: `${rm(r.cash)} · Coach +${r.coach}${r.pop ? ` · Popularity +${r.pop}` : ""}`, miss: `Coach −${Math.abs(r.miss)}` }; };
+const goalProjTxt = (G, G0) => {
+  const e = G0 && G0.exp; if (!e) return "";
+  const v = G.mentee ? null : ({ mpg: e.mpg, ppg: e.ppg, apg: e.apg, rpg: e.rpg, sbpg: e.spg + e.bpg, "%": e.fg })[G.unit];
+  return v != null ? ` · on current form ${G.unit === "%" ? v.toFixed(1) + "%" : v.toFixed(1)}` : "";
+};
+/* Judge the season, pay out, and set next season's perk. */
+function goalsJudge(p0, comp) {
+  const p = { ...p0, relationships: { ...p0.relationships } };
+  const G0 = p.goals;
+  if (!G0 || G0.y !== comp.year || G0.kind !== comp.kind) return { p, review: null };
+  const res = G0.list.map(G => { const r = goalValue(G, comp, p, G0); return { ...G, v: r.v, hit: r.hit }; });
+  let cash = 0, coach = 0, pop = 0;
+  res.forEach(G => { const r = goalReward(p, G); if (G.hit) { cash += r.cash; coach += r.coach; pop += r.pop; } else coach += r.miss; });
+  const hits = res.filter(r => r.hit).length;
+  p.money = (p.money || 0) + cash;
+  p.totalEarnings = (p.totalEarnings || 0) + cash;
+  p.relationships.coach = clamp((p.relationships.coach || 50) + coach);
+  p.popularity = clamp((p.popularity || 0) + pop);
+  let perk = null;
+  if (hits === res.length) { perk = { y: p.year + 1, role: 1 }; p.goalsTalk = true; }
+  else if (hits === 0) perk = { y: p.year + 1, role: -1 };
+  p.goalsPerk = perk;
+  const verdict = hits === 3 ? "That's everything I asked for. You've earned the bigger role next season." : hits === 2 ? "Good season. Not perfect, but I can build around this." : hits === 1 ? "We'll talk in pre-season. I expected more." : "That wasn't good enough. Next season starts further down the bench unless you show me something.";
+  const review = { y: G0.y, kind: G0.kind, clubName: G0.clubName, coach: G0.coach, list: res, cash, coachD: coach, pop, hits, verdict, perk: hits === 3 ? "up" : hits === 0 ? "down" : null };
+  p.goalsLog = [...(p.goalsLog || []), { y: G0.y, kind: G0.kind, hits, n: res.length, ids: res.map(r => [r.id, r.hit ? 1 : 0]) }].slice(-30);
+  delete p.goals;
+  return { p, review };
+}
+/* At the start of next season: the role that last season's review earned. */
+function goalsApplyPerk(p) {
+  const k = p.goalsPerk;
+  if (!k || k.y !== p.year || !k.role) return null;
+  const i = GOAL_ROLES.indexOf(p.starterStatus || "Rotation");
+  const j = Math.max(0, Math.min(2, (i < 0 ? 1 : i) + k.role));
+  const from = p.starterStatus || "Rotation";
+  p.starterStatus = GOAL_ROLES[j];
+  p.goalsPerk = { ...k, role: 0 };
+  return j === i ? null : { from, to: GOAL_ROLES[j], up: k.role > 0 };
+}
+
+/* ---------- UI ---------- */
+function GoalRing({ pct, st, size = 62, children }) {
+  const r = (size - 8) / 2, c = 2 * Math.PI * r;
+  const col = st === "done" || st === "track" ? "var(--ok)" : st === "miss" || st === "risk" ? "var(--bd)" : st === "close" ? "var(--or2)" : "var(--or)";
+  return (
+    <span className="gl-ring" style={{ width: size, height: size }}>
+      <svg viewBox={`0 0 ${size} ${size}`} aria-hidden="true"><circle cx={size / 2} cy={size / 2} r={r} className="bg" /><circle cx={size / 2} cy={size / 2} r={r} className="fg" style={{ stroke: col, strokeDasharray: c, strokeDashoffset: c * (1 - Math.max(0, Math.min(1, pct / 100))) }} /></svg>
+      <span className="in">{children}</span>
+    </span>
+  );
+}
+function GoalSpark({ series, tgt }) {
+  if (!series || series.length < 2) return null;
+  const W = 120, H = 30;
+  const mx = Math.max(tgt * 1.25, ...series) || 1, mn = Math.min(tgt * 0.6, ...series);
+  const y = (v) => H - 3 - (v - mn) / Math.max(0.001, mx - mn) * (H - 6);
+  const pts = series.map((v, i) => `${(i / (series.length - 1)) * W},${y(v).toFixed(1)}`).join(" ");
+  return (
+    <svg className="gl-spark" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden="true">
+      <line x1="0" x2={W} y1={y(tgt)} y2={y(tgt)} className="t" />
+      <polyline points={pts} />
+      <circle cx={W} cy={y(series[series.length - 1])} r="2.6" />
+    </svg>
+  );
+}
+function GoalCard({ G, p, comp, G0, i = 0, compact = false, final = null }) {
+  const r = final ? { v: final.v, st: final.hit ? "done" : "miss", hit: final.hit, series: null } : comp ? goalValue(G, comp, p, G0) : { v: 0, st: "new", series: null };
+  const [sl, sc] = GOAL_ST[r.st];
+  const rw = goalRewardText(p, G);
+  const fill = goalFill(G, r.v);
+  const isEnd = r.st === "done" || r.st === "miss";
+  return (
+    <article className={"pn gl-card" + (G.kind === "stretch" ? " str" : "") + (r.st === "done" ? " is-done" : r.st === "miss" ? " is-miss" : "") + (compact ? " gl-cmp" : "")} style={{ animationDelay: i * 80 + "ms" }}>
+      <div className="gl-top">
+        <GoalRing pct={final ? 100 : fill} st={r.st}><Ic n={final ? (r.hit ? "check" : "x") : (G.ic || "target")} /></GoalRing>
+        <div className="gl-t">
+          <span className="gl-tags"><Tg cls={G.kind === "stretch" ? "or" : ""} style={{ height: 22 }}>{G.kind === "stretch" ? "Stretch goal" : G.slot === "team" ? "Team goal" : "Core goal"}</Tg>{final ? <span className={"gl-stamp " + (r.hit ? "ok" : "no")}>{r.hit ? "Hit" : "Missed"}</span> : <Tg cls={sc} style={{ height: 22 }}>{sl}</Tg>}</span>
+          <h4>{G.title}</h4>
+          {!compact && <p>{G.why}</p>}
+        </div>
+      </div>
+      {!comp && !final ? <div className="gl-val">
+        <b className="num">{G.unit === "place" ? (G.tgt === 1 ? "No. 1" : "Top " + G.tgt) : G.unit === "tech" ? "0" : G.unit === "%" ? G.tgt + "%" : String(G.tgt) + "+"}</b>
+        <small>{G.unit === "place" ? (G.tgt === 1 ? "win the playoffs" : "after the regular season") : G.unit === "gp" ? "games" : G.unit === "tech" ? "technical fouls" : G.unit === "chem" ? "team chemistry" : G.mentee ? "his minutes a game" : ({ mpg: "minutes a game", ppg: "points a game", apg: "assists a game", rpg: "rebounds a game", sbpg: "steals + blocks a game", "%": "from the field" })[G.unit] || ""}{goalProjTxt(G, G0)}</small>
+      </div> : <div className="gl-val">
+        <b className="num">{final && G.unit === "place" && G.tgt === 1 && r.hit ? "Won" : r.st === "new" && G.unit !== "chem" ? "—" : goalShow(G, r.v)}</b>
+        <small>{G.unit === "place" ? (G.tgt === 1 ? "current place · title needed" : "current place") : G.unit === "gp" ? "games played" : G.unit === "tech" ? "technicals" : G.unit === "chem" ? "team chemistry" : G.mentee ? "his minutes a game" : final ? "final" : "so far"} · target {goalFmtT(G)}</small>
+        {!compact && <GoalSpark series={r.series} tgt={G.tgt} />}
+      </div>}
+      <div className="gl-track"><i style={{ width: fill + "%" }} /><span className="gl-tk" style={{ left: goalTgtPos(G) + "%" }} /></div>
+      {!compact && <div className="gl-rw"><div className={final && r.hit ? "on" : ""}><small>If you hit it</small>{rw.hit}</div><div className={final && !r.hit ? "on" : ""}><small>If you miss</small>{rw.miss}</div></div>}
+    </article>
+  );
+}
+function GoalsCoachHead({ G0, p, lbl }) {
+  return (
+    <div className="pn gl-coach" data-a="">
+      <span className="gl-face" aria-hidden="true">{G0.coach.replace("Coach ", "").slice(0, 2).toUpperCase()}<PrLogo k={G0.club} s={26} /></span>
+      <div className="gl-q"><small className="lbl">{lbl || `${G0.coach} · ${G0.clubName}`}</small><p>“{G0.quote}”</p></div>
+    </div>
+  );
+}
+/* Before the first game. */
+function GoalsIntroScreen({ player, onStart }) {
+  const p = player;
+  const G0 = p.goals;
+  const comp = p.mdComp;
+  if (!G0 || !comp) return <PrPage><PrNext onClick={onStart}>Start the season</PrNext></PrPage>;
+  const lg = comp.kind === "mbl" ? "MBL" : PR_LG_SHORT[comp.kind] || comp.label;
+  return (
+    <PrPage>
+      <PrHead lbl={<><PrLogo k={comp.kind === "mbl" ? "c_mbl" : "c_dleague"} s={22} /> {lg} {comp.year} · {G0.clubName} · {comp.myRole}</>} title="Coach's targets" desc="Three goals for this season: one personal, one for the team and one that fits your stage of career. Hit them for a bonus and more trust; miss them and he remembers." />
+      {p.goalsPerkNote && <div className={"alert gl-perk " + (p.goalsPerkNote.up ? "up" : "dn")} data-a="" style={{ cursor: "default" }}><span className="ini-b"><Ic n={p.goalsPerkNote.up ? "up" : "x"} /></span><span><b>{p.goalsPerkNote.up ? "Last season's review: role up" : "Last season's review: role down"}</b><small>{p.goalsPerkNote.from} → {p.goalsPerkNote.to} to start this season.</small></span></div>}
+      <GoalsCoachHead G0={G0} p={p} />
+      <div className="gl-grid">{G0.list.map((G, i) => <GoalCard key={G.id} G={G} p={p} comp={null} G0={G0} i={i} />)}</div>
+      <div className="g" style={{ marginTop: 14 }}>
+        <section className="pn c7 l12 gl-how" data-a="">
+          <h3><Ic n="eye" /> How it works</h3>
+          <div className="dec"><span className="k you"><Ic n="clock" /></span><div><b>Halfway check-in</b><small>The mid-season recap shows where each goal stands.</small></div></div>
+          <div className="dec"><span className="k chance"><Ic n="cash" /></span><div><b>Bonuses paid at the end</b><small>Core goal: a month's salary (at least RM 1,000). Stretch goal: two months' salary and popularity.</small></div></div>
+          <div className="dec"><span className="k you"><Ic n="up" /></span><div><b>All three: a bigger role</b><small>Your role goes up a step next season and your next contract talk starts 10% higher. None: your role drops a step.</small></div></div>
+        </section>
+        <details className="pn c5 l12 gl-lib" data-a="">
+          <summary><Ic n="table" /> Every goal type</summary>
+          <table className="mini-t"><thead><tr><th>Goal</th><th>Who gets it</th></tr></thead><tbody>{GOAL_LIB.map(r => <tr key={r[0]}><td>{r[0]}</td><td>{r[1]}</td></tr>)}</tbody></table>
+        </details>
+      </div>
+      <PrNext onClick={onStart}>Start the season</PrNext>
+    </PrPage>
+  );
+}
+/* On the competition page and the mid-season recap. */
+function GoalsPanel({ player, comp, mode = "comp" }) {
+  const p = player;
+  const G0 = p.goals;
+  if (!G0 || !comp || G0.y !== comp.year || G0.kind !== comp.kind) return null;
+  const vals = G0.list.map(G => goalValue(G, comp, p, G0));
+  const ok = vals.filter(v => v.st === "track" || v.st === "done").length;
+  const half = mode === "checkin";
+  const line = ok === 3 ? "All three on track. Keep doing exactly this." : ok === 2 ? "Two of three on track. Fix the last one in the second half." : ok === 1 ? "Only one on track. The second half has to be better." : "Nothing on track yet. I need more from you.";
+  if (mode === "comp") return (
+    <div className="rd-card gl-mini" data-a="">
+      <div className="gl-mh"><span className="rd-k">Coach's targets · {ok} of 3 on track</span></div>
+      {G0.list.map((G, i) => { const v = vals[i]; const [sl, sc] = GOAL_ST[v.st]; return (
+        <div key={G.id} className="gl-mr">
+          <GoalRing pct={goalFill(G, v.v)} st={v.st} size={34}><Ic n={G.ic || "target"} /></GoalRing>
+          <span><b>{G.title}</b><small>{v.st === "new" && G.unit !== "chem" ? "—" : goalShow(G, v.v)} · target {goalFmtT(G)}{G.kind === "stretch" ? " · stretch" : ""}</small></span>
+          <Tg cls={sc} style={{ height: 22 }}>{sl}</Tg>
+        </div>); })}
+    </div>
+  );
+  return (
+    <section className="pn c12 gl-check" data-a="">
+      <h3><Ic n="target" /> {half ? "Halfway check-in" : "Coach's targets"}<small>{ok} of 3 on track</small></h3>
+      <p className="gl-said">“{line}” <small>— {G0.coach}</small></p>
+      <div className="gl-grid">{G0.list.map((G, i) => <GoalCard key={G.id} G={G} p={p} comp={comp} G0={G0} i={i} compact />)}</div>
+    </section>
+  );
+}
+/* The hub's small card. */
+function GoalsHubCard({ player, onOpen }) {
+  const p = player;
+  const G0 = p.goals, comp = p.mdComp;
+  if (!G0 || !comp || G0.y !== comp.year || G0.kind !== comp.kind) return null;
+  const vals = G0.list.map(G => goalValue(G, comp, p, G0));
+  return (
+    <section className="pn c4 l12 gl-hub" data-a="" onClick={onOpen} style={onOpen ? { cursor: "pointer" } : undefined}>
+      <h3><Ic n="target" /> Coach's targets<small>{vals.filter(v => v.st === "track" || v.st === "done").length} of 3 on track</small></h3>
+      {G0.list.map((G, i) => { const v = vals[i]; const [sl, sc] = GOAL_ST[v.st]; return (
+        <div key={G.id} className="gl-hr">
+          <span><b>{G.title}</b><i className="gl-hb"><i style={{ width: goalFill(G, v.v) + "%" }} className={"s-" + v.st} /></i></span>
+          <Tg cls={sc} style={{ height: 22 }}>{sl}</Tg>
+        </div>); })}
+      <PrSrc>{G0.coach} · {G0.kind === "mbl" ? "MBL" : PR_LG_SHORT[G0.kind]} {G0.y}</PrSrc>
+    </section>
+  );
+}
+/* On the end-of-season result screen. */
+function GoalsReview({ review, player }) {
+  const R = review;
+  const [n, setN] = useState(prReduced() ? R.cash : 0);
+  useEffect(() => { if (prReduced()) return; let raf, t0; const run = (t) => { if (!t0) t0 = t; const k = Math.min(1, (t - t0) / 900); setN(Math.round(R.cash * (1 - Math.pow(1 - k, 3)))); if (k < 1) raf = requestAnimationFrame(run); }; raf = requestAnimationFrame(run); return () => cancelAnimationFrame(raf); }, [R.cash]);
+  return (
+    <section className="pn c12 gl-rev" data-a="">
+      <h3><Ic n="target" /> Season goals · review<small>{R.coach} · {R.clubName}</small></h3>
+      <div className="gl-rv">
+        <div className="gl-sum">
+          <div className={"gl-score s" + R.hits}><b className="num">{R.hits}</b><small>of 3<br />hit</small></div>
+          <div className="gl-nums">
+            <div><small className="lbl">Bonuses paid</small><b className="num">{rm(n)}</b></div>
+            <div><small className="lbl">Coach trust</small><b className={"num " + (R.coachD >= 0 ? "up" : "dn")}>{R.coachD >= 0 ? "+" : "−"}{Math.abs(R.coachD)}</b></div>
+            {R.pop > 0 && <div><small className="lbl">Popularity</small><b className="num up">+{R.pop}</b></div>}
+          </div>
+          <p className="gl-said">“{R.verdict}”</p>
+          {R.perk && <div className={"gl-perkb " + R.perk}><Ic n={R.perk === "up" ? "up" : "x"} /> {R.perk === "up" ? "Next season: your role goes up a step, and your next contract talk starts 10% higher." : "Next season: your role drops a step."}</div>}
+        </div>
+        <div className="gl-grid">{R.list.map((G, i) => <GoalCard key={G.id} G={G} p={player} comp={null} G0={null} i={i} compact final={{ v: G.v, hit: G.hit }} />)}</div>
+      </div>
+    </section>
+  );
+}
 
 const PR_CSS = `.pr{color-scheme:dark;--bg:#0a0b0e;--bg2:#0f1115;--p1:#14171c;--p2:#1a1e25;--p3:#222731;--ln:rgba(255,255,255,.07);--ln2:rgba(255,255,255,.12);--ink:#f3f4f6;--mu:#a3a9b4;--di:#737a86;--or:#ff7a1a;--or2:#ff9a4d;--gd:#e2b65a;--ok:#34c37a;--bd:#f05252;--in:#4aa8ff;--r1:6px;--r2:10px;--r3:14px;--r4:20px;--tc:#ff7a1a;--td:#1a1208;--cd:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;--sn:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;--ease:cubic-bezier(.2,.8,.2,1)}
 .pr .i{width:18px;height:18px;flex:none}
@@ -12538,6 +13353,7 @@ const PR_CSS = `.pr{color-scheme:dark;--bg:#0a0b0e;--bg2:#0f1115;--p1:#14171c;--
 .pr .nav.on{color:var(--ink);background:linear-gradient(90deg,rgba(255,122,26,.16),rgba(255,122,26,.02))}
 .pr .nav.on::before{content:"";position:absolute;left:-12px;top:9px;bottom:9px;width:3px;border-radius:3px;background:var(--or)}
 .pr .nav svg{width:19px;height:19px;flex:none}
+.pr .nav .ct{margin-left:auto;font:700 11px/1 var(--sn);background:var(--or);color:#160a00;border-radius:20px;padding:3px 7px}
 .pr .side .sp{flex:1}
 .pr .me{display:flex;gap:10px;align-items:center;padding:10px;border-radius:var(--r3);background:var(--p1);border:1px solid var(--ln)}
 .pr .me .ph{width:40px;height:40px;border-radius:10px}
@@ -12562,7 +13378,7 @@ const PR_CSS = `.pr{color-scheme:dark;--bg:#0a0b0e;--bg2:#0f1115;--p1:#14171c;--
 .pr[data-l=tab]{--sbw:76px}
 .pr[data-l=land]{--sbw:64px}
 .pr[data-l=tab] .side,.pr[data-l=land] .side{padding:14px 8px;align-items:center}
-.pr[data-l=tab] .nav span,.pr[data-l=land] .nav span,.pr[data-l=tab] .brand b,.pr[data-l=land] .brand b,.pr[data-l=tab] .me div,.pr[data-l=land] .me{display:none}
+.pr[data-l=tab] .nav span,.pr[data-l=land] .nav span,.pr[data-l=tab] .brand b,.pr[data-l=land] .brand b,.pr[data-l=tab] .me div,.pr[data-l=land] .me,.pr[data-l=tab] .nav .ct,.pr[data-l=land] .nav .ct{display:none}
 .pr[data-l=tab] .nav,.pr[data-l=land] .nav{justify-content:center;padding:11px;width:46px}
 .pr[data-l=tab] .nav.on::before,.pr[data-l=land] .nav.on::before{left:-8px}
 .pr[data-l=tab] .brand,.pr[data-l=land] .brand{padding:0 0 14px}
@@ -13487,6 +14303,189 @@ const PR_CSS = `.pr{color-scheme:dark;--bg:#0a0b0e;--bg2:#0f1115;--p1:#14171c;--
 @media (prefers-reduced-motion:reduce){.pr .rl-r,.pr .rl-r.in,.pr .vx-bar i,.pr .rl-st .mb i,.pr .pr-drawer,.pr .pr-drawer-in{animation:none!important;transition:none!important}}
 
 .pr .vx-left{display:flex;flex-direction:column}.pr .vx-left .vx-stage{flex:1;height:auto!important;min-height:520px}.pr[data-l=phone] .vx-left .vx-stage{min-height:440px}
+/* ---- season goals ---- */
+.pr .gl-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:14px}
+.pr[data-l=phone] .gl-grid,.pr[data-l=land] .gl-grid{grid-template-columns:minmax(0,1fr)}
+.pr[data-l=tab] .gl-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.pr .gl-card{position:relative;overflow:hidden;display:flex;flex-direction:column;align-items:stretch;gap:12px;animation:glin .5s var(--ease) both;transition:border-color .3s,transform .3s var(--ease),box-shadow .3s}
+.pr .gl-card:hover{transform:translateY(-3px);box-shadow:0 14px 30px rgba(0,0,0,.35)}
+.pr .gl-card.str{background:linear-gradient(170deg,rgba(255,122,26,.09),var(--p1) 46%);border-color:rgba(255,122,26,.3)}
+.pr .gl-card.is-done{border-color:rgba(52,195,122,.55)}
+.pr .gl-card.is-done .gl-ring .in{color:var(--ok)}.pr .gl-card.is-miss .gl-ring .in{color:var(--bd)}
+.pr .gl-card.is-miss{border-color:rgba(240,82,82,.45)}
+.pr .gl-top{display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;align-items:center}
+.pr .gl-t h4{margin:6px 0 0;font:800 21px/1.08 var(--cd);text-transform:uppercase;letter-spacing:.01em;text-wrap:balance}
+.pr .gl-card.gl-cmp .gl-t h4{font-size:18px}
+.pr .gl-t p{margin:4px 0 0;color:var(--mu);font-size:13px}
+.pr .gl-tags{display:flex;gap:6px;flex-wrap:wrap}
+.pr .gl-ring{position:relative;display:inline-grid;place-items:center;flex:none}
+.pr .gl-ring svg{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg)}
+.pr .gl-ring circle{fill:none;stroke-width:5}
+.pr .gl-ring .bg{stroke:var(--p3)}
+.pr .gl-ring .fg{stroke-linecap:round;transition:stroke-dashoffset .8s var(--ease),stroke .3s}
+.pr .gl-ring .in{position:relative;display:grid;place-items:center;color:var(--or2)}
+.pr .gl-ring .in .i{width:20px;height:20px}
+.pr .gl-mr .gl-ring .in .i{width:14px;height:14px}
+.pr .gl-ring circle{stroke-width:4}
+.pr .gl-val{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:4px 10px;align-items:end}
+.pr .gl-val b{font:800 34px/1 var(--cd)}
+.pr .gl-val small{color:var(--di);font-size:12px;line-height:1.3;align-self:end;padding-bottom:3px}
+.pr .gl-spark{width:120px;height:30px;overflow:visible}
+.pr .gl-spark polyline{fill:none;stroke:var(--or2);stroke-width:2;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.pr .gl-spark line.t{stroke:rgba(255,255,255,.35);stroke-dasharray:3 3;vector-effect:non-scaling-stroke}
+.pr .gl-spark circle{fill:var(--or2)}
+.pr .gl-track{position:relative;height:10px;border-radius:9px;background:var(--p3)}
+.pr .gl-track>i{position:absolute;left:0;top:0;bottom:0;border-radius:9px;background:linear-gradient(90deg,var(--or),var(--or2));transition:width .8s var(--ease)}
+.pr .gl-card.is-done .gl-track>i{background:linear-gradient(90deg,#26a865,var(--ok))}
+.pr .gl-card.is-miss .gl-track>i{background:linear-gradient(90deg,#b23b3b,var(--bd))}
+.pr .gl-track .gl-tk{position:absolute;top:-5px;bottom:-5px;width:2px;border-radius:2px;background:var(--ink)}
+.pr .gl-rw{display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12.5px}
+.pr .gl-rw div{background:var(--p2);border-radius:10px;padding:8px 10px;border:1px solid transparent;transition:border-color .3s,background .3s}
+.pr .gl-rw div.on{border-color:var(--or);background:rgba(255,122,26,.08)}
+.pr .gl-rw small{display:block;color:var(--di);font-weight:600;font-size:11.5px}
+.pr .gl-stamp{display:inline-flex;align-items:center;height:22px;padding:0 10px;border-radius:6px;font:800 13px/1 var(--cd);letter-spacing:.08em;text-transform:uppercase;color:#0b0d10;transform:rotate(-4deg);animation:glstamp .5s var(--ease) .25s both}
+.pr .gl-stamp.ok{background:var(--ok)}.pr .gl-stamp.no{background:var(--bd)}
+.pr .gl-coach{display:grid;grid-template-columns:auto minmax(0,1fr);gap:16px;align-items:center;margin-top:4px;background:linear-gradient(100deg,#1b1f27,var(--p1) 60%);position:relative;overflow:hidden}
+.pr .gl-coach::after{content:"";position:absolute;right:-40px;top:-40px;width:180px;height:180px;border-radius:50%;background:radial-gradient(circle,rgba(255,122,26,.16),transparent 70%);pointer-events:none}
+.pr .gl-face{position:relative;width:68px;height:68px;border-radius:18px;background:radial-gradient(circle at 50% 30%,#2e3440,#14171c);display:grid;place-items:center;font:800 26px/1 var(--cd);color:var(--or2);border:1px solid var(--ln2)}
+.pr .gl-face .lg{position:absolute;right:-8px;bottom:-8px}
+.pr .gl-q p{margin:4px 0 0;font:600 17px/1.4 var(--sn);text-wrap:pretty}
+.pr .gl-perk{margin-bottom:12px}
+.pr .gl-perk.up .ini-b{background:var(--ok);color:#06150c}.pr .gl-perk.dn .ini-b{background:var(--bd);color:#1a0606}
+.pr .gl-perk.dn{background:linear-gradient(90deg,rgba(240,82,82,.14),rgba(240,82,82,.03));border-color:rgba(240,82,82,.35)}
+.pr .gl-lib{align-self:start}
+.pr .gl-lib summary{cursor:pointer;font:700 15px/1.2 var(--sn);list-style:none;display:flex;align-items:center;gap:8px}
+.pr .gl-lib summary::-webkit-details-marker{display:none}
+.pr .gl-lib table{margin-top:10px}
+.pr .gl-lib td{padding:7px 6px;border-bottom:1px solid var(--ln);font-size:12.5px;vertical-align:top;color:var(--mu)}
+.pr .gl-lib td:first-child{color:var(--ink);font-weight:600}
+.pr .gl-mini{padding:14px;display:flex;flex-direction:column;gap:10px}
+.pr .gl-mr{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center}
+.pr .gl-mr b{display:block;font-size:13px;line-height:1.25}
+.pr .gl-mr small{color:var(--di);font-size:11.5px}
+.pr .gl-said{margin:0;font:600 15px/1.45 var(--sn);color:var(--ink)}
+.pr .gl-said small{color:var(--di);font-weight:500;font-size:12.5px}
+.pr .gl-hub .gl-hr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--ln)}
+.pr .gl-hub .gl-hr:first-of-type{border-top:0}
+.pr .gl-hr b{display:block;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pr .gl-hb{display:block;height:6px;border-radius:6px;background:var(--p3);overflow:hidden;margin-top:6px}
+.pr .gl-hb i{display:block;height:100%;border-radius:6px;background:var(--or);transition:width .8s var(--ease)}
+.pr .gl-hb i.s-track,.pr .gl-hb i.s-done{background:var(--ok)}.pr .gl-hb i.s-risk,.pr .gl-hb i.s-miss{background:var(--bd)}.pr .gl-hb i.s-close{background:var(--or2)}
+.pr .gl-rv{display:flex;flex-direction:column;gap:16px}
+.pr .gl-rv .gl-grid{margin-top:0}
+.pr .gl-sum{display:flex;flex-wrap:wrap;align-items:center;gap:14px 26px}
+.pr .gl-sum .gl-said{flex:1 1 280px}
+.pr .gl-sum .gl-perkb{flex:1 1 100%}
+.pr .gl-score{display:flex;align-items:baseline;gap:8px}
+.pr .gl-score b{font:800 64px/.9 var(--cd)}
+.pr .gl-score.s3 b{color:var(--ok)}.pr .gl-score.s0 b{color:var(--bd)}.pr .gl-score.s2 b,.pr .gl-score.s1 b{color:var(--or2)}
+.pr .gl-score small{color:var(--mu);font-weight:600;line-height:1.15}
+.pr .gl-nums{display:flex;gap:22px;flex-wrap:wrap}
+.pr .gl-nums b{display:block;font:800 26px/1.1 var(--cd)}
+.pr .gl-nums b.up{color:var(--ok)}.pr .gl-nums b.dn{color:var(--bd)}
+.pr .gl-perkb{display:flex;gap:8px;align-items:flex-start;padding:10px 12px;border-radius:12px;font-size:13px;font-weight:600}
+.pr .gl-perkb.up{background:rgba(52,195,122,.1);color:#8fe7b8;border:1px solid rgba(52,195,122,.35)}
+.pr .gl-perkb.down{background:rgba(240,82,82,.1);color:#ffadad;border:1px solid rgba(240,82,82,.35)}
+@keyframes glin{from{opacity:0;transform:translateY(10px)}}
+@keyframes glstamp{from{opacity:0;transform:rotate(-4deg) scale(1.9)}}
+/* ---- records ---- */
+.pr .rc{display:flex;flex-direction:column;gap:16px}
+.pr .rc-hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:16px;align-items:end;background:radial-gradient(120% 140% at 100% 0%,rgba(255,211,77,.12),transparent 55%),linear-gradient(160deg,#17150f,var(--p1) 60%);border-color:rgba(255,211,77,.22);overflow:hidden}
+.pr[data-l=phone] .rc-hero{grid-template-columns:minmax(0,1fr)}
+.pr .rc-hero-t .lbl{display:inline-flex;gap:6px;align-items:center}
+.pr .rc-hero-t h2{margin:6px 0 4px;font:800 clamp(28px,4vw,40px)/1 var(--cd);text-transform:uppercase}
+.pr .rc-hero-t p{margin:0;color:var(--mu);font-size:13.5px;max-width:52ch}
+.pr .rc-pod{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;align-items:end}
+.pr .rc-pd{display:flex;flex-direction:column;align-items:center;gap:0;background:none;border:0;padding:0;color:inherit;cursor:pointer;min-width:0}
+.pr .rc-pd .fig{display:flex;justify-content:center;align-items:flex-end;height:96px}
+.pr .rc-pd .fig canvas{height:100%;width:auto;image-rendering:pixelated}
+.pr .rc-grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:16px;align-items:start}
+.pr[data-l=phone] .rc-grid,.pr[data-l=tab] .rc-grid,.pr[data-l=land] .rc-grid{grid-template-columns:minmax(0,1fr)}
+.pr .rc-side{display:flex;flex-direction:column;gap:16px}
+.pr .rc-bar{display:flex;gap:8px;flex-wrap:wrap;justify-content:space-between}
+.pr .rc-bar .tabs{margin-bottom:0;flex-wrap:wrap}
+.pr .rc-chase{display:flex;gap:10px;align-items:center;padding:11px 14px;border-radius:12px;background:rgba(255,211,77,.07);border:1px solid rgba(255,211,77,.3);margin-top:12px;font-size:13.5px}
+.pr .rc-chase b{color:var(--gd)}
+.pr .rc-chase .i{color:var(--gd)}
+.pr .rc-board{display:flex;flex-direction:column;gap:4px;margin-top:12px}
+.pr .rc-r{display:grid;grid-template-columns:34px auto minmax(0,1fr) 92px 72px;gap:10px;align-items:center;min-height:50px;padding:0 12px;border-radius:12px;background:var(--p2);border:1px solid transparent;transition:background .2s,border-color .2s}
+.pr .rc-r.click{cursor:pointer}.pr .rc-r.click:hover{background:var(--p3)}
+.pr .rc-r .rk{font:800 21px/1 var(--cd);color:var(--di);text-align:center}
+.pr .rc-r .rk.r1{color:var(--gd)}.pr .rc-r .rk.r2{color:#d6dbe3}.pr .rc-r .rk.r3{color:#d08a54}
+.pr .rc-r .nm b{display:block;font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pr .rc-r .nm small{color:var(--di);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+.pr .rc-r .pg{color:var(--mu);font-size:12px;text-align:right}
+.pr .rc-r .tot{font:800 23px/1 var(--cd);text-align:right}
+.pr .rc-r.is-me{background:linear-gradient(90deg,rgba(255,122,26,.2),var(--p2) 65%);border-color:rgba(255,122,26,.55)}
+.pr .rc-r.is-me .tot{color:var(--or2)}
+.pr[data-l=phone] .rc-r{grid-template-columns:26px auto minmax(0,1fr) 60px;gap:8px;padding:0 10px}
+.pr[data-l=phone] .rc-r .pg{display:none}
+.pr .rc-gap{text-align:center;color:var(--di);letter-spacing:.3em;font-size:12px;padding:2px 0}
+.pr .rc-cm{width:var(--s);height:var(--s);border-radius:8px;background:var(--p3);display:inline-grid;place-items:center;font:800 10px/1 var(--cd);color:var(--mu);flex:none}
+.pr .rc-sg{display:grid;grid-template-columns:62px minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--ln)}
+.pr .rc-sg:first-of-type{border-top:0}
+.pr .rc-sg>b{font:800 38px/1 var(--cd);color:var(--gd);text-align:center}
+.pr .rc-sg .nm{display:block;font-weight:700;font-size:14px}
+.pr .rc-sg small{display:block;color:var(--di);font-size:11.5px}
+.pr .rc-sg .nx{text-align:right}
+.pr .rc-sg.is-me>b{color:var(--or2)}
+.pr .rc-sel{width:100%;margin-bottom:12px}
+.pr .rc-empty{color:var(--di);margin:0;font-size:13px}
+.pr .rc-cl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.pr .rc-cl>div{background:var(--p2);border-radius:12px;padding:10px 12px;border:1px solid transparent}
+.pr .rc-cl>div.is-me{border-color:rgba(255,122,26,.55)}
+.pr .rc-cl b{display:block;font:800 26px/1.05 var(--cd);color:var(--gd)}
+.pr .rc-cl span{display:block;font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pr .rc-chi{display:flex;flex-direction:column;gap:4px;margin-top:10px;font-size:12px;color:var(--mu)}
+.pr .rc-chi b{color:var(--ink);font:800 15px/1 var(--cd)}
+.pr .rc-ms{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.pr[data-l=phone] .rc-ms{grid-template-columns:minmax(0,1fr)}
+.pr .rc-b{display:grid;grid-template-columns:40px minmax(0,1fr);gap:10px;align-items:center;padding:8px;border-radius:12px;background:var(--p2)}
+.pr .rc-b .bd{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:var(--p3);color:var(--di)}
+.pr .rc-b.got .bd{background:linear-gradient(160deg,#ffd34d,#e09b1a);color:#2a1a00;box-shadow:0 0 0 3px rgba(255,211,77,.15)}
+.pr .rc-b b{display:block;font-size:13px}
+.pr .rc-b small{display:block;color:var(--di);font-size:11.5px}
+.pr .rc-b .bar{display:block;height:5px;border-radius:5px;background:var(--p3);overflow:hidden;margin-top:5px}
+.pr .rc-b .bar i{display:block;height:100%;background:var(--gd)}
+.pr .rc-tg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:14px}
+.pr[data-l=phone] .rc-tg{grid-template-columns:minmax(0,1fr)}
+.pr .rc-t{background:linear-gradient(170deg,rgba(255,211,77,.08),var(--p2) 55%);border:1px solid rgba(255,211,77,.25);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:4px}
+.pr .rc-t>b{font:800 20px/1.1 var(--cd);text-transform:uppercase}
+.pr .rc-t span b{font:800 22px/1 var(--cd);color:var(--gd)}
+.pr .rc-t span{font-size:13px;color:var(--mu)}
+.pr .rc-t small{color:var(--di);font-size:11.5px}
+.pr .rc-t .bar{display:block;height:6px;border-radius:6px;background:var(--p3);overflow:hidden}
+.pr .rc-t .bar i{display:block;height:100%;background:var(--gd)}
+.pr .rc-pl{display:inline-flex;gap:6px;align-items:center;margin:2px 0 8px;padding:4px 10px;border-radius:20px;background:rgba(255,211,77,.1);border:1px solid rgba(255,211,77,.35);color:var(--gd);font-size:12.5px;font-weight:700}
+.pr .rc-pl .i{width:14px;height:14px}
+.pr .rc-toasts{position:fixed;left:50%;top:74px;transform:translateX(-50%);z-index:80;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none;width:min(560px,calc(100% - 24px))}
+.pr[data-l=phone] .rc-toasts{top:64px}
+.pr .rc-toast{pointer-events:auto;cursor:pointer;display:grid;grid-template-columns:52px minmax(0,1fr);gap:12px;align-items:center;width:100%;padding:12px 16px;border-radius:16px;background:#1b1710;border:1px solid rgba(255,211,77,.55);box-shadow:0 18px 50px rgba(0,0,0,.55),0 0 0 4px rgba(255,211,77,.08);animation:rctin .55s var(--ease) both}
+.pr .rc-toast b{display:block;font:800 20px/1.1 var(--cd);text-transform:uppercase}
+.pr .rc-toast small{display:block;color:var(--mu);font-size:12.5px}
+.pr .rc-toast small.lbl{color:var(--gd);font-size:11px}
+.pr .rc-tb{position:relative;width:52px;height:52px;border-radius:14px;background:linear-gradient(160deg,#ffd34d,#e09b1a);display:grid;place-items:center;color:#2a1a00}
+.pr .rc-tb .i{width:24px;height:24px}
+.pr .rc-toast.t-pass .rc-tb{background:linear-gradient(160deg,#ffb27a,#ff7a1a)}
+.pr .rc-sp{position:absolute;width:5px;height:5px;border-radius:1px;background:var(--gd);left:24px;top:24px;animation:rcburst .8s ease-out both}
+.pr .rc-more{pointer-events:auto;padding:6px 12px;border-radius:20px;background:#1b1710;border:1px solid rgba(255,211,77,.35);color:var(--gd);font-size:12px;font-weight:700;animation:rctin .55s var(--ease) .3s both}
+@keyframes rctin{from{opacity:0;transform:translateY(-24px) scale(.96)}}
+@keyframes rcburst{to{transform:translate(var(--dx),var(--dy));opacity:0}}
+@keyframes rcrise{from{opacity:0;transform:translateY(16px)}}
+@media (prefers-reduced-motion:reduce){.pr .gl-card,.pr .gl-stamp,.pr .rc-toast,.pr .rc-more,.pr .rc-pd .st{animation:none}}
+
+.pr .rc-pd .st{position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;width:100%;min-height:64px;border-radius:12px 12px 4px 4px;background:linear-gradient(180deg,#2a2618,#191710);border:1px solid rgba(255,211,77,.25);padding:14px 6px 8px;text-align:center;animation:rcrise .6s var(--ease) both}
+.pr .rc-pd.p1 .st{min-height:84px;background:linear-gradient(180deg,#3a3014,#1d190d);border-color:rgba(255,211,77,.55)}
+.pr .rc-pd.p2 .st{animation-delay:.08s}.pr .rc-pd.p3 .st{animation-delay:.16s;min-height:56px}
+.pr .rc-pd .st .v{display:block;font:800 26px/1 var(--cd);color:var(--gd)}
+.pr .rc-pd.p1 .st .v{font-size:32px}
+.pr .rc-pd .st .n{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:11.5px;line-height:1.25;color:var(--mu);font-weight:600;max-width:100%}
+.pr .rc-pd .st .rkb{position:absolute;top:-11px;left:50%;transform:translateX(-50%);width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font:800 12px/1 var(--cd);background:#d6dbe3;color:#111}
+.pr .rc-pd.p1 .st .rkb{background:var(--gd)}.pr .rc-pd.p3 .st .rkb{background:#d08a54}
+.pr .rc-pd.is-me .st{border-color:var(--or);box-shadow:0 0 0 3px rgba(255,122,26,.18)}
+.pr[data-l=phone] .rc-pd .fig{height:74px}
+.pr[data-l=phone] .rc-pd .st .v{font-size:22px}.pr[data-l=phone] .rc-pd.p1 .st .v{font-size:26px}
+.pr .rc-pd .st>*{flex:none}.pr .rc-pd>*{flex:none}
 `;
 function PrStyle() { return <style>{PR_CSS}</style>; }
 
@@ -16922,6 +17921,7 @@ export default function App() {
     // Lock the contract at the exact salary + length shown in the offer.
     p.contractSalary = terms.salary;
     p.contractYearsLeft = years;
+    delete p.goalsTalk;
     note += `. (${rm(p.contractSalary)}/month)`;
 
     // Clear the one-time offer-preview rolls now that a choice is made.
@@ -17488,6 +18488,8 @@ export default function App() {
   };
   const mdStartLeague = (p0, ctx) => {
     const p = { ...p0 };
+    p.goalsPerkNote = null;
+    try { const pk = goalsApplyPerk(p); if (pk) p.goalsPerkNote = pk; } catch (e) { /* goals are extras */ }
     const legs = mdLegsFor(p);
     p.mdYear = { y: p.year, legs, i: 0, ctx, grades: {}, carry: null, notes: [] };
     // Before U20: another club may want you for the U20 D-League only.
@@ -17621,12 +18623,14 @@ export default function App() {
     if (!ss.banner && comp.notRegistered) ss.banner = `${(comp.teams[comp.myTeam] || {}).name || "Your club"} left you off the MBL list after your D-League tournaments. You train with the team but can't play this season.`;
     if (!ss.banner && comp.injuredCarry) ss.banner = `Still out with the injury from the ${PR_LG_SHORT[Y.legs[Y.i - 1]] || "last tournament"}. You miss this one.`;
     if (!ss.banner && Y.i > 0) ss.banner = `${PR_LG_SHORT[kind]} ${p.year}: ${comp.myRole} for ${(comp.teams[comp.myTeam] || {}).name || "your club"}.`;
+    let goalsNew = false;
+    try { if (goalsLegOk(p, comp)) { p.goals = goalsPlan(p, comp); goalsNew = true; } else if (p.goals && p.goals.y !== p.year) delete p.goals; } catch (e) { /* goals are extras */ }
     p.mdComp = comp;
     setPlayer(p);
     save(p);
     setBanner(ss.banner || null);
     if (p.highlightMode && !ss.banner) { mdAutoSeason(p); return; }
-    setScreen("comp");
+    setScreen(goalsNew && !p.highlightMode ? "goals_intro" : "comp");
   };
   /* A life ban ends the career on the spot. */
   const mdLifeBan = (p0) => {
@@ -17686,9 +18690,11 @@ export default function App() {
       if (comp.brkPending) break;
       if (!n.length && !comp.done) mdSimUntilMine(comp, p, true);
     }
-    const q = { ...p, mdComp: comp };
+    let q = { ...p, mdComp: comp };
+    let rb = null;
+    try { const rs = recScan(q, comp); q = rs.p; rb = recBannerText(rs.ev); } catch (e) { /* records are extras */ }
     const eb = mdEarnCheck(comp, q);
-    if (eb) setBanner(eb);
+    if (eb || rb) setBanner([rb, eb].filter(Boolean).join(" "));
     if (comp.midPending) { mdMidseason(q); return; }
     if (comp.brkPending) { mdBreaking(q); return; }
     mdFinishLeague(q);
@@ -17899,6 +18905,10 @@ export default function App() {
     try { p = npcMerge(p, comp, aw); } catch (e) { /* profiles are extras */ }
     try { p = npcFlopCheck(p, comp); } catch (e) { /* moves are extras */ }
     try { p.mdLeagueLast = prLeagueSummary(comp, rookies); p.mdLeagues = { ...(p.mdLeagues || {}), [kind]: p.mdLeagueLast }; } catch (e) { /* the table page falls back to the simulated MBL */ }
+    let goalsReview = null;
+    if (kind === "mbl") { try { const rs = recScan(p, comp); p = rs.p; } catch (e) { /* records are extras */ } }
+    try { const gj = goalsJudge(p, comp); p = gj.p; goalsReview = gj.review; } catch (e) { /* goals are extras */ }
+    if (kind === "mbl") { try { p.rec = recAddSeason(p.rec, recFromComp(comp), p); recBadgesQuiet(p); } catch (e) { /* records are extras */ } }
     delete p.mdComp;
     delete p.pendingSecondHalf;
     delete p.pendingSeasonContext;
@@ -17959,7 +18969,7 @@ export default function App() {
       if (kind !== "mbl" && p.league !== "mbl" && gamesPlayed && stats.tr >= 52 && p.age >= 18 && Math.random() < Math.min(0.5, (stats.tr - 45) / 40)) p.mdMblInterest = p.year;
     }
     finishAndRouteSeason(p, {
-      leagueKind: kind,
+      leagueKind: kind, goals: goalsReview,
       ...ctx, ...(comp.notRegistered ? { simTierLabel: "Not registered", simNote: `${(comp.teams[comp.myTeam] || {}).name || "Your club"} left you off the MBL list after your D-League tournaments. You trained with the team all season but didn't play.` } : {}),
       leagueStats: stats, leagueLabel: LEAGUE[kind] ? LEAGUE[kind].short : null,
       leagueAwards, leagueBoard, leagueStandings, awardRace, gamesPlayed, wonChampionship, injury,
@@ -17988,6 +18998,7 @@ export default function App() {
     const eb = mdEarnCheck(comp, p);
     if (eb) banner = banner ? banner + " " + eb : eb;
     mdBrkCheck(comp, p);
+    try { const rs = recScan(p, comp); p = rs.p; if (rs.ev.length && nextScreen !== "md_box") { const t = recBannerText(rs.ev); banner = banner ? banner + " " + t : t; } } catch (e) { /* records are extras */ }
     p.mdComp = comp;
     setPlayer(p);
     save(p);
@@ -18141,6 +19152,7 @@ export default function App() {
     p.league = terms.league;
     p.contractSalary = terms.salary;
     p.contractYearsLeft = terms.years;
+    delete p.goalsTalk;
     p.history = [...p.history, { age: p.age, tierLabel: "Re-signed", note: `Re-signed a ${terms.years}-year deal with ${club.name} as a ${terms.role.toLowerCase()} — ${rm(p.contractSalary)}/month.` }];
     setPlayer(p);
     save(p);
@@ -18782,6 +19794,7 @@ export default function App() {
       playingStyle: p.playingStyle, shotProfile, styleNote,
       bestGame, isCareerHigh,
       coachTrust: p.relationships.coach, teamChemistry: p.relationships.team,
+      goals: ctx.goals || null,
     });
     setPlayer(p);
     if (p.pendingInjuryDecision) {
@@ -18877,6 +19890,7 @@ export default function App() {
     p.age += 1;
     p.seasonNum += 1;
     p.year = (p.year || (2011 + player.age)) + 1;
+    try { p = recYearEnd(p, p.year - 1); } catch (e) { /* records are extras */ }
     p.fatigue = clamp(p.fatigue - 10);
     try { p = invYearEnd(p); } catch (e) { /* money extras never block a season */ }
     // Every authored rival advances one season here, unconditionally — this
@@ -19775,6 +20789,7 @@ export default function App() {
       {screen === "midseason_checkpoint" && player && midseasonEvent && midseasonEvent.type === "special" && (
         <SpecialEventScreen key={midseasonEvent.id + player.year} player={player} event={midseasonEvent} onDone={mdSpecialDone} />
       )}
+      {screen === "goals_intro" && player && <GoalsIntroScreen player={player} onStart={() => { const q = { ...player, goalsPerkNote: null }; setPlayer(q); save(q); setScreen("comp"); }} />}
       {screen === "md_breaking" && player && player.mdComp && player.mdComp.brkPending && (
         <BreakingEventScreen key={"brk" + player.mdComp.brkPending.id + player.year} player={player} event={player.mdComp.brkPending} onDone={mdBreakDone} />
       )}
